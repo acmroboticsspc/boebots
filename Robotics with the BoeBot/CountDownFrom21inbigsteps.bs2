@@ -1,0 +1,16 @@
+' Robotics with the Boe-Bot - CountDownFrom21.bs2
+' Use a variable in a FOR...NEXT loop.
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+myCounter             VAR        Word
+
+FOR myCounter = 21 TO 9 STEP 3
+  DEBUG ? myComputer
+  PAUSE 500
+next
+
+DEBUG CR, "All done!"
+
+end

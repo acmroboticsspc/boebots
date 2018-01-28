@@ -1,0 +1,12 @@
+' Robotics with the Boe-Bot - ServoP12Clockwise.bs2
+' Run the servo connected to P12 at full speed clockwise.
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program Running!"
+
+Do
+  PULSOUT 12, 650
+  PAUSE 20
+loop

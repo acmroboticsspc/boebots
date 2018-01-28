@@ -1,0 +1,13 @@
+' Robotics with the Boe-Bot - CenterServoP13.bs2
+' This program sends 1.5 ms pulses to the servo connected to
+' P13 for manual centering.
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program Running!"
+
+DO
+  PULSOUT 13, 750
+  PAUSE 20
+LOOP

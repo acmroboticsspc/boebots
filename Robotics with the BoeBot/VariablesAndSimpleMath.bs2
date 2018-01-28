@@ -1,0 +1,20 @@
+' Robotics with the Boe-Bot - VariablesAndSimpleMath.bs2
+' Declare variables and use them to solve a few arithmetic problems.
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+value               VAR         Word      ' Declare variables
+anotherValue        VAR         Word
+
+value = 500                               ' Initialize variables
+anotherValue = 2000
+
+DEBUG ? value                             ' Display values
+DEBUG ? anotherValue
+
+value = 10 * anotherValue                 ' Perform operations
+
+DEBUG ? value                             ' Displays values again
+DEBUG ? anotherValue
+
+end
