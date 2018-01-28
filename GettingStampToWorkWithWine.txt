@@ -1,0 +1,3 @@
+Getting Stamp to work on Wine
+https://ubuntuforums.org/showthread.php?t=1523814
+https://bugs.winehq.org/attachment.cgi?id=8760

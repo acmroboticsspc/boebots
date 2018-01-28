@@ -1,0 +1,21 @@
+' Robotics with the Boe-Bot - ControlServoRunTimes.bs2
+' Run the P13 servo at full speed counterclockwise for 2.3s, then
+' run the P12 servo for twice as long.
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program Running!"
+
+counter VAR Byte
+
+FOR counter = 1 TO 100
+  PULSOUT 13, 850
+  PAUSE 20
+NEXT
+
+FOR counter = 1 TO 200
+  PULSOUT 12, 850
+  PAUSE 20
+NEXT
+
+END

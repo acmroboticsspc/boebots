@@ -1,0 +1,24 @@
+' Robotics with the Boe-Bot - BothServosThreeSeconds.bs2
+' Run both servos in opposite directions for three seconds, then reverse
+' the direction of both servos and run another three seconds
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program Running!"
+
+counter VAR Byte
+
+FOR counter = 1 TO 122
+  PULSOUT 13, 850
+  PULSOUT 12, 650
+  PAUSE 20
+NEXT
+
+FOR counter = 1 TO 122
+  PULSOUT 13, 650
+  PULSOUT 12, 850
+  PAUSE 20
+NEXT
+
+END

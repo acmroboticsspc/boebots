@@ -7,7 +7,7 @@
 
 DEBUG "Program Running!"
 
-Do
+DO
   PULSOUT 12, 750
   PAUSE 20
-loop
+LOOP
