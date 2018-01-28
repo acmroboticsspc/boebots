@@ -1,0 +1,8 @@
+' Stamps in Class - FirstProgram.bs2
+' BASIC Stamp sends message to Debug Terminal.
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Hello, it's me, your BASIC Stamp!"
+End

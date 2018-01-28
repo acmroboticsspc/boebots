@@ -1,0 +1,13 @@
+' Stamps in Class - FirstProgramYourTurn.bs2
+' BASIC Stamp sends message to Debug Terminal.
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Hello, it's me, your BASIC Stamp!"
+' PAUSE 1000
+DEBUG "Hello, it's me, your BASIC Stamp!"
+DEBUG CR "What's 7 X 11?"
+DEBUG CR "The answer is: "
+DEBUG DEC 7 * 11
+END
