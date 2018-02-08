@@ -1,0 +1,31 @@
+' Robotics with the Boe-Bot - Ovalbot.bs2
+' This program hopefully causes the robot to drive in a line or an oval, who knows
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program Running!"
+
+counter        VAR       Word
+
+DO
+
+  FOR counter = 1 TO 1220
+  PULSOUT 12, 850
+  PULSOUT 13, 650
+  NEXT
+
+  FOR counter = 1 TO 410
+  PULSOUT 12, 850
+  NEXT
+
+  FOR counter = 1 TO 1220
+  PULSOUT 12, 850
+  PULSOUT 13, 650
+  NEXT
+
+  FOR counter = 1 TO 410
+  PULSOUT 12, 850
+  NEXT
+
+LOOP

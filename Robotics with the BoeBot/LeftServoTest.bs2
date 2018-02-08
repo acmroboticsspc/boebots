@@ -1,0 +1,27 @@
+' Robotics with the Boe-Bot - LefServoTest.bs2
+' Left servo turns clockwise three seconds, stops 1 second, then
+' counterclockwise three seconds.
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program Running!"
+
+counter        VAR       Word
+
+FOR counter = 1 TO 122              ' Clockwise just under 3 seconds
+PULSOUT 13, 650
+PAUSE 20
+NEXT
+
+FOR counter = 1 TO 40               ' Stop one second.
+  PULSOUT 13, 750
+  PAUSE 20
+NEXT
+
+FOR counter = 1 TO 122              ' Counterclockwise three seconds.
+  PULSOUT 13, 850
+  PAUSE 20
+NEXT
+
+END
