@@ -1,0 +1,294 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' File...... SLAVE.BS2
+' Purpose... Slave Stamp demo -- manages RTC, themometer and LCD
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started...
+' Updated... 07 DEC 2001
+
+' { $STAMP BS2 }
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+E               CON     0                       ' LCD Enable pin  (1 = enabled)
+RS              CON     3                       ' Register Select (1 = char)
+LCDout          VAR     OutB                    ' 4-bit LCD data
+
+DQ              CON     8                       ' data line
+Clock           CON     9
+CS_1620         CON     10                      ' select DS1620 thermometer
+CS_1302         CON     11                      ' select DS1302 RTC
+
+SIOpin          CON     14                      ' serial I/O
+FCpin           CON     15                      ' serial flow control
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+N2400           CON     16780                   ' serial baud parameter
+
+RdTmp           CON     $AA                     ' read temperature
+WrHi            CON     $01                     ' write TH (high temp)
+WrLo            CON     $02                     ' write TL (low temp)
+RdHi            CON     $A1                     ' read TH
+RdLo            CON     $A2                     ' read TL
+StartC          CON     $EE                     ' start conversion
+StopC           CON     $22                     ' stop conversion
+WrCfg           CON     $0C                     ' write config register
+RdCfg           CON     $AC                     ' read config register
+
+TM_Cels         CON     0                       ' temperature modes
+TM_Fahr         CON     1
+
+WrSecs          CON     $80                     ' write seconds
+RdSecs          CON     $81                     ' read seconds
+WrMins          CON     $82                     ' write minutes
+RdMins          CON     $83                     ' read minutes
+WrHrs           CON     $84                     ' write hours
+RdHrs           CON     $85                     ' read hours
+CWPr            CON     $8E                     ' write protect register
+WPr1            CON     $80                     ' set write protect
+WPr0            CON     $00                     ' clear write protect
+WrBurst         CON     $BE                     ' write burst of data
+RdBurst         CON     $BF                     ' read burst of data
+WrRam           CON     $C0                     ' RAM address control
+RdRam           CON     $C1
+
+ClrLCD          CON     $01                     ' clear the LCD
+CrsrHm          CON     $02                     ' move cursor to home position
+CrsrLf          CON     $10                     ' move cursor left
+CrsrRt          CON     $14                     ' move cursor right
+DispLf          CON     $18                     ' shift displayed chars left
+DispRt          CON     $1C                     ' shift displayed chars right
+DDRam           CON     $80                     ' Display Data RAM control
+
+NumTasks        CON     2                       ' Time and Temp
+
+Tsk_Time        CON     0                       ' task control values
+Tsk_Temp        CON     1
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+task            VAR     Nib                     ' current task to execute
+ioByte          VAR     Byte
+rxBuffer        VAR     Byte(2)                 ' serial receive buffer
+reg             VAR     Byte                    ' RTC register #
+
+secs            VAR     Byte                    ' seconds
+secs01          VAR     secs.LowNib
+secs10          VAR     secs.HighNib
+mins            VAR     Byte                    ' minutes
+mins01          VAR     mins.LowNib
+mins10          VAR     mins.HighNib
+hrs             VAR     Byte                    ' hours
+hrs01           VAR     hrs.LowNib
+hrs10           VAR     hrs.HighNib
+day             VAR     Byte                    ' day
+
+tempIn          VAR     Word                    ' raw temperature
+sign            VAR     tempIn.Bit8             ' 1 = negative temperature
+tSign           VAR     Bit
+tempC           VAR     Word                    ' Celsius
+tempF           VAR     Word                    ' Fahrenheit
+tMode           VAR     Bit                     ' 0 = Celsius, 1 = Fahrenheit
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+DS1620init:
+  HIGH CS_1620                                  ' alert the DS1620
+  SHIFTOUT DQ,Clock,LSBFirst,[WrCfg,%10]        ' use with CPU; free-run
+  LOW CS_1620
+  PAUSE 10
+  HIGH CS_1620
+  SHIFTOUT DQ,Clock,LSBFirst,[StartC]           ' start conversions
+  LOW CS_1620
+
+DS1302init:
+  reg = CWPr                                    ' clear write protect register
+  ioByte = WPr0
+  GOSUB RTC_out
+
+LCDinit:
+  PAUSE 500                                     ' let the LCD settle
+  DirL = %11111101                              ' setup pins for LCD
+  LCDout = %0011                                ' 8-bit mode
+  PULSOUT E,1 : PAUSE 5
+  PULSOUT E,1
+  PULSOUT E,1
+  LCDout = %0010                                ' 4-bit mode
+  PULSOUT E,1
+  ioByte = %00001100                            ' disp on, crsr off, blink off
+  GOSUB LCDcommand
+  ioByte = %00000110                            ' inc crsr, no disp shift
+  GOSUB LCDcommand
+  ioByte = ClrLCD
+  GOSUB LCDcommand
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  ioByte = 0                                    ' clear las command
+  SERIN SIOpin\FCpin, N2400, 200, LCD_Update, [ioByte]
+  BRANCH ioByte, [LCD_Update, Reset_Clock, Set_C, Set_F, Send_TmTmp]
+  GOTO LCD_Update
+
+Reset_Clock:
+  SERIN SIOpin\FCpin, N2400, 200, LCD_Update, [hrs, mins]
+  secs = 0
+  GOSUB SetTime                                 ' update DS1302
+  GOTO Show_Time                                ' update LCD
+
+Set_C:
+  tMode = TM_Cels                               ' celsius
+  task = Tsk_Time                               ' do time next time through
+  GOTO Show_Temp                                ' update temp display
+
+Set_F:
+  tMode = TM_Fahr                               ' fahrenheit
+  task = Tsk_Time                               ' do time next time through
+  GOTO Show_Temp                                ' update temp display
+
+Send_TmTmp:
+  tempIn = tempC                                ' assume in C
+  BRANCH tMode, [Send_TmTmp2]                   ' if tMode = 1
+  tempIn = tempF                                '   then F
+
+Send_TmTmp2:
+  ioByte = "C" + (tMode * 3)                    ' send temp mode indicator
+  SEROUT SIOpin\FCpin, N2400, [hrs, mins]
+  SEROUT SIOpin\FCpin, N2400, [tempIn.LowByte, tempIn.HighByte, ioByte]
+  GOTO Main
+
+LCD_Update:
+  BRANCH task, [Show_Time, Show_Temp]
+
+Show_Time:
+  GOSUB GetTime
+  ioByte = CrsrHm
+  GOSUB LCDcommand
+  ioByte = hrs10 + "0"  : GOSUB LCDwrite
+  ioByte = hrs01 + "0"  : GOSUB LCDwrite
+  ioByte = ":"          : GOSUB LCDwrite
+  ioByte = mins10 + "0" : GOSUB LCDwrite
+  ioByte = mins01 + "0" : GOSUB LCDwrite
+  ioByte = ":"          : GOSUB LCDwrite
+  ioByte = secs10 + "0" : GOSUB LCDwrite
+  ioByte = secs01 + "0" : GOSUB LCDwrite
+
+  task = task + 1 // NumTasks
+  GOTO Main
+
+Show_Temp:
+  GOSUB GetTemperature                          ' get current temp
+  tempIn = tempC                                ' assume C
+  BRANCH tMode, [Show_Temp2]                    ' if tMode = 1
+  tempIn = tempF                                '   then F
+
+Show_Temp2:
+  ioByte = DDRam + 11                           ' move to right side of LCD
+  GOSUB LCDcommand
+  ioByte = " "                                  ' space pad (right justify)
+  IF (tempIn < 100) THEN Show100
+  ioByte = tempIn DIG 2 + "0"
+
+Show100:
+  GOSUB LCDwrite
+  ioByte = tempIn DIG 1 + "0"
+  IF (tempIn > 99) OR (ioByte > "0") THEN Show10
+  ioByte = " "
+
+Show10:
+  GOSUB LCDwrite
+
+Show01:
+  ioByte = tempF DIG 0 + "0" : GOSUB LCDwrite
+  ioByte = 223               : GOSUB LCDwrite
+  ioByte = "C" + (tMode * 3) : GOSUB LCDwrite
+
+  task = task + 1 // NumTasks
+  GOTO Main
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'
+RTC_out:                                        ' send ioByte to reg in DS1302
+  HIGH CS_1302
+  SHIFTOUT DQ,Clock,LSBFirst,[reg,ioByte]
+  LOW CS_1302
+  RETURN
+
+
+RTC_in:                                         ' read ioByte from reg in DS1302
+  HIGH CS_1302
+  SHIFTOUT DQ,Clock,LSBFirst,[reg]
+  SHIFTIN DQ,Clock,LSBPre,[ioByte]
+  LOW CS_1302
+  RETURN
+
+
+SetTime:                                        ' write data with burst mode
+  HIGH CS_1302
+  SHIFTOUT DQ,Clock,LSBFirst,[WrBurst]
+  SHIFTOUT DQ,Clock,LSBFirst,[secs,mins,hrs,0,0,day,0,0]
+  LOW CS_1302
+  RETURN
+
+
+GetTime:                                        ' read data with burst mode
+  HIGH CS_1302
+  SHIFTOUT DQ,Clock,LSBFirst,[RdBurst]
+  SHIFTIN DQ,Clock,LSBPre,[secs,mins,hrs,day,day,day]
+  LOW CS_1302
+  RETURN
+
+
+GetTemperature:
+  HIGH CS_1620                                  ' alert the DS1620
+  SHIFTOUT DQ,Clock,LSBFIRST,[RdTmp]            ' give command to read temp
+  SHIFTIN DQ,Clock,LSBPRE,[tempIn\9]            ' read it in
+  LOW CS_1620                                   ' release the DS1620
+
+  tSign = sign                                  ' save sign bit
+  tempIn = tempIn/2                             ' round to whole degrees
+  IF tSign = 0 THEN NoNeg1
+  tempIn = tempIn | $FF00                       ' extend sign bits for negative
+
+NoNeg1:
+  tempC = tempIn                                ' save Celsius value
+  tempIn = tempIn */ $01CC                      ' multiply by 1.8
+  IF tSign = 0 THEN NoNeg2                      ' if negative, extend sign bits
+  tempIn = tempIn | $FF00
+
+NoNeg2:
+  tempIn = tempIn + 32                          ' finish C -> F conversion
+  tempF = tempIn                                ' save Fahrenheit value
+  RETURN
+
+
+LCDcommand:
+  LOW RS                                        ' enter command mode
+
+LCDwrite:
+  LCDout = ioByte.HighNib                       ' output high nibble
+  PULSOUT E,1                                   ' strobe the Enable line
+  LCDout = ioByte.LowNib                        ' output low nibble
+  PULSOUT E,1
+  HIGH RS                                       ' return to character mode
+  RETURN

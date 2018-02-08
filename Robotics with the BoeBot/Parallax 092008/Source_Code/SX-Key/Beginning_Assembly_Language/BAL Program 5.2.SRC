@@ -1,0 +1,62 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 5.2
+;=======================================================================
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	start_point
+		freq	50000000	; 50 MHz
+
+		org	8
+dividend	ds	1
+divisor		ds	1
+quotient	ds	1
+counter		ds	1
+		watch 	dividend,8,udec
+		watch 	divisor,8,udec
+		watch 	quotient,8,udec
+		watch 	counter,8,udec
+
+		org	0
+start_point 
+		mov	dividend,#20
+		mov	divisor,#5
+		call	divide
+		break
+		nop
+		sleep
+
+; subroutine
+
+divide		clr	counter		; assume not dividing by zero
+		clc
+:loop		rl	divisor
+		inc	counter
+		jnc	:loop
+; restore divisor so top bit is 1
+		rr	divisor  
+; counter has number of bits in quotient
+		clr	quotient
+:dloop
+		test	counter
+		jz	:done
+		clc
+		rl	quotient
+		cjb	dividend,divisor,:dloop1
+		sub	dividend,divisor
+		inc	quotient
+:dloop1		
+		dec	counter
+		clc
+		rr	divisor
+		jmp	:dloop
+:done
+		ret			; go back to wherever
+
+
+	
+
+
+
+

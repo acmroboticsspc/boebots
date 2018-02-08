@@ -1,0 +1,166 @@
+' Program Listing 45.3
+' Nuts & Volts: Stamp Applications, November 1998
+
+' ----[ Title ]-----------------------------------------------------------
+'
+' File...... EEMOVER.BS2
+' Purpose... Stamp to PC Communications Experiments
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 30 SEP 98
+' Updated...  2 OCT 98
+
+
+' ----[ Program Description ]---------------------------------------------
+'
+' This program awaits a PC command and processes it accordingly: send the
+' revision code, upload the EE-stored parameters or allow the download of
+' a new (64 byte) parameters block.
+'
+' For convenience, this project was built on a Parallax BSAC. A SEETRON 
+' 4x40 LCD module was used in debugging.
+
+
+' ----[ Revision History ]------------------------------------------------
+'
+'  2 OCT 98 : Finally figured it all out and everything works!
+
+
+' ----[ I/O Definitions ]-------------------------------------------------
+'
+TXpin	CON	0			' serial output to PC
+RXpin	CON	1			' serial input from PC
+LCDpin	CON	15			' debugging pin (SEETRON LCD)
+PGMpin	CON	16			' uses BS2 programming port
+
+PCcon	VAR	In1			' pc connected?
+LEDrx	VAR	Out8			' receive LED
+LEDtx	VAR	Out9			' transmit LED
+
+
+' ----[ Constants ]-------------------------------------------------------
+'
+N9600	CON	84			' non inverted (through driver)
+T9600	CON	$4054			' inverted (direct)
+
+Off	CON	1			' active low
+On	CON	0
+
+Yes	CON	0
+No	CON	1
+
+Start	CON	$FF			' start byte
+CmdQr	CON	$A7			' query - return date code
+CmdUp	CON	$A0			' upload ee
+CmdDn	CON	$A1			' download new ee
+
+
+' ----[ Variables ]-------------------------------------------------------
+'
+cmd	VAR	Byte			' command byte
+addr	VAR	Byte
+dByte	VAR	Byte
+tries	VAR	Byte
+
+
+' ----[ EEPROM Data ]-----------------------------------------------------
+'
+Setup1	DATA	"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+Setup2	DATA	"abcdefghijklmnopqrstuvwxyz"
+Setup3	DATA	"0123456789"
+Setup4	DATA	"NV"
+
+RevCode	DATA	98,10,02		' embedded revision code
+
+
+' ----[ Initialization ]--------------------------------------------------
+'
+Init:	DirA = %0001
+	DirC = %0011
+	
+
+' ----[ Main Code ]-------------------------------------------------------
+'
+
+Main:	LEDtx = Off			' clear the TX/RX LEDs
+	LEDrx = Off
+
+	' look for PC
+	IF PCcon = Yes THEN M1		' look for low on input line
+	  SEROUT LCDpin,T9600,[12,"PC is not connected"]
+	  PAUSE 250
+	GOTO Main
+
+M1:	SEROUT LCDpin,T9600,[12,"Connected. Waiting..."]
+	SERIN  RXpin,T9600,5000,Main,[WAIT (Start), cmd]
+
+	LEDrx = On			' show transmission received
+	PAUSE 50
+	LEDrx = Off
+
+	LOOKDOWN cmd,[CmdQr,CmdUp,CmdDn],cmd	' decode command byte
+	BRANCH cmd,[CQry,CUpLd,CDnLd]		' branch to processing
+	GOTO CBad
+
+CQry:	SEROUT LCDpin,T9600,[12, "Query "]
+	GOSUB RCode
+	PAUSE 1000
+	GOTO Main
+
+CUpld:	SEROUT LCDpin,T9600,[12, "Upload"]
+	GOSUB UpLoad
+	PAUSE 1000
+	GOTO Main
+
+CDnld:	SEROUT LCDpin,T9600,[12, "Download"]
+	GOSUB DnLoad
+	PAUSE 1000
+	GOTO Main
+
+CBad:	SEROUT LCDpin,T9600,[12, "Invalid Command"]
+	PAUSE 1000
+	GOTO Main
+
+
+' ----[ Subroutines ]-----------------------------------------------------
+'
+
+RCode:	' send revision code to PC
+	LEDtx = On
+	FOR addr = RevCode TO (RevCode + 2)
+	  READ addr, dByte
+	  SEROUT TXpin,T9600,[dByte]
+	NEXT
+	LEDtx = Off	  
+	RETURN
+
+
+UpLoad:	LEDtx = On
+	FOR addr = 0 TO 63
+	  READ addr, dByte
+	  SEROUT TXpin,T9600,[dByte]
+	NEXT
+	LEDtx = Off	  
+	RETURN
+
+
+DnLoad: ' download new set-up data
+	LEDrx = On
+	SERIN  RXpin,T9600,2000,DLx,[WAIT (Start),addr,dByte]
+	LEDrx = Off
+
+	' show the transmission
+	SEROUT LCDpin,T9600,[1,"Writing... ", DEC2 addr, "->",DEC3 dByte]
+	SEROUT LCDpin,T9600,[" (",dByte, ")  "]
+
+	' copy to ee
+	WRITE addr,dByte			' write to ee
+	READ addr,dByte			' read it back
+	
+	' return address and data
+	LEDtx = On
+	SEROUT TXpin,T9600,[addr,dByte]
+	LEDtx = Off
+	
+	IF addr < 63 THEN DnLoad		' do 64 bytes
+DLx:	RETURN 

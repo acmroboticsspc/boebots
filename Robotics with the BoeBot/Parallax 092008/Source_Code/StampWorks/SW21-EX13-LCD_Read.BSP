@@ -1,0 +1,108 @@
+' =========================================================================
+'
+'   File....... SW21-EX13-LCD_Read.BS2
+'   Purpose.... Read data from LCD
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 16 AUG 2006
+'
+'   {$STAMP BS2p}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates how to read data from the LCD's display RAM
+' (DDRAM) or character RAM (CGRAM).
+'
+' The connections for this program conform to the BS2p-family LCDCMD,
+' LCDIN, and LCDOUT instructions.  Use this program for the BS2p, BS2pe,
+' or BS2px.  There is a separate program for the BS2, BS2e, and BS2sx.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+E               PIN     1                       ' Enable pin
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+LcdCls          CON     $01                     ' clear the LCD
+LcdHome         CON     $02                     ' move cursor home
+LcdCrsrL        CON     $10                     ' move cursor left
+LcdCrsrR        CON     $14                     ' move cursor right
+LcdDispL        CON     $18                     ' shift chars left
+LcdDispR        CON     $1C                     ' shift chars right
+LcdDDRam        CON     $80                     ' Display Data RAM control
+LcdCGRam        CON     $40                     ' Character Generator RAM
+LcdLine1        CON     $80                     ' DDRAM address of line 1
+LcdLine2        CON     $C0                     ' DDRAM address of line 2
+
+
+#DEFINE _NotLcdReady = ($STAMP < BS2P)
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+rndVal          VAR     Word                    ' random value
+addr            VAR     Byte                    ' address to write/read
+tOut            VAR     Byte                    ' test value - out to LCD
+tIn             VAR     Byte                    ' test value - in from LCD
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  #IF _NotLcdReady #THEN
+    #ERROR "Please use BS2 version: SW21-EX13-LCD_Read.BS2"
+  #ENDIF
+
+  PAUSE 100                                     ' let the LCD settle
+
+Lcd_Setup:
+  LCDCMD E, %00110000 : PAUSE 5                 ' 8-bit mode
+  LCDCMD E, %00110000 : PAUSE 0
+  LCDCMD E, %00110000 : PAUSE 0
+  LCDCMD E, %00100000 : PAUSE 0                 ' 4-bit mode
+  LCDCMD E, %00101000 : PAUSE 0                 ' multi-line mode
+  LCDCMD E, %00001100 : PAUSE 0                 ' on, no crsr, no blink
+  LCDCMD E, %00000110
+
+Display:
+  LCDOUT E, LcdHome,  ["ADDR=??  OUT:???"]
+  LCDOUT E, LcdLine2, ["          IN:???"]
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  RANDOM rndVal                                 ' generate random number
+  addr = rndVal.LOWBYTE & $3F                   ' create address (0 to 63)
+  tOut = rndVal.HIGHBYTE                        ' create test value
+
+  LCDCMD E, (LcdCGRam + addr)                   ' set CGRAM pointer
+  LCDOUT E, 0, [tOut]                           ' move the value to CGRAM
+  PAUSE 100
+
+  LCDCMD E, (LcdCGRam + addr)                   ' reset CGRAM pointer
+  LCDIN  E, 0, [tIn]                            ' read value from LCD
+
+  ' display results
+
+  LCDCMD E, (LcdLine1 + 5)                      ' show address @ L1/C5
+  LCDOUT E, 0, [DEC2 addr]
+
+  LCDCMD E, (LcdLine1 + 13)                     ' show output @ L1/C13
+  LCDOUT E, 0, [DEC3 tOut]
+
+  LCDCMD E, (LcdLine2 + 13)                     ' show output @ L2/C13
+  LCDOUT E, 0, [DEC3 tIn]
+  PAUSE 1000
+
+  GOTO Main                                     ' do it again
+
+
+' -----[ Subroutines ]-----------------------------------------------------

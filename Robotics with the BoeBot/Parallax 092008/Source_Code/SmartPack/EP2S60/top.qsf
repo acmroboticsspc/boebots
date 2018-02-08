@@ -1,0 +1,218 @@
+# Copyright (C) 1991-2005 Altera Corporation
+# Your use of Altera Corporation's design tools, logic functions 
+# and other software and tools, and its AMPP partner logic       
+# functions, and any output files any of the foregoing           
+# (including device programming or simulation files), and any    
+# associated documentation or information are expressly subject  
+# to the terms and conditions of the Altera Program License      
+# Subscription Agreement, Altera MegaCore Function License       
+# Agreement, or other applicable license agreement, including,   
+# without limitation, that your use is for the sole purpose of   
+# programming logic devices manufactured by Altera and sold by   
+# Altera or its authorized distributors.  Please refer to the    
+# applicable agreement for further details.
+
+
+# The default values for assignments are stored in the file
+#		top_assignment_defaults.qdf
+# If this file doesn't exist, and for assignments not listed, see file
+#		assignment_defaults.qdf
+
+# Altera recommends that you do not modify this file. This
+# file is updated automatically by the Quartus II software
+# and any changes you make may be lost or overwritten.
+
+
+# Project-Wide Assignments
+# ========================
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION "5.0 SP1.04"
+set_global_assignment -name PROJECT_CREATION_TIME_DATE "09:35:21  AUGUST 22, 2005"
+set_global_assignment -name LAST_QUARTUS_VERSION "5.0 SP1.04"
+set_global_assignment -name AHDL_FILE top.tdf
+
+# Pin & Location Assignments
+# ==========================
+set_location_assignment PIN_A15 -to clka
+set_location_assignment PIN_AF15 -to clkb
+set_location_assignment PIN_AD26 -to e[0]
+set_location_assignment PIN_V26 -to e[10]
+set_location_assignment PIN_W25 -to e[11]
+set_location_assignment PIN_U26 -to e[12]
+set_location_assignment PIN_V25 -to e[13]
+set_location_assignment PIN_R25 -to e[14]
+set_location_assignment PIN_T25 -to e[15]
+set_location_assignment PIN_M26 -to e[16]
+set_location_assignment PIN_M25 -to e[17]
+set_location_assignment PIN_K26 -to e[18]
+set_location_assignment PIN_L25 -to e[19]
+set_location_assignment PIN_AD25 -to e[1]
+set_location_assignment PIN_J26 -to e[20]
+set_location_assignment PIN_K25 -to e[21]
+set_location_assignment PIN_H26 -to e[22]
+set_location_assignment PIN_J25 -to e[23]
+set_location_assignment PIN_G26 -to e[24]
+set_location_assignment PIN_H25 -to e[25]
+set_location_assignment PIN_F26 -to e[26]
+set_location_assignment PIN_G25 -to e[27]
+set_location_assignment PIN_E26 -to e[28]
+set_location_assignment PIN_F25 -to e[29]
+set_location_assignment PIN_AB26 -to e[2]
+set_location_assignment PIN_M23 -to e[30]
+set_location_assignment PIN_M24 -to e[31]
+set_location_assignment PIN_AC25 -to e[3]
+set_location_assignment PIN_AA26 -to e[4]
+set_location_assignment PIN_AB25 -to e[5]
+set_location_assignment PIN_Y26 -to e[6]
+set_location_assignment PIN_AA25 -to e[7]
+set_location_assignment PIN_W26 -to e[8]
+set_location_assignment PIN_Y25 -to e[9]
+set_location_assignment PIN_N25 -to eclka
+set_location_assignment PIN_P25 -to eclkb
+set_location_assignment PIN_AD21 -to led[0]
+set_location_assignment PIN_AD20 -to led[1]
+set_location_assignment PIN_AD19 -to led[2]
+set_location_assignment PIN_AD18 -to led[3]
+set_location_assignment PIN_AD9 -to led[4]
+set_location_assignment PIN_AD8 -to led[5]
+set_location_assignment PIN_AD7 -to led[6]
+set_location_assignment PIN_AD6 -to led[7]
+set_location_assignment PIN_A24 -to n[0]
+set_location_assignment PIN_A18 -to n[10]
+set_location_assignment PIN_B19 -to n[11]
+set_location_assignment PIN_A17 -to n[12]
+set_location_assignment PIN_B18 -to n[13]
+set_location_assignment PIN_B14 -to n[14]
+set_location_assignment PIN_B16 -to n[15]
+set_location_assignment PIN_B12 -to n[16]
+set_location_assignment PIN_A12 -to n[17]
+set_location_assignment PIN_A9 -to n[18]
+set_location_assignment PIN_A10 -to n[19]
+set_location_assignment PIN_B24 -to n[1]
+set_location_assignment PIN_A8 -to n[20]
+set_location_assignment PIN_B9 -to n[21]
+set_location_assignment PIN_A7 -to n[22]
+set_location_assignment PIN_B8 -to n[23]
+set_location_assignment PIN_A6 -to n[24]
+set_location_assignment PIN_B7 -to n[25]
+set_location_assignment PIN_A5 -to n[26]
+set_location_assignment PIN_B6 -to n[27]
+set_location_assignment PIN_A3 -to n[28]
+set_location_assignment PIN_B5 -to n[29]
+set_location_assignment PIN_A22 -to n[2]
+set_location_assignment PIN_M3 -to n[30]
+set_location_assignment PIN_M4 -to n[31]
+set_location_assignment PIN_B23 -to n[3]
+set_location_assignment PIN_A21 -to n[4]
+set_location_assignment PIN_B22 -to n[5]
+set_location_assignment PIN_A20 -to n[6]
+set_location_assignment PIN_B21 -to n[7]
+set_location_assignment PIN_A19 -to n[8]
+set_location_assignment PIN_B20 -to n[9]
+set_location_assignment PIN_P2 -to nclka
+set_location_assignment PIN_N2 -to nclkb
+set_location_assignment PIN_E15 -to px[0]
+set_location_assignment PIN_C23 -to px[1]
+set_location_assignment PIN_C25 -to px[2]
+set_location_assignment PIN_AE4 -to s[0]
+set_location_assignment PIN_AE9 -to s[10]
+set_location_assignment PIN_AF9 -to s[11]
+set_location_assignment PIN_AE10 -to s[12]
+set_location_assignment PIN_AF10 -to s[13]
+set_location_assignment PIN_AF12 -to s[14]
+set_location_assignment PIN_AE11 -to s[15]
+set_location_assignment PIN_AE15 -to s[16]
+set_location_assignment PIN_AE13 -to s[17]
+set_location_assignment PIN_AF17 -to s[18]
+set_location_assignment PIN_AE16 -to s[19]
+set_location_assignment PIN_AF3 -to s[1]
+set_location_assignment PIN_AF18 -to s[20]
+set_location_assignment PIN_AE17 -to s[21]
+set_location_assignment PIN_AF19 -to s[22]
+set_location_assignment PIN_AE18 -to s[23]
+set_location_assignment PIN_AF20 -to s[24]
+set_location_assignment PIN_AE19 -to s[25]
+set_location_assignment PIN_AF21 -to s[26]
+set_location_assignment PIN_AE20 -to s[27]
+set_location_assignment PIN_AF22 -to s[28]
+set_location_assignment PIN_AE21 -to s[29]
+set_location_assignment PIN_AE5 -to s[2]
+set_location_assignment PIN_R24 -to s[30]
+set_location_assignment PIN_R23 -to s[31]
+set_location_assignment PIN_AF5 -to s[3]
+set_location_assignment PIN_AE6 -to s[4]
+set_location_assignment PIN_AF6 -to s[5]
+set_location_assignment PIN_AE7 -to s[6]
+set_location_assignment PIN_AF7 -to s[7]
+set_location_assignment PIN_AE8 -to s[8]
+set_location_assignment PIN_AF8 -to s[9]
+set_location_assignment PIN_P23 -to sclka
+set_location_assignment PIN_R26 -to sclkb
+set_location_assignment PIN_C2 -to w[0]
+set_location_assignment PIN_J1 -to w[10]
+set_location_assignment PIN_J2 -to w[11]
+set_location_assignment PIN_K1 -to w[12]
+set_location_assignment PIN_K2 -to w[13]
+set_location_assignment PIN_M1 -to w[14]
+set_location_assignment PIN_L2 -to w[15]
+set_location_assignment PIN_R2 -to w[16]
+set_location_assignment PIN_M2 -to w[17]
+set_location_assignment PIN_U1 -to w[18]
+set_location_assignment PIN_T2 -to w[19]
+set_location_assignment PIN_C1 -to w[1]
+set_location_assignment PIN_V1 -to w[20]
+set_location_assignment PIN_U2 -to w[21]
+set_location_assignment PIN_W1 -to w[22]
+set_location_assignment PIN_V2 -to w[23]
+set_location_assignment PIN_Y1 -to w[24]
+set_location_assignment PIN_W2 -to w[25]
+set_location_assignment PIN_AA1 -to w[26]
+set_location_assignment PIN_Y2 -to w[27]
+set_location_assignment PIN_AB1 -to w[28]
+set_location_assignment PIN_AA2 -to w[29]
+set_location_assignment PIN_E1 -to w[2]
+set_location_assignment PIN_T4 -to w[30]
+set_location_assignment PIN_T3 -to w[31]
+set_location_assignment PIN_E2 -to w[3]
+set_location_assignment PIN_F1 -to w[4]
+set_location_assignment PIN_F2 -to w[5]
+set_location_assignment PIN_G1 -to w[6]
+set_location_assignment PIN_G2 -to w[7]
+set_location_assignment PIN_H1 -to w[8]
+set_location_assignment PIN_H2 -to w[9]
+set_location_assignment PIN_R1 -to wclka
+set_location_assignment PIN_R3 -to wclkb
+
+# Analysis & Synthesis Assignments
+# ================================
+set_global_assignment -name TOP_LEVEL_ENTITY top
+set_global_assignment -name DEVICE_FILTER_PACKAGE FBGA
+set_global_assignment -name DEVICE_FILTER_PIN_COUNT 672
+set_global_assignment -name DEVICE_FILTER_SPEED_GRADE 4
+set_global_assignment -name FAMILY "Stratix II"
+
+# Fitter Assignments
+# ==================
+set_global_assignment -name DEVICE EP2S60F672C4
+set_global_assignment -name CYCLONE_CONFIGURATION_SCHEME "PASSIVE SERIAL"
+set_global_assignment -name ENABLE_DEVICE_WIDE_RESET ON
+set_global_assignment -name RESERVE_DATA0_AFTER_CONFIGURATION "AS INPUT TRI-STATED"
+set_global_assignment -name OPTIMIZE_TIMING NORMAL_COMPILATION
+set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
+set_global_assignment -name APEX20KE_DEVICE_IO_STANDARD LVCMOS
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD LVCMOS
+set_global_assignment -name ERROR_CHECK_FREQUENCY_DIVISOR 1
+
+# Assembler Assignments
+# =====================
+set_global_assignment -name ON_CHIP_BITSTREAM_DECOMPRESSION ON
+set_global_assignment -name MERCURY_JTAG_USER_CODE FFFE7FFF
+set_global_assignment -name USE_CONFIGURATION_DEVICE OFF
+set_global_assignment -name APEX20K_CONFIGURATION_DEVICE EPC16
+set_global_assignment -name EXCALIBUR_CONFIGURATION_DEVICE EPC2LC20
+set_global_assignment -name MERCURY_CONFIGURATION_DEVICE EPC2LC20
+set_global_assignment -name FLEX6K_CONFIGURATION_DEVICE EPC1PC8
+set_global_assignment -name FLEX10K_CONFIGURATION_DEVICE EPC2LC20
+set_global_assignment -name CYCLONE_CONFIGURATION_DEVICE EPC2
+set_global_assignment -name STRATIX_CONFIGURATION_DEVICE EPC16
+set_global_assignment -name GENERATE_RBF_FILE ON
+set_global_assignment -name AUTO_RESTART_CONFIGURATION OFF

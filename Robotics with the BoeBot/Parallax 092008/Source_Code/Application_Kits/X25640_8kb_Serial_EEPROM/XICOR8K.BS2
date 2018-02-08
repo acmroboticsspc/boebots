@@ -1,0 +1,96 @@
+' Program: XICOR8K.BS2
+' This program demonstrates subroutines for storing data in a
+' XICOR X25640 serial EEPROM using the BASIC Stamp II (BS2).
+
+CS      con     0	' Chip-select line to pin 0.
+CLK     con     1	' Clock line to pin 1.
+DATA_N  con     2	' Pin # of DATA for "input" & "output"
+ReadEE  con     3	' EEPROM opcode for read.
+WREN    con     6	' EEPROM opcode to enable writes.
+WRDI    con     4	' EEPROM opcode to disable writes.
+RDSR    con     5	' EEPROM opcode to read the status register.
+WriteEE con     2	' EEPROM opcode for write.
+
+EEaddr	var	word	' EEPROM address for reads or writes. 
+EEdata	var	byte	' Data written/read to/from EEPROM. 
+EEstats	var	byte	' Copy of the EEPROM status register. 
+EEbusy	var	EEstats.bit0	' EEPROM busy bit. 
+
+' Demonstration program. We're just going to write-enable
+' the EEPROM, write a value to one of its addresses, then retrieve
+' that value. 
+
+Demo:	
+  high CS		' Deactivate EEPROM.
+  pause 100		' Wait for settling.
+  EEdata = 113		' Write the value 113 to EEPROM address 8191. 
+  EEaddr = 8191
+  gosub EEnable		' Enable the EEPROM for writes. 
+  gosub EEwrite		' Write the data. 
+is_busy: 		' Stay in a loop until EEPROM finishes write.
+  gosub Read_stats	' Read status register. 
+  if EEbusy = 1 then is_busy	' Wait until busy bit says 'done.'
+  gosub EEread		' Now read back the data and..
+  debug ? EEdata	' ..display it on the PC screen. 
+
+STOP			' End program. 
+
+' ==================================================================
+' The subroutines for reading and writing the EEPROM.
+' ==================================================================
+
+' Write-enable the EEPROM. 
+EEnable: 
+  low CS		' Activate the EEPROM. 
+  shiftout DATA_N,CLK,msbfirst,[WREN]	' Send the enable opcode. 
+  high CS		' Deactivate the EEPROM. 
+return			' Return to program. 
+
+' Write-protect (disable) the EEPROM. 
+EEdisable: 		 
+  low CS		' Activate the EEPROM. 
+  shiftout DATA_N,CLK,msbfirst,[WRDI]	' Send the disable opcode. 
+  high CS		' Deactivate the EEPROM. 
+return
+
+' Write data to the EEPROM. Use the address in EEaddr 
+' and data in EEdata. 
+EEwrite: 
+  low CS		' Activate the EEPROM. 
+  shiftout DATA_N,CLK,msbfirst,[WriteEE]	' Send write opcode. 
+  gosub Send_addr				' Send the address. 
+  shiftout DATA_N,CLK,msbfirst,[EEdata]		' Send the data. 
+  high CS		' Deactivate the EEPROM. 
+return			' Return to program. 
+
+' Read data from the EEPROM. Use the address in EEaddr; 
+' put data into EEdata.
+EEread: 
+  low CS		' Activate the EEPROM. 
+  shiftout DATA_N,CLK,msbfirst,[ReadEE]		' Send the read opcode. 
+  gosub Send_addr				' Send the address. 
+  shiftin DATA_N,CLK,msbpre,[EEdata]		' Send the data. 
+  high CS		' Deactivate the EEPROM. 
+return			' Return to program. 
+
+' Send the address for a read or write. 
+Send_addr: 
+  shiftout DATA_N,CLK,msbfirst,[EEaddr\16]	' Shift the address out. 
+return			' Return to program. 
+
+' Read the EEPROM status register. 
+Read_stats: 
+  low CS		' Activate the EEPROM. 
+  shiftout DATA_N,CLK,msbfirst,[RDSR]	' Send status-read opcode. 
+  shiftin DATA_N,CLK,msbpre,[EEstats]	' Get the status register. 
+  high CS		' Deactivate the EEPROM. 
+return			' Return to program. 
+
+
+
+
+
+
+
+
+

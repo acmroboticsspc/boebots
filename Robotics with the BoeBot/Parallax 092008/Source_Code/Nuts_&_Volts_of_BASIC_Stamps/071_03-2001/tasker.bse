@@ -1,0 +1,64 @@
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... TASKER2.BSE
+' Purpose... Task switcher demonstration with external subroutines
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+
+' {$STAMP BS2e, SUBS.BSE}			' or BS2sx or BS2p
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Simple task switcher demonstration with external subroutines
+' (in SUBS.BSE)
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+NumTasks	CON	3			' number of tasks
+SubNum		CON	0			' RAM location of external
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+task		VAR	Byte			' current task
+count1		VAR	Byte			' byte counter
+count2		VAR	Word			' word counter
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Main:
+  task = task + 1 // NumTasks			' point to next task
+RunTask:
+  BRANCH task,[Task0,Task1]			' run current task block
+  GOTO Main					' back to top
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+Task0:
+  PUT SubNum,0					' define external subroutine
+  RUN 1						' run subs program
+
+Task1:
+  count2 = count2 + 10				' local update
+  PUT SubNum,1					' define external subroutine
+  RUN 1						' run subs program
+
+Task2:
+  DEBUG "(TASKER [2])",TAB,DEC count2,CR
+  PAUSE 500
+  GOTO NextTask

@@ -1,0 +1,68 @@
+;=======================================================================
+;TITLE:         Page_Calling.src
+;
+;PURPOSE:       This SX28 code demonstrates calling across pages.
+;
+;AUTHOR:        Parallax, Inc.
+;
+;REVISIONS:
+;  08/12/99 -   Initial release.
+;  09/17/04 -   Updated to support SASM.
+;
+;CONNECTIONS:
+;  None.
+;
+;DETAILS:
+;  Use Run -> Debug option to program SX chip.  After it has downloaded
+;  and the Debug screens appear, use the Hop or Step buttons to step one
+;  instruction at a time.  Watch carefully how execution jumps between
+;  routines located on different pages, paying attention to STATUS
+;  register bits 5, 6 and 7 as they change to indicate the correct page.
+;  NOTE:  Status bits 5-7 are used as the upper three bits of the address
+;  (combined with the 8 bits in PC) when calling or jumping.
+;=======================================================================
+
+
+;-------------------------- DEVICE DIRECTIVES --------------------------
+
+		DEVICE		SX28,OSC4MHZ,TURBO
+
+IFDEF	__SASM  ;SASM Directives
+		DEVICE		STACKX,OPTIONX
+		IRC_CAL		IRC_SLOW
+		
+ELSE		;Parallax Assember Directives
+		DEVICE		STACKX_OPTIONX
+ENDIF
+
+		RESET		Main
+
+;---------------------------- DEBUG SETTINGS ---------------------------
+
+		FREQ	4_000_000
+
+;----------------------------- JUMP TABLES -----------------------------
+		ORG	$0		;Page 0
+
+Sub1		jmp	@_Sub1		;Set page and jump
+Sub2		jmp	@_Sub2
+
+;---------------------------- MAIN PROGRAM -----------------------------
+		;Start of main routines
+
+Main		call	@Sub1		;Call the Jump Table
+		jmp	@Continue
+	
+;----------------------------- SUBROUTINES -----------------------------
+		ORG	$200		;Page 1
+
+Continue	call	@Sub2		;Call the Jump Table
+		jmp	@Main
+			
+	
+		ORG	$400		;Page 2
+_Sub1		;Subroutine 1 code goes here
+		retp			;Return and reset page
+
+_Sub2		;Subroutine 2 code goes here
+		retp			;Return and reset page

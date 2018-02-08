@@ -1,0 +1,79 @@
+' =========================================================================
+'
+'   File....... PWMPAL_Template.BS2
+'   Purpose.... Template for PWMPAL Programs
+'   Author..... Parallax
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 18 JUN 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+PpPin           PIN     0                       ' PWM Pal Serial I/O
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+T9600           CON     84
+T19200          CON     32
+T38400          CON     6
+PpBaud          CON     T38400
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+chan            VAR     Nib                     ' channel number
+status          VAR     Byte                    ' control/status
+phase           VAR     Byte                    ' counters/phase
+
+tOn             VAR     Word                    ' work variable
+tOff            VAR     Word                    ' work variable
+counter         VAR     Word                    ' work variable
+
+m1Ctrl          VAR     status.BIT0             ' status bits
+m2Ctrl          VAR     status.BIT1
+m3Ctrl          VAR     status.BIT2
+m4Ctrl          VAR     status.BIT3
+m1Enable        VAR     status.BIT4
+m2Enable        VAR     status.BIT5
+m3Enable        VAR     status.BIT6
+m4Enable        VAR     status.BIT7
+
+c1Enable        VAR     phase.BIT0              ' phase bits
+c2Enable        VAR     phase.BIT1
+c3Enable        VAR     phase.BIT2
+c4Enable        VAR     phase.BIT3
+m1Phase         VAR     phase.BIT4
+m2Phase         VAR     phase.BIT5
+m3Phase         VAR     phase.BIT6
+m4Phase         VAR     phase.BIT7
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Setup:
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------

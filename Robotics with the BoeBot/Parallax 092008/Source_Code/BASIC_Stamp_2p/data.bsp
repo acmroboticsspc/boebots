@@ -1,0 +1,30 @@
+'{$STAMP BS2p}
+
+addr	VAR WORD
+char	VAR BYTE
+
+Text1	DATA "0123456789"
+
+	DATA @$10, "A", "B"
+
+Text2 DATA @32, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+
+Spc	DATA @$30, " " (16)
+
+Res	DATA @$40, (16)
+	DATA 27
+
+Text3	DATA @$100, "Das ist ein Beispiel für einen mit ASCII 0 abgeschlossenen String.",0
+
+	addr = Text3
+	DEBUG CLS, HEX4 addr
+	SEROUT 16, 240, [CR]
+loop:
+	READ addr, char
+	IF char = 0 then exit
+	SEROUT 16, 240, [char]
+	addr = addr + 1
+	GOTO loop
+exit: DEBUG CR, HEX4 addr	
+
+END

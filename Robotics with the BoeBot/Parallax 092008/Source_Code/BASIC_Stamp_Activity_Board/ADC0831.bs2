@@ -1,0 +1,22 @@
+'************************************************************************
+'*  Basic Stamp Activity Board Sample Program                 ADC-0831  *
+'*  9 September, 1997                                           (BS-2)  *
+'*                                                                      *
+'*  This program shows how to use the ADC-0831 from National Semi.      *
+'*  Insert the ADC-0831 into Socket A and position the jumpers and      *
+'*  apply the analog input according to the drawing depicted in the     *
+'*  Basic Stamp Activity Board Notes. Power it up and hit 'Alt-R' to    *
+'*  download. The analog input voltage must be 0-5Vdc.                  *
+'************************************************************************
+ADres	var	byte		' A/D result (8 bits)
+ADcs	con	12		' A/D enable (low true)
+ADdat	con	14		' A/D data line
+ADclk	con	15		' A/D clock  
+
+START:	low ADcs				' Enable ADC
+	shiftin ADdat,ADclk,msbpost,[ADres\9]	' Shift in the data
+	high ADcs				' Disable ADC
+	debug ?ADres				' Display the result
+	pause 100				' Wait a 0.1 Seconds 
+	goto START				' Repeat forever
+'************************************************************************

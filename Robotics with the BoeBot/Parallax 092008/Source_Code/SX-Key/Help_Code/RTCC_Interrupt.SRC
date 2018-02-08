@@ -1,0 +1,68 @@
+;=======================================================================
+;TITLE:         RTCC_Interrupt.src
+;
+;PURPOSE:       This SX28 code demonstrates RTCC-Rollover Interrupts.
+;
+;AUTHOR:        Parallax, Inc.
+;
+;REVISIONS:
+;  08/12/99 -   Initial release.
+;  09/17/04 -   Updated to support SASM.
+;
+;CONNECTIONS:
+;  None.
+;
+;DETAILS:
+;  NOTE: The SX will not always trigger an interrupt if the SX-Key is
+;  single-stepping or walking during debug mode.  Running or polling
+;  during debug mode will allow triggering of these interrupts, however.
+;
+;  Use Run -> Debug (CTRL+D) to program the SX chip.  After it has
+;  downloaded and the Debug screens appear, click on the Poll button to
+;  run the code in polling mode.  The code will run full speed, but will
+;  update the screen at the BREAK directive (below).  Watch register $08
+;  as is it incremented by the interrupt routine.  The BREAK is inside of
+;  the interrupt routine, thus, no update of the screen even occurs until
+;  an RTCC-Rollover interrupt occurs.  If this code is Run (instead of
+;  Polled), it will run at full speed until an interrupt occurs.
+;=======================================================================
+
+
+;-------------------------- DEVICE DIRECTIVES --------------------------
+
+		DEVICE		SX28,OSC4MHZ,TURBO
+
+IFDEF	__SASM  ;SASM Directives
+		DEVICE		STACKX,OPTIONX
+		IRC_CAL		IRC_SLOW
+		
+ELSE		;Parallax Assember Directives
+		DEVICE		STACKX_OPTIONX
+ENDIF
+
+		RESET		Initialize
+
+;---------------------------- DEBUG SETTINGS ---------------------------
+
+		FREQ	4_000_000
+	
+;-------------------------- INTERRUPT ROUTINE --------------------------
+
+		ORG 	$00
+Interrupt
+		BREAK
+		inc	$08
+		reti
+
+;------------------------ INITIALIZATION ROUTINE -----------------------
+
+Initialize
+		;RTCC Rollover Interrupt Configuration
+		MOV	!OPTION,#%10011111	;Enable RTCC rollover interrupt
+ 						;RTCC inc on clock cycle, no prescaler
+
+
+;---------------------------- MAIN PROGRAM -----------------------------
+
+Main		
+		jmp	Main

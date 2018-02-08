@@ -1,0 +1,144 @@
+'{$STAMP BS2}
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... HyperTerminal to Stamp Modem (CH1786LEDs.BS2)
+' Purpose... Cermetek CH1786 Demo Program Demonstrates PC to Stamp Modem 
+' Author.... Parallax, Inc.
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Stamp Modem answers an incoming call from a PC modem. Two LEDs on the 
+' Board of Education / Stamp Modem board are controlled using a terminal 
+' program such as HyperTerminal.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+Red_LED	CON	0				' red LED through 470 ohm
+Yellow_LED	CON	1				' yellow LED through 470 ohm
+RI_		VAR	In12				' ring indicator
+DCD_		VAR	In13				' carrier detect
+RX1		CON	14				' CH1786 "Rx" pin
+TX1		CON	15				' CH1786 "Tx" pin
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+T2400		CON	396				' 2400 baud for modem: 8N
+No		CON	1
+Yes		CON	0
+LF		CON	10				' line feed character
+FF		CON	12				' clear screen
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+InByte	var byte				' input character from modem
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+dirs = %100000000000011
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+
+Main:
+  GOSUB Initialize_Modem			' initialize modem
+  GOSUB Wait_DCD					' carrier detect routine
+  GOSUB Communicate
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+
+Initialize_Modem:	
+  'DEBUG "Initializing Modem",cr			
+  PAUSE 1000					' allow modem to power up
+  SEROUT TX1, T2400,["AT", CR]		' setup modem for speed
+  SERIN  RX1, T2400, 2500, Error, [WAIT ("OK")]
+  PAUSE 250
+
+  SEROUT TX1, T2400,["ATS0=2", CR]		' answer on second ring.
+  SERIN  RX1, T2400, 2500, Error, [WAIT ("OK")]
+  PAUSE 250
+
+  SEROUT TX1, T2400,["ATS7=50", CR]		' max carrier detect is 50 secs 
+  SERIN  RX1, T2400, 2500, Error, [WAIT ("OK")]
+  PAUSE 250
+
+  SEROUT TX1, T2400,["ATS2=43", CR]		' escape character to "+" 
+  SERIN  RX1, T2400, 2500, Error, [WAIT ("OK")]
+  PAUSE 250
+		
+  SEROUT TX1, T2400,["AT&C1", CR]		' enable DCD
+  SERIN  RX1, T2400, 2500, Error, [WAIT ("OK")]
+  PAUSE 250
+
+  PAUSE 600
+  SEROUT TX1, T2400,["AT&D0", CR]		' disable DTR
+  SERIN  RX1, T2400, 2500, Error, [WAIT ("OK")]
+  PAUSE 200
+  RETURN
+
+Wait_DCD:						' wait for carrier detect
+  'DEBUG "Waiting for carrier detect",cr		
+  PAUSE 10
+  IF DCD_ = YES THEN Connect		      ' wait for carrier
+  GOTO Wait_DCD
+
+Connect:
+  PAUSE 30000
+  RETURN
+
+Communicate:
+  'DEBUG "Sending data to HypterTerminal",cr		
+  SEROUT TX1, T2400, [FF]
+  SEROUT TX1, T2400, ["==========================", CR, LF]
+  SEROUT TX1, T2400, ["CH1786 LED Demo Program   ", CR, LF]
+  SEROUT TX1, T2400, ["==========================", CR, LF]
+  SEROUT TX1, T2400, ["Command options:          ", CR, LF]
+  SEROUT TX1, T2400, [" [R] Red LED toggle       ", CR, LF]
+  SEROUT TX1, T2400, [" [Y] Yellow LED toggle    ", CR, LF]
+  SEROUT TX1, T2400, [" [E] End the call         ", CR, LF]
+  SEROUT TX1, T2400, [CR, LF]
+  SEROUT TX1, T2400, [" Red LED status    = ", bin1 in0,CR, LF]
+  SEROUT TX1, T2400, [" Yellow LED status = ", bin1 in1,CR, LF]
+  SEROUT TX1, T2400, [CR, LF]
+  SEROUT TX1, T2400, ["Enter command ==> "]
+  PAUSE 500  
+  SERIN RX1,T2400,[InByte]			' get byte
+  IF InByte = "E" THEN Hang_up		
+  IF InByte = "R" THEN Toggle_red
+  IF InByte = "Y" THEN Toggle_yellow
+  GOTO Communicate
+
+Hang_up:						' hang up modem
+  'DEBUG "Hanging up modem",cr		
+  OUTL=%0000					' LEDs off					
+  SEROUT TX1, T2400,[CR,LF,LF,"Disconnect requested", CR,LF]
+  PAUSE 2000
+  SEROUT TX1, T2400, ["+++"]
+  PAUSE 2000
+  SEROUT TX1, T2400, 10, ["ATH0", CR]
+RETURN
+
+Toggle_red:
+  TOGGLE 0
+  GOTO Communicate
+
+Toggle_yellow:
+  TOGGLE 1
+  GOTO Communicate
+
+Error:
+  'DEBUG "Communication error!",cr
+END

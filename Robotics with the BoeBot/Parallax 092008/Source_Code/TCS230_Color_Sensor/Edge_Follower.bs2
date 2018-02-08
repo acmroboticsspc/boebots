@@ -1,0 +1,117 @@
+'{$STAMP BS2}
+
+'----------------------------------------------------------------------------------------
+'     Color edge follower for the TCS230 color sensor module and the Parallax BOEBot.
+'----------------------------------------------------------------------------------------
+'To use this program, position the TCS230 module on the front of the BOEBot, facing down,
+'with the PCB about one inch from the floor/table. Holding the reset button in, place
+'the BOEBot so that the TCS230 is centered over a section of colored tape comprising a
+'path laid out on the floor/table. Release the reset button. The BOEBot will read the
+'color of the tape, then spin right to read the color of the floor/table. From then it
+'will follow the right edge of the tape around the circuit laid out. Tape having a high
+'color contrast with the background will give the best results. Blue or green masking
+'tapes work well. Stripes on a gymnasium floor should also work well.
+
+'Define port pins
+
+EN	CON	1	'TCS 230 output enable.
+A0	CON	2	'Unit 0/Unit 1 selector.
+S0	CON	3	'Output frequency selectors.
+S1	CON	4	'           "
+S2	CON	5	'Color selectors.
+S3	CON	6	'           "
+nLED	CON	7	'LED enable, active low.
+OUT	CON	8	'TCS230 output pin.
+RIGHT	CON	12	'Servo controller: Left wheel.
+LEFT	CON	13	'Servo controller: Right wheel.
+
+'Color difference behavior thresholds.
+
+LORGT	CON	40	'Way too far into the tape. Quick right.
+HIRGT	CON	50	'Too far into tape. Veer right.
+LOLFT	CON	75	'Too far off tape. Veer left.
+HILFT	CON	85	'Way to far off tape. Quick left.
+
+'Variable definitions.
+
+RED	VAR	WORD	'Current value of red color component.
+GREEN	VAR	WORD	'Current value of green color component.
+BLUE	VAR	WORD	'Current value of blue color component.
+TRED	VAR	WORD	'Red component of tape.
+TGREEN	VAR	WORD	'Green component of tape.
+TBLUE	VAR	WORD	'Blue component of tape.
+MAXDIF	VAR	WORD	'Maximum color difference between on tape & off tape.
+DIF	VAR	WORD	'Difference between current color and "on tape".
+IDIF	VAR	WORD	'Time-integrated color difference.
+LPULS	VAR	WORD	'Pulse width for left wheel.
+RPULS	VAR	WORD	'Pulse width for right wheel.
+
+'Program begins here.
+
+START:	HIGH	S0	'Select maximum TCS230 output frequency.
+	HIGH	S1
+	LOW	LEFT	'Turn off servo pulse levels.
+	LOW	RIGHT
+	LOW	nLED	'Enable LED to come on when EN is high.
+	LOW	EN	'Disable TCS230 output.
+	LOW	A0	'Select Unit 0.
+	PAUSE	3000	'Wait three seconds.
+
+	GOSUB	SAMPLE	'Sample the tape color.
+	TRED	= RED	'Save color components.
+	TBLUE	= BLUE
+	TGREEN	= GREEN
+
+	FOR	DIF = 1 TO 10	'Turn right to get off of tape.
+	PULSOUT	LEFT, 1000
+	PULSOUT	RIGHT, 1000
+	PAUSE	20
+	NEXT
+
+	GOSUB	SAMPLE	'Get a color sample "off tape".
+			'Compute the "minimax" difference between "on tape" and "off tape" colors.
+	MAXDIF	= ABS(RED - TRED) MIN ABS(BLUE - TBLUE) MIN ABS(GREEN - TGREEN) MAX 640
+
+	IDIF	= 0	'Clear integrated difference.
+
+'Initialization done. Begin main program loop.
+
+MAINLP:	GOSUB	SAMPLE	'Read the current color.
+			'Calculate the normalized (to 100) difference between current and tape color.
+	DIF	= (ABS(RED - TRED) MIN ABS(BLUE - TBLUE) MIN ABS(GREEN - TGREEN) MAX 640) * 100 / MAXDIF MAX 100
+
+	IF	DIF < LORGT THEN WAYRGT	'Way too much like tape color: hard right.
+	IF	DIF < HIRGT THEN GORGHT	'Too much like tape color: veer right.
+	IF	DIF > HILFT THEN WAYLFT	'Too little like tape color: veer left.
+	IF	DIF > LOLFT THEN GOLEFT	'Way to little like tape color: hard left.
+
+	LPULS	= 1000	'Just right: stay the course.
+	RPULS	= 500
+	IDIF	= 0	'Clear time-integrated difference.
+	GOTO	DOPULS	'Pulse the servos.
+
+WAYRGT:	IDIF	= IDIF + 60 MAX 250	'Hard right. Accumulate differences.
+GORGHT:	LPULS	= 1000			'Right: Move left wheel forward.
+	RPULS	= 750 - (DIF * 5) + IDIF  'Move right wheel forward or back, depending on tightness of turn.
+	GOTO	DOPULS			'Pulse the servos.
+
+WAYLFT: IDIF	= IDIF + 5 MAX 250	'Hard left. Accumulate differences.
+GOLEFT:	RPULS	= 500			'Left: Move right wheel forward.
+	LPULS	= 1250 - (DIF * 5) - IDIF  'Move left wheel forward or back, depending on tightness of turn.
+
+DOPULS:	PULSOUT	LEFT, LPULS		'Pulse the servos once each.
+	PULSOUT	RIGHT, RPULS
+	GOTO	MAINLP			'Back for another color sample.
+
+'SAMPLE: Sample the current RGB values.
+
+SAMPLE:	HIGH	EN			'Enable the TCS230 output, turning on the LEDs.	
+	LOW	S2			'Select red component.
+	LOW	S3
+	COUNT	OUT, 10, RED		'Sample it.
+	HIGH	S3			'Select blue component.
+	COUNT	OUT, 10, BLUE		'Sample it.
+	HIGH	S2			'Select green component.
+	COUNT	OUT, 10, GREEN		'Sample it.
+	LOW	EN			'Turn off output and LEDs.
+	RETURN				'Return.

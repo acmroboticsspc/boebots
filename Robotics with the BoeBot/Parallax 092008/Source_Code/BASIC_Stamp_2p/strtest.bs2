@@ -1,0 +1,24 @@
+string VAR byte(8)			' Command string
+value	VAR word
+i	VAR nib
+
+start:
+	SERIN 16,84+$4000,[STR string\7\";"]
+
+	'Test for "P1="
+	IF (string(0)<>"P" OR string(1)<>"1" OR string(2)<>"=") THEN no_command
+	value = 0
+	i = 3 
+m1:	if string(i) = 0 then next_command
+	value = value * 10+ string(i) - 48
+	
+	i = i + 1
+	goto m1
+
+
+
+next_command:
+	debug cr, cr, "D:", DEC3 value
+
+no_command:
+	goto start

@@ -1,0 +1,85 @@
+; TUT020.SRC
+; ----------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE   SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ     50_000_000
+else  
+  DEVICE   SX28AC, OSCHS, OPTIONX
+endif
+DEVICE     TURBO
+RESET      Start
+
+TRIS       equ $0f
+PLP        equ $0e
+WKEN       equ $0b
+WKPND_W    equ $09
+
+org        $08
+
+Counter1   ds 1
+Counter2   ds 1
+Counter3   ds 1
+Time       ds 1
+Bounce     ds 2
+localTemp0 ds 1
+
+org $000
+
+;-----------------------------------
+; ISR
+;-----------------------------------
+  mov    localTemp0, m
+  clr    Bounce
+  clr    Bounce+1
+:DeBounce
+  decsz  Bounce
+    jmp  :DeBounce
+  decsz  Bounce+1
+    jmp  :DeBounce
+  sb     rb.3
+    xor  Time, #%00100000
+  mode   WKPND_W
+  clr    w
+  mov    !rb, w
+  mov    m, localTemp0
+  reti
+
+TimeEater
+  mov    Counter1, Time
+:Loop
+  decsz  Counter3
+    jmp  :Loop
+  decsz  Counter2
+    jmp  :Loop
+  decsz  Counter1
+    jmp  :Loop
+  
+  ret
+
+org $100
+
+Start
+  mov    Time, #$30
+  mode   TRIS
+  mov    !rb, #%11111110
+  mode   PLP
+  mov    !rb, #%11110111
+  mode   WKPND_W
+  clr    w
+  mov    !rb, w
+  mode   WKEN
+  mov    !rb, #%11110111
+
+Loop
+  call   TimeEater
+  clrb   rb.0
+
+  call   TimeEater
+  setb   rb.0
+  jmp    Loop

@@ -1,0 +1,25 @@
+' Applied Robotics with the SumoBot - PushbuttonLed.bs2
+' Simple finite state machine example.
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+pbSense    PIN 6
+LedSpeaker PIN 5
+
+LOW LedSpeaker
+
+DO
+
+  IF pbSense = 1 THEN
+    DEBUG HOME, "State = Blink LED"
+    TOGGLE LedSpeaker
+  ELSE
+    DEBUG HOME, "State = Led off", CLREOL
+    LOW LedSpeaker
+  ENDIF
+
+  PAUSE 100
+
+LOOP
+

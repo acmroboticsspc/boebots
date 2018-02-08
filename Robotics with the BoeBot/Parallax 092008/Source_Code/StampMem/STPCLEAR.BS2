@@ -1,0 +1,27 @@
+'This BS2-IC program tells the StampMem to clear all memory.
+'(writes FF hex data in each byte location. Requires about 1 minute)
+
+Idx		VAR	BYTE		'General Purpose Index Variable
+Value		VAR	BYTE(2)	'Used to read values
+
+  'Send Clear command, (StampMem clears it's own memory (to $FF))
+  DEBUG "Clearing memory",CR,"Time Remaining:     Sec",REP 3\4
+  SEROUT 0,84,["ZERC"]
+  Idx = 60
+WaitMore:
+  Idx = Idx - 10
+  IF Idx = 0 THEN NoClearResponse
+  DEBUG REP 3\3,DEC3 Idx
+  SERIN 0,84,10000,WaitMore,[STR Value\2]
+  IF Value(0) = 255 THEN OK
+  DEBUG "ERROR! StampMem failed to Clear all memory."
+  DEBUG CR,"EEPROM #",DEC Value(1)/32+1, " Failed."
+  STOP
+OK:
+  DEBUG CR,"StampMem cleared all memory."
+STOP
+
+NoClearResponse:
+  DEBUG "ERROR! StampMem did not respond to Clear command"
+STOP
+

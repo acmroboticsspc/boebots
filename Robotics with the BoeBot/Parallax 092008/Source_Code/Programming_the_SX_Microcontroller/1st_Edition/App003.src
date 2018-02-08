@@ -1,0 +1,224 @@
+; APP003.SRC - Generating a triangular waveform
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+;SX18_20                                     
+SX28
+;SX48_52
+;SX48_52_ES                                     
+
+IFDEF __SASM
+  IFDEF SX18_20
+    device   SX18L, oschs2, turbo, stackx, optionx
+  ENDIF
+  IFDEF SX28 
+    device   SX28L, oschs2, turbo, stackx, optionx
+  ENDIF
+  IFDEF SX48_52_ES
+    device   oschs,turbo, stackx, optionx
+  ELSE
+    IFDEF SX48_52
+      device oschs2
+    ENDIF
+  ENDIF
+    IRC_CAL  IRC_FAST
+    freq     50_000_000                         
+ELSE
+  IFDEF SX18_20
+    device   SX18, oschs2, turbo, stackx, optionx
+  ENDIF
+  IFDEF SX28
+    device   SX28, oschs2, turbo, stackx, optionx
+  ENDIF
+  IFDEF SX48_52_ES
+    device   SX52, oschs, turbo, stackx, optionx
+  ELSE
+    IFDEF SX48_52
+      device SX52, oschs2   
+    ENDIF
+  ENDIF
+ENDIF
+
+id    'TriGen'                             
+reset reset_entry                       ; set reset vector
+
+_bank macro 1
+  bank  \1
+  IFDEF SX48_52
+    IFDEF SX48_52_ES
+      IF \1 & %00010000                 ; SX48BD/ES and SX52BD/ES (engineering
+                                        ; sample)
+        setb  fsr.4
+      ENDIF
+    ELSE
+      IF \1 & %10000000 
+        setb  fsr.7
+      ELSE
+        clrb  fsr.7
+      ENDIF
+    ENDIF
+  ENDIF
+endm
+
+_mode macro 1
+  IFDEF SX48_52
+    mov   w, #\1 & $1F                  ; loads the M register for the SX48BD
+        ;and SX52BD
+    mov   m, w
+  ELSE
+    mov   m, #\1 & $0F                  ; loads the M register for the SX18AC,
+        ;SX20AC and SX28AC
+  ENDIF
+endm
+
+IFDEF SX48_52
+global_org   =   $0A
+bank0_org    =   $00
+ELSE
+global_org   =   $08
+bank0_org    =   $10
+ENDIF
+
+             org  global_org
+
+flags0       equ  global_org + 0
+flags1       equ  global_org + 1
+localTemp0   equ  global_org + 2
+localTemp1   equ  global_org + 3
+localTemp2   equ  global_org + 4
+isrTemp      equ  global_org + 5
+
+;VP_begin DAC Triangle
+dacSlope     equ  flags0.0
+;VP_end
+             org  bank0_org
+bank0        =    $
+
+;VP_begin DAC Triangle
+dacOutVal    ds   1
+;VP_end
+
+
+;***********************************************************************
+; Port Assignment
+;***********************************************************************
+
+RC_latch     equ   %00000000            ; SX18/20/28/48/52 port C latch init
+RC_DDIR      equ   %00000000            ; SX18/20/28/48/52 port C DDIR value 
+      
+;***********************************************************************
+; Port and pin definitions
+;***********************************************************************
+
+;VP_begin DAC Ramp
+DAC_PORT     equ   rc
+;VP_end
+
+;***********************************************************************
+; Program constants
+;***********************************************************************
+
+int_period   equ   100                  ; RTCC Interrupt rate
+
+IFDEF SX48_52
+DDIR_W       equ   $1F                  ; Write Port Direction
+ELSE
+DDIR_W       equ   $0F                  ; Write Port Direction
+ENDIF
+
+INTERRUPT_ORG      equ $000
+RESET_ENTRY_ORG    equ $1fb
+MAIN_PROGRAM_ORG   equ $600
+
+       org    INTERRUPT_ORG
+           
+;***********************************************************************
+ISR
+;***********************************************************************
+
+;VP_begin DAC Triangle
+      snb   dacSlope                    ; If Flags.0 set, negative slope
+        jmp :Down
+      inc   dacOutVal                   ; Generate positive slope
+      cjb   dacOutVal, #250, isrOut     ; Continue if less than 250,
+      dec   dacOutVal                   ; else reset to 249    
+      setb  dacSlope                    ; Set flag for negative slope
+:Down                                   ; Generate negative slope   
+      dec   dacOutVal
+      sz                                ; Continue is greater than 0,
+        jmp isrOut                      ; else
+      clrb  dacSlope                    ; clear the slope direction flag
+;VP_end         
+                  
+isrOut
+      mov   w, #-int_period
+      retiw
+                                    
+      org   RESET_ENTRY_ORG
+      
+reset_entry    
+      page  _resetEntry
+      jmp   _resetEntry
+
+      org   MAIN_PROGRAM_ORG
+      
+_resetEntry
+      mov   w, #RC_latch                ; Initialize RC data latch
+      mov   rc, w      
+      _mode DDIR_W                      ; point MODE to write DDIR register
+      mov   w, #RC_DDIR                 ; Setup RC Direction register
+      mov   !rc, w       
+
+;***********************************************************************
+; Clear all Data RAM locations
+;***********************************************************************
+IFDEF SX48_52                           ; SX48/52 RAM clear routine
+      mov   w,#$0a                      ; reset all ram starting at $0A
+      mov   fsr,w
+:zero_ram   clr   ind                   ; clear using indirect addressing
+      incsz fsr                         ; repeat until done
+      jmp   :zero_ram
+
+      _bank bank0                       ; clear bank 0 registers
+      clr   $10
+      clr   $11
+      clr   $12
+      clr   $13
+      clr   $14
+      clr   $15
+      clr   $16
+      clr   $17
+      clr   $18
+      clr   $19
+      clr   $1a
+      clr   $1b
+      clr   $1c
+      clr   $1d
+      clr   $1e
+      clr   $1f
+
+ELSE                                    ; SX18/20/28 RAM clear routine
+      clr   fsr                         ; reset all ram banks
+:zero_ram   sb fsr.4                    ; are we on low half of bank?
+      setb  fsr.3                       ; If so, don't touch regs 0-7
+      clr   ind                         ; clear using indirect addressing
+      incsz fsr                         ; repeat until done
+      jmp   :zero_ram
+ENDIF
+
+RTCC_ON      =  %10000000               ; Enables RTCC at address $01 (RTW hi)
+                                        ; *WREG at address $01 (RTW lo) by
+        ;default
+RTCC_PS_OFF  =  %00001000               ; Assigns prescaler to RTCC (PSA lo)
+PS_111       =  %00000111               ; RTCC = 1:256, WDT = 1:128
+
+OPTIONSETUP  equ RTCC_ON | RTCC_PS_OFF | PS_111
+
+      mov   !option, #OPTIONSETUP
+      _bank localTemp0
+mainLoop
+      jmp   mainLoop  
+END

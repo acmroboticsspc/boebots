@@ -1,0 +1,119 @@
+' =========================================================================
+'
+'   File...... Light Music.BS2
+'   Purpose... Simple MIDI Theremin
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallax.com
+'   Started... 
+'   Updated... 22 JAN 2003
+'
+'   {$STAMP BS2p}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Play a MIDI instrument via light falling on a CdS photocell.  It forms
+' part of a voltage divider with a 10K resistor which is read by and 
+' ADC0831.
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+MidiOut         PIN     15                      ' midi serial output
+
+A2Ddata         PIN      8                      ' ADC0831 data line
+A2Dclock        PIN      9                      ' ADC0831 clock
+A2Dcs           PIN     10                      ' ADC0831 chip select
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+#DEFINE DebugMode = 0                           ' for conditional DEBUGs
+
+#SELECT $STAMP                                  ' check Stamp type
+  #CASE BS2, BS2e, BS2pe
+    MidiBaud    CON     $8000 + 12              ' 31.25 kBaud -- open
+
+  #CASE BS2sx, BS2p
+    MidiBaud    CON     $8000 + 60
+#ENDSELECT
+
+Channel         CON     0
+NoteOn          CON     $90 | Channel
+NoteOff         CON     $80 | Channel
+
+ScaleMin        CON     32                      ' scale low value
+ScaleMax        CON     96                      ' sclae high value
+HighNote        CON     90                      ' highest playable note
+
+MixPercent      CON     35
+NMix            CON     $100 * MixPercent / 100 ' new note mix
+LMix            CON     $100 - NMix             ' last note mix
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+note            VAR     Byte                    ' note to play
+velocity        VAR     Byte                    ' volume level
+last            VAR     Byte                    ' last note
+scale           VAR     Word                    ' note scaling
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Setup:
+  HIGH A2Dcs                                    ' deselect ADC0831
+  scale = $0100                                 ' set scale to 1.00
+  GOSUB Get_Note                                ' read ambient light
+  
+  #IF DebugMode #THEN DEBUG DEC ?note : #ENDIF
+
+  scale = ScaleMax * $0100 / note               ' high note = ambient
+
+  #IF DebugMode #THEN DEBUG DEC ?scale : #ENDIF
+
+  GOSUB Get_Note
+
+  #IF DebugMode #THEN DEBUG DEC ?note : #ENDIF
+
+  last = note
+  velocity = 96                                 ' fixed volume
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  GOSUB Get_Note
+  note = (note */ NMix) + (last */ LMix)        ' digital filter
+  IF (note = last) THEN Main                    ' no change, look again
+  IF (note > HighNote) THEN Last_Off            ' if out of range, silence
+
+New_On:
+  SEROUT MidiOut, MidiBaud, [NoteOn, note, velocity]
+  PAUSE 5
+
+Last_Off:
+  SEROUT MidiOut, MidiBaud, [NoteOff, last, 0]
+  last = note
+  GOTO Main
+
+  END
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Get_Note:
+  LOW A2Dcs                                     ' select ADC0831
+  SHIFTIN A2Ddata, A2Dclock, MSBPost, [note\9]
+  HIGH A2Dcs                                    ' deslect ADC0831
+  note = note */ scale MIN ScaleMin             ' get new note
+  RETURN

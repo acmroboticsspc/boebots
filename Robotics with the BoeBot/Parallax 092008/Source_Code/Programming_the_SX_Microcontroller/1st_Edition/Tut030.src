@@ -1,0 +1,44 @@
+; TUT030.SRC
+; ----------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+;CMPOUT                         ; Remove the leading comment to
+                                ; enable the comparator output pin
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE   TURBO
+
+RESET    Start
+CMP      equ $08
+
+Start
+mode CMP
+IFDEF CMPOUT
+  mov  !rb, #%00000000
+ELSE
+  mov  !rb, #%01000000
+ENDIF
+
+; Read the comparator output
+;
+:Loop
+mode CMP
+IFDEF CMPOUT
+  mov  !rb, #%00000000
+ELSE
+  mov  !rb, #%01000000
+ENDIF
+;
+; w.0 now is set to the comparator
+; output state
+
+  mov $08, w                    ; <-- set a breakpoint here
+  jmp :Loop

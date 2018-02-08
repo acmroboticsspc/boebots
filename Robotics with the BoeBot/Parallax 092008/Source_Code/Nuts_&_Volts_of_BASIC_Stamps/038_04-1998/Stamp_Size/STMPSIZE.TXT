@@ -1,0 +1,83 @@
+===========================================================================
+                                STMPSIZE.EXE 
+===========================================================================
+
+Version 3.0
+July 28, 1996
+
+
+--------------------
+Overview
+--------------------
+
+The purpose of this utility is to analyze the EEPROM utilization of a
+Stamp 1 program.  I found it necessary because a some of my Stamp 1 pro-
+grams were getting very close the limit and I wanted to make sure that 
+I wasn't over-running the EEPROM.  STMPSIZE is a very useful tool when
+attempting to optimize Stamp 1 programs.
+
+To use STMPSIZE you must run a Stamp 1 program that contains the BSAVE
+command.  BSAVE creates a file called CODE.OBJ that is an image of the
+Stamp 1 EEPROM.  STMPSIZE analyzes CODE.OBJ (or the OBJ file you specify) 
+and determines space used for data (EEPROM command), free space, and space 
+used by the program.  It also displays a DEBUG-type memory dump so that 
+you can view ASCII characters stored in data memory.
+
+NOTE: BSAVE will save the file before the program is downloaded to the
+      Stamp 1. You do not actually need to have a Stamp connected for
+      it to work.
+
+
+--------------------
+Using STMPSIZE
+--------------------
+
+At the DOS prompt: STMPSIZE or STMPSIZE MYFILE
+
+If you do not specify a file name, CODE.OBJ is assumed.  If you do, 
+it is not necessary (but won't hurt) to add the .OBJ extension.
+
+Hint: Rename STMPSIZE.EXE SS.EXE for convenience.
+
+
+--------------------
+Examples
+--------------------
+
+I've included two demo programs and their associated OBJ files.  The 
+programs each display a couple of strings on a 1x16 LCD.  The difference 
+is in how the strings are stored within the program.  Notice that when 
+SS1 (strings stored in LOOKUP table) is analyzed there are 92 free bytes.  
+Now run STMPSIZE on SS2 (strings in data memory <EEPROM command>).  See 
+the difference?  There are now 103 free bytes and the program does exactly 
+the same thing!  Trust me, 11 bytes is enough to get excited about when it 
+comes to the Stamp 1.
+       
+
+I hope you find this program useful.  If you have any suggestions for im-
+provements, please drop me an e-mail.
+
+
+Jon Williams
+Irving, Texas
+E-mail... jonwms@aol.com
+WWW...... http://members.aol.com/jonwms
+
+
+Revision History:
+
+Version 1.0     Reported program memory and free space
+
+Version 2.0     Reported data memory, free memory and program memory
+                Added DEBUG type memory demp
+
+Version 2.1     Added version number
+                Improved memory dump (ASCII codes of pgm memory displayed)
+
+Version 2.2     Improved free memory scanning to prevent errors
+                Non-ASCII characters displayed as large dot
+
+Version 3.0     Added file name to title bar
+                Added percentage-of-use to analysis section
+                Added address range to each data line 
+                Highlighted last_address_used byte (255)

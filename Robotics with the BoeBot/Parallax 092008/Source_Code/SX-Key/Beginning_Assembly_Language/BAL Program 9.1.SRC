@@ -1,0 +1,132 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 9.1
+;4-bit LCD driver by Al Williams
+;=======================================================================
+
+		device	SX28L,turbo,stackx,optionx,oscxt1,bor42
+		freq 	4000000   	; Run at 4MHz to simplify timing.
+		reset	start   	; Go to 'start' on reset.
+ 
+		org     $0c
+dlyctr 		ds 	1   		; Main delay counter.
+dlymult		ds	1   		; Delay multiplier.
+tmp		ds	1		; Temp storage.
+work		ds	1		; More temp storage.
+i		ds	1		; Loop counter.
+ 
+ebit		equ 	ra.1 		; I/O: Enable and Register Select.
+ 
+rsbit		equ 	ra.0		; Assumes DB4 to DB7 connect to RB.0-RB.3.
+ 
+  		org 	0 
+ 
+ 
+ldelay		mov	dlymult,#5	; Long delay (5x256). Enter here if you want 
+delaym  	clr 	dlyctr		; to set your own dlymult.
+ 
+:delay  	nop
+		djnz 	dlyctr,:delay
+		djnz 	dlymult,delaym
+  		ret
+ 
+init		mov	ra,#0		; Call to init the LCD.
+		mov	rb,#0		; Set all bits to zero.
+		mov	!rb,#%11110000	; Set outputs.
+		mov	!ra,#%00
+		call	ldelay		; Give LCD some time to catch up.
+		mov	rb,#$3		; Write a 3 out to the display 3 times.
+ 
+		call	pulsee
+ 		call 	pulsee
+		call 	pulsee
+ 
+		mov 	rb,#$2   	; Now go to 4-bit mode (twice).
+		call 	pulsee
+		call	pulsee
+		mov 	rb,#$8		; Set 2-line mode (remove next 2 lines if
+					; display has 1 line).
+		call 	pulsee
+ 
+		mov 	w,#14		; Non blink cursor (use 15 for blinking).
+		call 	lcdout
+		mov 	w,#6   		; Activate the cursor.
+		call	lcdout
+clear    				; Clear the screen (init falls 
+					; Into this routine).
+  		mov 	w,#1   		; Send a command (clear falls 
+					; Into this routine).
+cmd  		clrb 	rsbit
+  		call 	lcdout
+  		setb 	rsbit
+  		ret
+ 
+lcdout  	mov 	tmp,w   	; Write to the LCD (4 bits at a time).
+ 
+  		mov 	work,w
+  		rr 	work    	; Get top 4 bits first.
+  		rr 	work
+  		rr 	work
+  		rr 	work
+  		and 	work,#$F
+  		mov 	rb,work
+  		call 	pulsee
+  		mov 	w,tmp   	; Then bottom 4 bits.
+  		and 	w,#$F	
+  		mov 	rb,w
+pulsee 		setb 	ebit   	; Pulse the E bit (lcdout falls into this).
+ 
+  		call 	ldelay
+  		clrb 	ebit
+  		ret
+ 
+; Set the cursor to the specified pos note that all displays think that
+; line 2 starts at pos 40 even if they don't have 40 characters.
+ 
+setcursor	mov	work,w
+		mov	w,#$80
+		add	w,work
+		jmp	cmd
+ 
+lookup		mov 	w,i   		; Get a byte from the string to display.
+  		jmp 	pc+w
+msg  		retw 	'Assembly Language I/O '
+  		retw 	'with the SX-Key',13
+  		retw 	'by Al Williams and Parallax',0
+ 
+start  		call 	init   		; Here is the main program.
+  		call 	ldelay
+  		clr 	i    		; Loop for each character.
+ 
+ploop  		call 	lookup
+; exit if 0
+  		test 	w
+  		jz 	:loop
+  		inc 	i
+  
+  		mov 	work,w   	; If 13 then go to line #2.
+  		cje 	work,#13,nl
+  		mov 	w,work  
+ 
+  		call 	lcdout   	; Not 0 or 13 so print it.
+ 
+; this delay gives a "teletype" effectcomment the following 2 lines
+; for full speed.
+ 
+  		clr 	dlymult
+  		call 	delaym
+ 
+  		jmp 	ploop      	; Keep going.
+ 
+; This look waits for about 5 seconds or so and then starts the whole 
+; thing over.
+ 
+:loop  		mov 	tmp,#64
+:loop1  	clr 	dlymult
+  		call 	delaym
+  		djnz 	tmp,:loop1
+  		jmp 	start  
+ 
+nl 		mov 	w,#40   	; Move to line 2.
+  		call 	setcursor
+  		jmp 	ploop

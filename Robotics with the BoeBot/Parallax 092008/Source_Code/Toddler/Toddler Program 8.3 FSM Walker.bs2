@@ -1,0 +1,361 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 8.3: Finite State Machine Walker
+' Real time servo programming and sensor integration lets Toddler walk
+' until infrared or Toddler Toes detect an object. To walk with bumpers 
+' only simply remove both infrared emitters on P4 and P15.
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+TiltServo       PIN     13              ' tilt servo on X7
+StrideServo     PIN     12              ' stride servo on X6
+
+LeftIRLED       PIN     4               ' left IRLED
+RightIRLED      PIN     15              ' right IRLED
+LeftIRSensor    PIN     11              ' left IR sensor input
+RightIRSensor   PIN     14              ' right IR sensor input
+
+RightBumper     PIN     1
+LeftBumper      PIN     2
+
+LeftVisionLED   PIN     5               ' left vision display LED
+RightVisionLED  PIN     6               ' right vision display LED
+Spkr            PIN     8               ' beeper pin
+
+' -----[ Constants ]-------------------------------------------------------
+
+MoveDelay       CON     1               ' code already using 19 ms of 20
+
+TiltStep        CON     5               ' TiltServo step size
+StrideStep      CON     5               ' StrideServo step size
+
+RightTilt       CON     620             ' tilt limits
+CenterTilt      CON     750             
+LeftTilt        CON     880            
+
+RightStride     CON     620             ' stride limits
+CenterStride    CON     750
+LeftStride      CON     890
+
+ctrlLEDs        CON     %1111           ' define DIRs as constants to 
+prepBumper      CON     %1001           ' simplify LED/bumper setups
+
+bothGreen       CON     %0110           ' OUTa register sets red/green
+bothRed         CON     %1001           ' status on P0-P3 for Twinkle Toes
+rightRed        CON     %0101           ' object detection states
+leftRed         CON     %1010
+bothLEDsOff     CON     %1001
+
+Fwd             CON     0               ' codes to pick movement table
+PivL            CON     1               ' set newMove to one of these
+PivR            CON     2               ' values and New_Movemt will LOOKUP
+BumpL           CON     3               ' the right movement table
+BumpR           CON     4
+
+' -----[ Variables ]-------------------------------------------------------
+
+doneTiltFlag    VAR     Bit             ' flag: 1 = tilt reached new value
+doneMoveFlag    VAR     Bit             ' flag: 1 = servos hit new values
+rightIR_Flag    VAR     Bit             ' flag: 1 = something on right side
+leftIR_Flag     VAR     Bit             ' flag: 1 = something left side
+rightBumpFlag   VAR     Bit             ' flag: 1 = bumper hit right side
+leftBumpFlag    VAR     Bit             ' flag: 1 = bumper hit left side
+
+sensors         VAR     Nib             ' lower 2 bits of the sensors var
+                                        ' used to store IR detector values
+currentMove     VAR     Nib
+newMove         VAR     Nib
+
+Mx              VAR     Word            ' index for movement tables
+MxOffset        VAR     Byte            ' added to Mx for index
+bMovmnt         VAR     Byte            ' table value for lookup movement
+
+currentTilt     VAR     Word
+currentStride   VAR     Word
+newTilt         VAR     Word
+newStride       VAR     Word
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+' These are actual values saved in the Basic Movement tables.
+
+TL              CON     0               ' use lower nibble for these
+TC              CON     1
+TR              CON     2
+SL              CON     3
+SC              CON     4
+SR              CON     5
+xx              CON     255             ' table end code
+
+' ------ Basic Movement Tables ------
+'
+' These tables contain Basic Movements consisting of bytes containing
+' above Basic Movement Codes to describe movement sequences.
+' An xx indicates the end of a list.
+' PivotLeft and PivotRight aren't entered at the start of their tables
+
+Forward         DATA    TR, SL, TL, SR, xx
+PivotLeft       DATA    TR, SL, TL, SR
+                DATA    TC, SL, TL, SR, xx
+PivotRight      DATA    TR, SL, TL, SR
+                DATA    TR, SL, TC, SR, xx
+RBumper         DATA    SL, TR, SR, TC, SL, TL, SR, xx
+LBumper         DATA    SR, TL, SL, TC, SR, TR, SL, TL, SR, xx
+
+' -----[ Initialize ]------------------------------------------------------
+
+GOSUB Clr_Vision                        ' reset vision LEDs and flags
+DIRS = ctrlLEDs                         ' setup green LEDs for Forward
+OUTS = bothGreen
+
+ResetFeet:
+  newTilt = CenterTilt
+  newStride = CenterStride
+  currentTilt = CenterTilt
+  currentStride = CenterStride
+
+  FOR currentMove = 1 TO 15             ' center feet for .3 sec
+    GOSUB Move_It                       ' currentMove is only a nibble.
+    PAUSE 17                            ' make up 20 ms servo refresh time
+    NEXT
+
+  'DEBUG "Forward = ", DEC Forward, CR
+  'DEBUG "PivotLeft = ", DEC PivotLeft, CR,
+  'DEBUG "PivotRight = ", DEC PivotRight, CR
+  'DEBUG "RBumper = ", DEC RBumper, cr, "LBumper = ", DEC LBumper, CR
+
+  doneTiltFlag = 1
+  doneMoveFlag = 1
+  sensors = 0
+  MxOffset = 0
+
+  FREQOUT Spkr, 2000, 3000              ' program start/restart signal
+  rightBumpFlag = 0
+  leftBumpFlag = 0
+
+  currentMove = 15                      ' invalid value to assure start
+  ' newMove = Fwd                       ' for testing single moves -
+  ' newMove = PivL                      ' comment out GOSUBs to vision
+  ' newMove = PivR                      ' and bump or the value might be
+  ' newMove = BumpL                     ' overwritten
+  ' newMove = BumpR
+
+' -----[ Main Code ]-------------------------------------------------------
+
+Main_Program:
+  DO
+    GOSUB Do_Vision                     ' look for obstacles with IR
+    GOSUB Do_Bumper                     ' check for obstacles with bumpers
+    GOSUB New_Movemt                    ' generates next move from table
+    GOSUB Do_Movement                   ' gives servo pulses out
+    PAUSE MoveDelay                     ' makes up 20 ms servo timing loop
+  LOOP
+END
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Do_Vision:
+
+  FREQOUT LeftIRLED,1,38500             ' pulse left IRLED.
+  sensors.BIT0 = LeftIRSensor           ' store IR detector output in RAM
+
+  FREQOUT RightIRLED,1,38500            ' repeat for the right IR pair.
+  sensors.BIT1 = RightIRSensor
+
+  ' Check if currently doing an infrared move
+
+  IF ((leftIR_Flag = 1) & (rightIR_Flag = 1)) THEN See_Both
+  IF (leftIR_Flag = 1) THEN See_Left    ' is left only?
+  IF (rightIR_Flag = 1) THEN See_Right  ' is right only?
+
+  ' Load IR detector output values into the lower 2 bits of the sensors
+  ' variable, storing a number between 0 and 3 that the BRANCH command
+  ' can execute the appropriate routine.
+
+  BRANCH sensors,[See_Both,See_Right,See_Left,See_None]
+
+See_Both:
+  newMove = PivR
+  rightIR_Flag = 1                      ' flag: 1 = something on right side
+  leftIR_Flag = 1                       ' flag: 1 = something left side
+  HIGH  LeftVisionLED                   ' left vision sequence display LED
+  HIGH  RightVisionLED                  ' right vision sequence display LED
+  RETURN
+
+See_Right:
+  newMove = PivL
+  rightIR_Flag = 1                      ' flag: 1 = something on right side
+  HIGH  RightVisionLED                  ' right vision sequence display LED
+  RETURN
+
+See_Left:
+  newMove = PivR
+  leftIR_Flag = 1                       ' flag: 1 = see something left side
+  HIGH  LeftVisionLED                   ' left vision sequence display LED
+  RETURN
+
+See_None:
+  newMove = Fwd
+  RETURN
+
+Do_Bumper:
+  DIRS = prepBumper
+  OUTS = bothLEDsOff
+
+  ' Bumpers on each foot. A hit causes Toddler to back and turn.
+  ' Code asssumes leg that hit is on the leg that is moving
+  ' (while leaning on the other leg).
+  ' A hit backs up the hit leg right away then steps back 1 step
+  '  and does a pivot away.
+
+  IF (leftBumpFlag = 1) THEN Bump_LeftA
+  IF (rightBumpFlag = 1) THEN Bump_RightA
+
+  ' check for old bumper hit on left
+  ' check for old bumper hit on right
+
+  IF (LeftBumper = 0) THEN Bump_Left    ' check for bumper hit on left
+  IF (RightBumper = 0) THEN Bump_Right  ' check for bumper hit on right
+
+  DIRS = ctrlLEDs
+  OUTS = bothGreen
+
+  RETURN
+
+Bump_Left:
+  'DEBUG "bump left", cr                ' sends only once on change
+
+Bump_LeftA:
+  leftBumpFlag = 1                      ' flag indicates bump response move
+  newMove = BumpL
+  DIRS = ctrlLEDs
+  OUTS = leftRed
+  GOTO Clr_Vision                       ' goes to Clr_Vision
+
+Bump_Right:
+  'DEBUG "bump right", cr
+
+Bump_RightA:
+  rightBumpFlag = 1
+  newMove = BumpR
+  DIRS = ctrlLEDs
+  OUTS = rightRed
+                                        ' falls through to Clr_Vision
+'---------------
+
+Clr_Vision:                             ' reset vision LEDs and flags
+  rightIR_Flag = 0                      ' flag: 1 = something on right side
+  leftIR_Flag = 0                       ' flag: 1 = something left side
+  LOW   LeftVisionLED                   ' left vision sequence display LED
+  LOW   RightVisionLED                  ' right vision sequence display LED
+  RETURN
+
+'---------------
+
+New_Movemt:                             ' sequences for forward motion
+
+  IF (newMove <> currentMove) THEN      ' new DATA if movement changed
+
+    'DEBUG cr, "start NewMovemt; newMove = ", DEC newMove
+    'DEBUG ", currentMove = ", DEC currentMove, CR
+
+    doneMoveFlag = 1                    ' stop current move wherever it is
+    currentMove = newMove
+
+    ' When customizing the program, here is where to integrate between
+    ' moves. You can make the transitions reasonable by using the existing
+    ' Mx value and MxOffset to compute the proper MxOffset to start into
+    ' the next move.
+
+    IF ((newMove = Fwd) OR (newMove = BumpL) OR (newMove = BumpR)) THEN
+      MxOffset = 0                      ' reset MxOffset value for new move
+    ENDIF
+    ' note: kept old MxOffset value for lead into pivot left or right
+
+    LOOKUP newMove,[Forward,PivotLeft,PivotRight,LBumper,RBumper],Mx
+                                        ' lookup movement table index
+  ENDIF
+
+  IF (doneMoveFlag = 1) THEN            ' done moving - lookup new move
+    READ (Mx + MxOffset), bMovmnt       ' read next basic move byte
+    'DEBUG "Mx = ", HEX Mx, ", MxOffset = ", HEX MxOffset
+    MxOffset = MxOffset + 1
+
+    IF (bMovmnt < xx) THEN              ' end code so do new move
+      'DEBUG "  bMovmnt = ", HEX bMovmnt, "  "
+
+      SELECT bMovmnt                    ' set and display movement type
+        CASE TL  : newTilt = LeftTilt           : 'DEBUG "TL, ", cr
+        CASE TC  : newTilt = CenterTilt         : 'DEBUG "TC, ", cr
+        CASE TR  : newTilt = RightTilt          : 'DEBUG "TR, ", cr
+        CASE SL  : newStride = LeftStride       : 'DEBUG "SL, ", cr
+        CASE SC  : newStride = CenterStride     : 'DEBUG "SC, ", cr
+        CASE SR  : newStride = RightStride      : 'DEBUG "SR, ", cr
+      ENDSELECT
+                                        ' fall through if invalid index
+    ELSE
+      'DEBUG "  xx = finished table", CR, CR
+      MxOffset = 0                      ' finished move sequence so restart
+      leftBumpFlag = 0                  ' clear out left bumper hit flag
+      rightBumpFlag = 0                 ' right too
+      DIRS = ctrlLEDs
+      OUTS = bothGreen
+      GOSUB Clr_Vision                  ' reset vision LEDs and flags
+      GOSUB Do_Vision                   ' since done previous movement,
+      GOSUB Do_Bumper                   ' figure out new one
+      GOTO New_Movemt                   ' get new table and offset
+    ENDIF
+
+  ENDIF
+
+'Done_New_Move:
+  RETURN                                ' ignore if invalid
+
+'---------------
+
+Do_Movement:
+
+  doneMoveFlag = 0                      ' reset flags
+  doneTiltFlag = 0
+
+  IF (currentTilt < newTilt) THEN       ' start tilt calculations
+    currentTilt = currentTilt + TiltStep' inc if coming from right tilt
+    IF (currentTilt >= newTilt) THEN    ' done?
+      currentTilt = newTilt             ' stop at limit
+      doneTiltFlag = 1
+    ENDIF
+  ELSE
+    currentTilt = currentTilt - TiltStep' coming from left tilt = decrement
+    IF (currentTilt <= newTilt) THEN    ' done?
+      currentTilt = newTilt             ' stop at limit
+      doneTiltFlag = 1
+    ENDIF
+  ENDIF
+
+
+Move_Stride:
+
+  IF (currentStride < newStride) THEN
+    currentStride = currentStride + StrideStep
+    ' coming from right stride = increment
+    IF (currentStride >= newStride) THEN
+      currentStride = newStride
+      IF (doneTiltFlag = 1) THEN doneMoveFlag = 1
+      ' uses doneMoveFlag to increment states.
+    ENDIF
+  ELSE
+    currentStride = currentStride - StrideStep
+    ' coming from left stride = decrement
+    IF (currentStride <= newStride) THEN
+    ' jump if still moving
+      currentStride = newStride
+      IF (doneTiltFlag = 1) THEN doneMoveFlag = 1
+      ' uses doneMoveFlag to increment states.
+    ENDIF
+  ENDIF
+
+Move_It:
+  PULSOUT TiltServo,   currentTilt
+  PULSOUT StrideServo, currentStride
+  RETURN 

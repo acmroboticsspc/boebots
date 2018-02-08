@@ -1,0 +1,19 @@
+'Example of StampMem data storage I/O.
+'I/O pin 0 should be connected to StampMem's SER pin.
+'2/22/99
+ 
+x	var	byte(17)	'data string
+Addr	var	word		'memory location to operate on
+
+PAUSE 500			'powerup delay
+'Write 16 bytes to StampMem
+Addr = 1000						'start at address 1000
+SEROUT 0,84,[0,Addr.HIGHBYTE,Addr.LOWBYTE,16]	'send Write command
+SEROUT 0,84,["0123456789abcdef"]			'send data 
+
+PAUSE 10		'allow time to write data[5ms*2(groups of 8 bytes)]
+Addr = 1000							'start at address 1000
+SEROUT 0,84,[1,Addr.HIGHBYTE,Addr.LOWBYTE,16] 	'semd Read command
+SERIN 0,84,[STR x\16]					'receive data
+DEBUG STR x,CR
+

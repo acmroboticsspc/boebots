@@ -1,0 +1,283 @@
+' Nuts & Volts - Stamp Applications
+' October 2000 (Listing 2)
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... SAYNUMBR.BS2
+' Purpose... Uses an ISD2560 to "say" and number
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 07 SEP 2000
+' Updated... 08 SEP 2000
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates ISD message concatenation.  The program has
+' two modes:
+'
+' MSDig (say digits)
+' ==================
+' In this mode, the individual digits of the random number are played. This
+' code demonstrates playing sounds from a specific address for a specified
+' length of time.  Digit addresses and durations are stored in DATA state-
+' ments (duration stored in 10 ms increments to fit into Byte).
+'
+' MSNum (say number)
+' ==================
+' In this mode, the number is spoken like we would.  This code demonstrates
+' cueing.
+'
+' Requirements
+' ============
+' For this program to work, you need to use ISD_LAB.BS2 to record the list
+' of digits (below) and determine clip timing (in 10 ms units) of the 
+' digits 0 through 9.
+'
+' Record this list (as individual clips) to the ISD:
+'
+' 	0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+'	10, 11, 12, 13, 14, 15, 16, 17, 18, 19
+'	20, 30, 40, 50, 60, 70, 80, 90,
+'	"hundred", "thousand"
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+AddrL	VAR	OutL			' low bits of ISD address (0..7)
+AddrH	VAR	OutC			' high bits of ISD address (8..9)
+
+CE_	CON	10			' ISD chip enable
+PR	CON	11			' ISD play/record (play = 1)
+PD	CON	12			' ISD power down (reset = 1)
+EOM_	VAR	In13			' ISD end of message indicator
+EOMpin	CON	13
+
+BtnIn	VAR	In14			' button input
+LED_	CON	15			' LED output (active low)
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+MaxAddr	CON	599			' last address in ISD25xx
+
+MSDig	CON	0			' say digits
+MSNum	CON	1			' say number
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+btn	VAR	Bit			' pushbutton input
+x	VAR	Byte			' loop counter
+mode	VAR	Bit			' demo mode
+msgNum	VAR	Byte			' message number
+msgAddr	VAR	Word			' clip segment address (0 - 599)
+msgLen	VAR	Word			' clip length in milliseconds
+waste	VAR	Word			' workspace for PULSIN
+opMode	VAR	Nib			' for use with SetModeBit
+randW	VAR	Word			' random number
+digit	VAR	Byte			' work value for saying digits
+tmpVal	VAR	Byte			' work value for number to speech
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+DAddr	DATA	2,13,25,33,42,52,62,73,84,95	' ISD address ("0" - "9")
+DTime	DATA	55,66,57,68,69,70,75,83,78,85	' time (10 ms units)
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Init_IO_Pins:
+  AddrL = %00000000			' clear message address bus
+  AddrH = %1100				' play, CE_ high, clear A9 & A8
+
+  DirL = %11111111			' low bits of address
+  DirC = %1111				' PR, CE_, A9, A8
+  DirD = %1001				' LED_, Btn, EOM_, PD
+
+ISD_Setup:
+  GOSUB ResetISD
+  PAUSE 25				' let ISD settle (Tpud)
+
+LED_Off:
+  HIGH LED_
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Main:
+  GOSUB GetBtn
+  IF btn = 1 THEN Main			' wait for release
+
+  DEBUG CLS, "Press the button..."
+
+BWait:
+  RANDOM randW				' generate new random number
+  GOSUB GetBtn
+  IF btn = 0 THEN BWait			' wait for press
+
+  BRANCH Mode,[SayDigits,SayNumber]	' branch to selected demo
+  GOTO Main
+
+
+' =============================
+' Say individual digits
+' - use clip address and length
+' =============================
+
+SayDigits:
+  DEBUG CLS, "Saying digits: ", DEC5 randW, CR
+
+  FOR x = 4 TO 0			' say all 5 digits
+    digit = randW DIG x			' get the digit
+    READ (DAddr + digit),msgAddr	' set the ISD digit address
+    READ (DTime + digit),msgLen		' read the length
+    msgLen = msgLen * 10		' set to milliseconds
+    GOSUB PlayLength			' say the digit
+  NEXT
+  
+  mode = ~mode				' flip mode
+  GOTO Main				' do it all again
+
+
+' ===============================
+' Say number as we would speak it
+' ===============================
+
+SayNumber:
+
+  DEBUG CLS, "Saying number: ", DEC randW, CR
+
+  IF randW = 0 THEN SN_Zero		' if zero, just say it
+
+  tmpVal = randW / 1000			' get 1000s
+  IF tmpVal = 0 THEN SN_100s		' if zero, skip to 100s
+  GOSUB SayValueXX			' say thousands value
+  msgNum = 30
+  GOSUB PlayMessage			' say "thousand"
+
+SN_100s:
+  tmpVal = (randW // 1000) / 100	' get 100s
+  IF tmpVal = 0 THEN SN_10		' if zero, skip to 10s
+  GOSUB SayValueXX			' say 100s value
+  msgNum = 29
+  GOSUB PlayMessage			' say "hundred"
+
+SN_10:
+  tmpVal = randW // 100			' get 10s and 1s
+  GOSUB SayValueXX			' say value
+  GOTO SN_Done
+
+SN_Zero:
+  msgNum = 1
+  GOSUB PlayMessage			' say "zero"
+
+SN_Done:
+  mode = ~mode				' flip mode
+  GOTO Main
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+ResetISD:
+  HIGH PD				' reset the ISD
+  PAUSE 13
+  LOW PD
+  RETURN
+
+
+' scan and debounce button input
+' - button must stay pushed for 25 ms and not change during routine
+'
+GetBtn:
+  btn = 1				' assume pressed
+  FOR x = 1 TO 5
+    btn = btn & ~BtnIn			' test input
+    PAUSE 5				' delay between tests
+  NEXT
+  RETURN
+
+
+PlayMessage:				' skip to specific message
+  GOSUB ResetISD
+  AddrL = %00010001			' consecutive messages with cueing
+  AddrH = %1111				' play, CE_ high, enable mode bits
+  PAUSE 25				' wait Tpud
+
+  IF (msgNum < 2) THEN PM_Play_It	' play first if 0 or 1
+
+PM_Fast_Forward:
+  msgNum = msgNum - 1			' don't skip selected message
+  FOR x = 1 TO msgNum			' fast forward to it
+    PULSOUT CE_,3			' start FF
+    PULSIN EOMpin,0,waste		' wait for EOM of current message
+  NEXT
+
+PM_Play_It:
+  AddrL = %00010000			' remove cueing bit
+  PULSOUT CE_,50			' start the message
+  PAUSE 50				' let EOM set
+
+PM_Wait:
+  IF EOM_ = 1 THEN PM_Wait		' wait for EOM to pulse low
+  RETURN
+
+
+PlayClip:				' play until EOM hit
+  GOSUB ResetISD
+  GOSUB SetAddress			' set address of message
+  PAUSE 25
+  PULSOUT CE_,50			' start play
+  PAUSE 50				' allow EOM to get set
+
+PC_Wait:
+  IF EOM_ = 1 THEN PC_Wait		' wait for EOM to pulse low
+  RETURN
+
+
+PlayLength:				' play for msgLen milliseconds
+  GOSUB ResetISD
+  GOSUB SetAddress			' set address of message
+  PAUSE 25				' wat Tpud
+  PULSOUT CE_,50			' start play
+  PAUSE msgLen				' wait for message to end
+  HIGH PD				' stop
+  RETURN
+
+
+SetAddress:
+  msgAddr = msgAddr MAX MaxAddr		' limit address to chip
+  AddrL = msgAddr.LowByte		' set A0..A7
+  AddrH = %1100 | (msgAddr >> 8)	' set play, CE_ high, A8..A9
+  RETURN
+
+
+SetModeBit:
+  AddrL = AddrL | (DCD opMode)		' add operational mode bit
+  AddrH = %1111				' set play, CE_ high, enable mode
+  RETURN  
+
+
+' ===============
+' Talking Numbers
+' ===============
+'
+' say a value between 1 and 99
+'
+SayValueXX:
+  IF (tmpVal < 1) | (tmpVal > 99) THEN SV_Done
+
+  IF tmpVal < 20 THEN SV_1TO19		' skip if less than 20
+
+  msgNum = (tmpVal / 10) + 19		' calculate 10s message #
+  GOSUB PlayMessage			' say 10s
+  tmpVal = tmpVal // 10			' calculate 1s message #
+  IF tmpVal = 0 THEN SV_Done		' skip if zero
+
+SV_1TO19:
+  msgNum = tmpVal + 1			' correct 0-offset
+  GOSUB PlayMessage			' say 1s
+
+SV_Done:
+  RETURN				' all done

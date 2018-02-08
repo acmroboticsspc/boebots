@@ -1,0 +1,227 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' BS2p Plus Pack
+'
+' File...... PP_PCF8583.BSP
+' Purpose... PCF8583 RTC Demo
+' Author.... Parallax
+' E-mail.... stamptech@parallaxinc.com
+' Started...
+' Updated... 26 SEP 2001
+
+' {$STAMP BS2p}
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' The program demonstrates the PCF8583 RTC/RAM.  When the program starts, you
+' will be asked if you want to set the time.  If Yes, you'll enter the hours,
+' minutes and day.  When running, the program displays the time and the day
+' (by name) on a two-line LCD.
+
+' To run this program on the BS2p Demo Board, connect the LCD and install
+' Jumper X3.
+'
+' Refer to the Hitachi HD44780 documentation for details on LCD control.
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+LCDpin          CON     0                       ' LCD is connected to OutL
+I2Cpin          CON     8                       ' SDA on 8; SCL on 9
+RxD             CON     16                      ' serial receive (from DEBUG)
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+DevType         CON     %1010 << 4              ' device type
+DevAddr         CON     %000 << 1               ' address = %000 -> %001
+Wr8583          CON     DevType | DevAddr       ' write to PCF8583
+Rd8583          CON     Wr8583 | 1              ' read from PCF8583
+
+' LCD control characters
+'
+NoCmd           CON     $00                     ' just print
+ClrLCD          CON     $01                     ' clear the LCD
+CrsrHm          CON     $02                     ' cursor home
+CrsrLf          CON     $10                     ' cursor left
+CrsrRt          CON     $14                     ' move cursor right
+DispLf          CON     $18                     ' shift display left
+DispRt          CON     $1C                     ' shift displayright
+DDRam           CON     $80                     ' Display Data RAM control
+Line1           CON     $80                     ' address of line 1
+Line2           CON     $C0                     ' address of line 2
+
+Yes             CON     1
+No              CON     0
+
+Baud96          CON     240                     ' 9600-8-N-1 (matches DEBUG)
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+seconds         VAR     Byte
+minutes         VAR     Byte
+hours           VAR     Byte
+day             VAR     Nib                     ' 0 - 6 (day of week)
+date            VAR     Byte                    ' 1 - 31
+month           VAR     Nib
+year            VAR     Nib                     ' 0 - 3 (LeapYear offset)
+
+rawTime         VAR     Word                    ' minutes past midnight
+
+regCtrl         VAR     Byte                    ' [0] control/status
+regHuns         VAR     Byte                    ' [1] hundredths (bcd)
+regSecs         VAR     Byte                    ' [2] seconds (bcd)
+regMins         VAR     Byte                    ' [3] minutes (bcd)
+regHrs          VAR     Byte                    ' [4] hours (bcd)
+regYrDate       VAR     Byte                    ' [5] year & date (bcd+)
+regMoDay        VAR     Byte                    ' [6] day & month (bcd+)
+
+regAddr         VAR     Byte                    ' register address
+regData         VAR     Byte                    ' data to/from register
+
+eeAddr          VAR     Byte                    ' EE data pointer
+char            VAR     Byte                    ' character from EE
+idx             VAR     Byte                    ' loop counter
+
+response        VAR     Byte
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+Su              DATA    "   SUNDAY",0
+Mo              DATA    "   MONDAY",0
+Tu              DATA    "  TUESDAY",0
+We              DATA    "WEDNESDAY",0
+Th              DATA    " THURSDAY",0
+Fr              DATA    "   FRIDAY",0
+Sa              DATA    " SATURDAY",0
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  DEBUG CLS                                     ' open DEBUG window
+  PAUSE 500                                     ' let LCD settle
+
+
+LCD_Setup:
+  LCDCMD LCDpin,%00110000 : PAUSE 5             ' 8-bit mode
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00100000 : PAUSE 0             ' 4-bit mode
+  LCDCMD LCDpin,%00101000 : PAUSE 0             ' 2-line mode
+  LCDCMD LCDpin,%00001100 : PAUSE 0             ' no crsr, no blink
+  LCDCMD LCDpin,%00000110                       ' inc crsr, no disp shift
+
+  LCDOUT LCDpin,ClrLCD,["BSP <--> PCF8583"]     ' splash screen
+
+
+Check_Set_Clock:
+  DEBUG "Would you like to set the clock? (Y/N)"
+  SERIN RxD,Baud96,10000,Main,[response]
+  idx = 99
+  LOOKDOWN response,["nNyY"],idx
+  idx = idx / 2
+  IF (idx = 0) THEN Main
+
+
+Enter_Hours:
+  DEBUG CR, "Hours (0..23): "
+  SERIN RxD,Baud96,[DEC2 hours]
+  IF (hours < 24) THEN Enter_Minutes
+  hours = 6
+
+
+Enter_Minutes:
+  DEBUG CR, "Minutes (0..59): "
+  SERIN RxD,Baud96,[DEC2 minutes]
+  IF (hours < 60) THEN Enter_Day
+  minutes = 0
+
+
+Enter_Day:
+  DEBUG CR, "Day (0..6 [0 = Sunday]): "
+  SERIN RxD,Baud96,[DEC1 day]
+  IF (day < 7) THEN Set_The_Clock
+  day = 0
+
+
+Set_The_Clock:
+  month = 9
+  date = 18
+  year = 1
+  GOSUB Put_Clock
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  DEBUG CLS, "The clock is running..."
+  LCDCMD LCDpin, ClrLCD
+
+Show_Clock:
+  GOSUB Get_Time_And_Day
+  LCDOUT LCDpin,Line1,[DEC2 hours,":",DEC2 minutes,":",DEC2 seconds]
+  LCDCMD LCDpin, (Line2 + 7)
+  GOSUB Print_Day
+  GOTO Show_Clock
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'
+Put_Register:
+  I2COUT I2Cpin,Wr8583,regAddr,[regData]        ' send data to register
+  RETURN
+
+
+Get_Register:
+  I2CIN I2Cpin,Rd8583,regAddr,[regData]         ' get data from register
+  RETURN
+
+
+Put_Raw_Clock:                                  ' set with rawTime
+  minutes = rawTime // 60
+  hours = rawTime / 60
+
+Put_Clock:
+  regSecs = 0
+  regMins.HighNib = minutes / 10                ' convert regs to BCD
+  regMins.LowNib = minutes // 10
+  regHrs.HighNib = hours / 10
+  regHrs.LowNib = hours // 10
+  regMoDay.HighNib = month / 10
+  regMoDay.LowNib = month // 10
+  regMoDay = regMoDay | (day << 5)              ' pack weekday in
+  I2COUT I2Cpin,Wr8583,2,[STR regSecs\5]        ' write time & day
+  RETURN
+
+
+Get_Time_And_Day:
+  I2CIN I2Cpin,Rd8583,0,[STR regCtrl\7]
+
+  ' convert from BCD
+
+  seconds = (regSecs.HighNib * 10) + regSecs.LowNib
+  minutes = (regMins.HighNib * 10) + regMins.LowNib
+  hours = (regHrs.HighNib * 10) + regHrs.LowNib
+  rawTime = (hours * 60) + minutes
+  day = regMoDay >> 5
+  RETURN
+
+
+Print_Day:
+  LOOKUP day,[Su,Mo,Tu,We,Th,Fr,Sa],eeAddr      ' point to EE string
+Print_Loop:
+  READ eeAddr,char                              ' read a character
+  IF (char = 0) THEN Print_Done                 ' done?
+  LCDOUT LCDpin,NoCmd,[char]                    ' print the character
+  eeAddr = eeAddr + 1                           ' point to next
+  GOTO Print_Loop:                              ' go get it
+Print_Done:
+  RETURN

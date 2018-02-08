@@ -1,0 +1,56 @@
+; TUT025.SRC
+;
+; --------------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" 2nd Edition by Guenther Daubach
+; Copyright (c), by Parallax Inc. 2004
+; --------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET     Main
+
+TRIS      equ  $0f
+PLP       equ  $0e
+
+org       $08
+ButtStat  ds   1
+
+org       $000
+;--------------------------------------
+; ISR
+;--------------------------------------
+  xor     rb,   #%00000001
+  mov     rtcc, #251
+  reti
+
+org       $050
+Main
+  clr     ButtStat
+  mode    TRIS
+  mov     !rb, #%01111110
+  mode    PLP
+  mov     !rb, #%11111001
+  clrb    rb.0
+  setb    rb.7
+  mov     rtcc, #251
+  mov     !option, #%10111000
+ 
+Loop
+  mov     w, ButtStat
+  jmp     pc+w
+  jmp     :WaitForOn
+  jmp     :WaitForOff
+        
+:WaitForOn
+  snb     rb.1
+    jmp   Loop
+  clrb    rb.7
+  inc     ButtStat
+  jmp     Loop
+ 
+:WaitForOff
+  snb     rb.2
+    jmp   Loop
+  setb    rb.7
+  clr     ButtStat
+  jmp     Loop

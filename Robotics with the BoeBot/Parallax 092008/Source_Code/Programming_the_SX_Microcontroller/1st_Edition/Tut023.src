@@ -1,0 +1,79 @@
+; TUT023.SRC
+; ----------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE   TURBO
+RESET    Start
+
+TRIS     equ $0f
+PLP      equ $0e
+
+org      $08
+Time     ds 1   ;  1
+Timer256 ds 1   ;  2
+Timer78  ds 1   ;  3
+TimerLED ds 1   ;  4
+Counter  ds 1   ;  5
+ISRState ds 1   ;  6
+
+org      $000
+;--------------------------------------
+; ISR
+;--------------------------------------
+  decsz Timer256                ;  7    1/2
+    jmp :ExitISR                ;  8    3
+  decsz Timer78                 ;  9    1/2
+    jmp :ExitISR                ; 10    3
+  mov   Timer78, #78            ; 11    2
+
+  mov   w, ISRState             ; 12    1
+  jmp   pc+w                    ; 13    3
+  jmp   :WaitOn                 ; 14    3 
+  jmp   :WaitOff                ; 15    3
+
+:WaitOn                         ; 16
+  snb rb.3                      ; 17    1/2
+    jmp :Continue               ; 18    3
+  inc ISRState                  ; 19    1
+  xor Time, #%00001111          ; 20    2
+  jmp :Continue                 ; 21    3
+
+:WaitOff                        ; 22
+  sb rb.3                       ; 23    1/2
+    jmp :Continue               ; 24    3
+  clr ISRState                  ; 25    1
+
+:Continue                       ; 26
+  decsz TimerLED                ; 27    1/2
+    jmp :ExitISR                ; 28    3
+  mov TimerLED, Time            ; 29    2
+  xor rb, #%00000001            ; 30    2
+
+:ExitIsr                        ; 31
+  mov  w, #-100                 ; 32    1
+  retiw                         ; 33    3
+
+Start                           ; 34
+  clr ISRstate                  ; 35
+  mov Time, #10                 ; 36
+  clr Timer256                  ; 37
+  mov Timer78, #78              ; 38
+  mov TimerLED, Time            ; 39
+  mode TRIS                     ; 40
+  mov !rb, #%11111110           ; 41
+  mode PLP                      ; 42
+  mov !rb, #%11110111           ; 43
+  mov !Option, #%10001000       ; 44
+:Loop                           ; 45
+  inc Counter                   ; 46
+  jmp :Loop                     ; 47

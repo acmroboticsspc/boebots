@@ -1,0 +1,38 @@
+; TUT022.SRC
+; ----------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+TRIS    equ $0f
+
+org     $08
+Timer   ds 1
+Counter ds 1
+
+org     $000
+;-----------------------------------
+; ISR
+;-----------------------------------
+  decsz Timer
+    reti
+  xor   rb, #%00000001
+  reti
+  
+Start
+  mode TRIS
+  mov  !rb, #%11111110
+  mov  !option, #%10000111
+:Loop
+  inc  Counter
+  jmp  :Loop

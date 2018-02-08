@@ -1,0 +1,54 @@
+'Program Listing 54.1
+'NV_AUG99.BS2 - This BASIC Stamp 2 program runs a high current motor one 
+'direction, stops the motor, and runs it in 'the other direction. This is 
+'repeated until power is removed.
+
+DISpin	CON	0 
+'Disable input, logic high disables all outputs 
+BHIpin	CON	1 
+'B high side control pin, a logic high turns on B high side driver
+BLIpin	CON	2 
+'B low side control pin, a logic high turns on B low side driver
+ALIpin	CON	3		
+'A low side control pin, a logic high turns on A low side driver
+AHIpin	CON	4		
+'A high side control pin, a logic high turns on A high side driver
+	 
+PWMreg	VAR	BYTE	'Pulse width modulation duty cycle register
+DURreg	VAR	BYTE	'Pulse width modulation duration register
+Loop	VAR	BYTE	'FOR…NEXT loop variable
+	
+HIGH	DISpin		'Disable H-bridge on power up
+PAUSE	500		
+
+DURreg	=100		'Duration = 100			
+PWMreg	=250		'Duty cycle is 98%	
+
+FORWARD
+HIGH	DISpin		'Disable all driver outputs(stops motor)
+PAUSE	1000		'Wait 1s then set input values
+HIGH	BHIpin		'Enable B high side driver
+LOW	BLIpin		'Disable B low side driver
+LOW	AHIpin		'Disable A high side driver
+LOW	ALIpin		'Disable A low side driver(will PWM it below)	
+LOW	DISpin		'Enable all driver outputs(only B high side in this case)
+	
+FOR	Loop = 1 to 25
+PWM	ALIpin,PWMreg,DURreg	'PWM A low side driver	
+NEXT
+	
+REVERSE
+HIGH	DISpin		'Disable all driver outputs(stops motor)		
+PAUSE	1000		'Pause 1s then set input values
+HIGH	AHIpin		'Enable A high side driver
+LOW	ALIpin		'Disable A low side driver
+LOW	BHIpin		'Disable B high side driver
+LOW	BLIpin		'Disable B low side driver(will PWM it below)
+LOW	DISpin		'Enable all driver outputs(only A high side in this case)
+
+FOR	Loop = 1 to 25
+PWM	BLIpin,PWMreg,DURreg	'PWM B low side driver
+NEXT
+GOTO	FORWARD		'Change direction again
+
+END

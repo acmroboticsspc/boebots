@@ -1,0 +1,37 @@
+' Program Listing 13.2. 
+' Serial Retry Overcomes Communication Glitches (PBASIC 2)
+' Program: TIMEOUT.BS2 (Demonstrate serial timeout function of BS2)
+' This program demonstrates how to use the serial-input timeout
+' capability of the BS2. If the BS2, interfaced to a Stamp Stretcher 1B,
+' does not receive a response to an analog-conversion request within
+' 1 millisecond, it displays the message "Timeout" on the PC debug
+' screen. If the Stretcher does return the data in time, the BS2
+' does not execute the error code, but displays the ADC result on the
+' debug screen. In a real program, the error handler would probably be
+' more elaborate--tracking the number of retries, lighting a warning
+' light, sounding a buzzer, reinitializing the Stretcher, etc. Since
+' communication errors are relatively rare under normal circumstances,
+' you can unhook the serial connection between the BS2 and Stretcher
+' while the program is running to demonstrate the error routine.
+
+N96N 	con 	$4054 	' Set 9600 baud, inverted, no parity.
+result 	var 	byte 	' Store ADC result in this byte.
+Maxtime	con 	1 	' Allow this many milliseconds for reply.
+comPin 	con 	0 	' Connect this pin of BS2 to Stretcher "S" pin.
+
+serout comPin,N96N,["***"] 	' Reset the Stretcher.
+
+again: 				' Endless loop.
+  pause 1000 			' Wait a second between tries.
+  serout comPin,N96N,["A"] 	' Send (A)nalog request.
+' The line below is the key to the program. It waits "maxtime" milli-
+' seconds for serial start bit from the Stretcher. If the data doesn't
+' arrive in time, it sends the program to the label "error." If the
+' data does arrive, it stores it in the variable "result."
+  serin comPin,N96N,maxtime,error,[result] ' Get response.
+  debug ? result 		' Display result.
+goto again 			' Do it again.
+
+error: 				' Serin timeout occurred: show error
+  debug "Timeout",cr 		' Display "Timeout" on PC debug screen.
+goto again 			' Try again.

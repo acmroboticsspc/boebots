@@ -1,0 +1,138 @@
+'{$STAMP BS2}
+'*********************************************************************************************************
+'* Program:  Txcvr_Slave_CRC.BS2          Author:   Jeff A. Martin, Parallax, Inc.                       *
+'* Date:     1/25/00                      Revision: 1.0 VERBOSE                                          *
+'*                                                                                                       *
+'* Description:                                                                                          *
+'* This BS2-IC source code is the SLAVE side of the Parallax RF Transceiver Packet Transmission example. *
+'* This is the Verbose version that reports packet reception status on the DEBUG screen (consumes aprox. *
+'* 29% of program space). Use the code named Txcvr_Slave_CRC2 if you want to have a smaller, non-verbose *
+'* version (consumes approx. 9% of program space).                                                       *
+'*                                                                                                       *
+'* This code must be run on a BASIC Stamp 2, interfaced to a 2x16 Serial LCD Module Part#27910 or 27913  *
+'* and an RF Transceiver Part#27988.  This code will NOT work with the RF Transmitter Part#27986 or RF   *
+'* Receiver Part#27987!  This code is meant to interface with a second Stamp 2 running                   *
+'* Txcvr_Master_CRC.BS2.                                                                                 *
+'*                                                                                                       *
+'* This code demonstrates the transmission and reception of variable-length data (from 1 to 16 bytes) in *
+'* the form of data packets.  This data packet method is used to help overcome the error-prone nature of *
+'* RF reception in various environments.  The data packets consist of a Packet Number, a count of the    *
+'* number of data bytes, the actual data bytes and finally a checksum value.  The format is as follows:  *
+'*                                                                                                       *
+'* Packet data format:                                                                                   *
+'* |---------------------||----------------|       |----------------||----------------||----------------|*
+'* | Packet# | Data Count||  Data Value 1  | . . . |  Data Value n  || Checksum  Low  || Checksum High  |*
+'* |---------------------||----------------|       |----------------||----------------||----------------|*
+'*         BYTE 1               BYTE 2                  BYTE n+1          BYTE n+2          BYTE n+3     *
+'*                                                                                                       *
+'* Byte 1 consists of two pieces of data, the Packet# and the Data Count.  The Packet Number is a        *
+'*        value from 1 to 15 (0 is an illegal value). It indicates the number of the packet relative     *
+'*        to the previously transmitted packet and is used to verify that no duplicate packets are       *
+'*        mistaken for new data.  The Data Count is a value from 0 to 15 representing the number of      *
+'*        Data Values in this packet.  Packets can contain from 1 to 16 bytes of data values             *
+'*        (at least 1 Data Value is required), thus the number of Data Values is actually Data Count + 1.*
+'* Byte 2 through Byte n+1 are the actual Data Values where n = Data Count+1.                            *
+'* Byte n+2 and Byte n+3 are the last bytes in the packet and consist of a 16-bit Cyclic Redundancy Check*
+'*        (CRC) Checksum value calculated using the bytes 1 through n+1 together  The use of this CRC    *
+'*        checksum increases error detection to approx. 99%.                                             *                                                             *
+'*                                                                                                       *
+'* The protocol for sending and receiving is as follows (shown is a simplified form):                    *
+'* 1) The MASTER device generates the next packet number (in sequence, from 1 to 15.  0 is not allowed)  *
+'* 2) The MASTER device constructs the entire packet, as shown above and calculates a checksum.		   *
+'* 3) The MASTER device transmits the packet.                                                            *
+'* 4) The SLAVE device receives the packet, calculates a checksum and compares the calcuated checksum    *
+'*    with the checksum received inside the packet.                                                      *
+'* 5) If checksums match:  SLAVE transmits a positive acknowledgement (the checksum value).              *
+'*    If checksums don't match:  SLAVE transmits a negative acknowledgment (the negative of checksum).   *
+'* 6) The SLAVE then verifies that the packet number is not the same as the previous packet.  If so, this*
+'*    is a duplicate packet and SLAVE treats it as if we received nothing.  If not, this is a good packet*
+'*    and all is well enough to process that data.                                                       *
+'* 7) If MASTER receives positive acknowledgement, it moves on.  If it receives a negative or no         *
+'*    acknowledgement, it retransmits the packet as in step 3.                                           *
+'*                                                                                                       *
+'* Wiring:  Refer to the "Set Up Constants" section below for pin wiring indications.  Make sure to      *
+'* connect the transceiver's MODE pin to +5 volts (Vdd) to place the transceiver into serial mode.       *
+'*********************************************************************************************************
+
+'---Set up Variables---
+Value 	VAR BYTE(16)						'Holds data value being transceived
+Idx		VAR BYTE							'Index into data
+PacketCount	VAR BYTE							'Packet Number and Data Value Count
+PrevPacket	VAR NIB							'Previous Packet Number 
+CRC		VAR WORD							'Calculate CRC value
+CRCL		VAR CRC.LOWBYTE						'Low byte of calculated CRC value
+CRCH		VAR CRC.HIGHBYTE						'High byte of calculated CRC value
+RcvdCRC	VAR WORD							'Received CRC value
+RcvdCRCL	VAR RcvdCRC.LOWBYTE					'Low byte of received CRC value
+RcvdCRCH	VAR RcvdCRC.HIGHBYTE					'High byte of received CRC value
+CValue	VAR BYTE							'Temporary holder of value for CRC calculation
+
+'---Set up Constants---
+Tx	 	CON 15							'Transmit I/O pin number
+TxFlow	CON 14							'Transmit flow control I/O pin number
+Rx		CON 13							'Receive I/O pin number
+LCD		CON 12							'LCD data I/O pin number
+N9600		CON $4054							'Baud mode value for 9600 baud, 8,N,1
+
+Initialize:
+  LOW Tx									'Initialize transceiver interface
+  LOW LCD									'Initialize the LCD interface
+  DEBUG CR,"Action     Packet#  DataCount  Checksum  Data              Status"
+  DEBUG CR,"--------   -------  ---------  --------  ----------------  ------"
+  PAUSE 800							'Wait for LCD to wake up
+
+'---------------------------------------- Main Routine -------------------------------------------
+
+ReceiverMain:
+  GOSUB Receive								'Call the receive routine
+  IF PacketCount = 0 THEN DoOtherStuff
+  SEROUT LCD,N9600,[STR Value\PacketCount&%1111+1]		'Display all data on LCD
+
+DoOtherStuff:
+  'Here is where you should do other desired tasks
+GOTO ReceiverMain
+
+'---------------------------------- Packet Receive Subroutines -----------------------------------
+
+Receive:
+  DEBUG CR,"Receive     "						'Look for incoming data packet
+  SERIN Rx,N9600,1000,NoReceive,[PacketCount,STR Value\PacketCount&%1111+1,RcvdCRCL,RcvdCRCH]
+  DEBUG DEC2 PacketCount>>4,REP " "\8,DEC2 PacketCount&%1111+1,REP " "\9
+  DEBUG DEC5 RcvdCRC,REP " "\6,STR Value\PacketCount&%1111+1,CR
+  CRC = 0
+  CValue = PacketCount>>4						'Data was received, so well prime the checksum 
+  if CValue = 0 THEN Error						'If Packet# = 0, error (illegal value)
+  GOSUB CalcCRC
+  FOR Idx = 0 TO PacketCount&%1111					'Now we'll loop through all the data calculating
+    CValue = Value(Idx)							'the entire checksum
+    GOSUB CalcCRC
+  NEXT
+  IF CRC <> RcvdCRC THEN Error					'Is calculated Checksum same as Received Checksum?
+  DEBUG "Tx Ack",REP " "\27,DEC5 CRC,REP " "\25,"OK"
+  PAUSE 1									'Give sender time to get ready to receive acknowledgement
+  SEROUT Tx\TxFlow,N9600,[CRCL,CRCH]				'Yes!  Send positive acknowledgement (the checksum)
+  IF PacketCount>>4 = PrevPacket THEN Duplicate 		'If duplicate packet, we'll ignore it
+  PrevPacket = PacketCount>>4						'Record previous packet number
+RETURN
+
+NoReceive:
+  DEBUG REP " "\45,"NO RECEIVE"
+  PacketCount = 0								'Clear PacketCount to indicate no data received
+RETURN
+
+Error:
+  DEBUG "Tx NAck",REP " "\26,DEC5 ~CRC,REP " "\25,"ERROR"
+  SEROUT Tx\TxFlow,N9600,[~CRCL,~CRCH]				'Error receiving, send negative acknowledgement (Not Checksum)
+GOTO Receive
+
+Duplicate:
+  DEBUG CR,"No Op", REP " "\28,DEC5 CRC,REP " "\25,"DUPLICATE"
+  PacketCount = 0								'Clear PacketCount to indicate no new data received
+RETURN
+
+'-------------------------------- CRC Checksum Calculation Routine -------------------------------
+
+CalcCRC:
+  CValue= CRCH^CValue>>4^(CRCH^CValue)
+  CRC = CValue^(CValue<<5)^(CValue<<12)^(CRC << 8)
+RETURN

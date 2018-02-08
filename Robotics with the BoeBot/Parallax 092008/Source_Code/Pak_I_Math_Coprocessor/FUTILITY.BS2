@@ -1,0 +1,346 @@
+' These are some starter routines
+' that will help you use the PAK-1
+' Coprocessor from AWC
+
+' Change these to suit your setup
+datap con 15   ' Data pin (I/O)
+datapin var in15
+clk con 14     ' Clk pin (output)
+
+' Enable/Busy if used
+en con 8
+EnableBit var in8
+
+
+' Constants for options
+FSaturate con $80
+FRound con $40
+
+input en            ' remove this line if not using Enable/Busy
+output clk
+output datap
+
+fpstatus var byte   ' FPSTATUS
+fpx var word        ' Integer used by some routines
+fpdigit var byte    ' Digit returned from DIGIT
+fpxlow var word     ' The X register low & high
+fpxhigh var word
+fpb var byte        ' Temporary byte
+' The X register in bytes
+fpxb0 var fpxlow.lowbyte
+fpxb1 var fpxlow.highbyte
+fpxb2 var fpxhigh.lowbyte
+fpxb3 var fpxhigh.highbyte
+
+gosub freset        ' always reset!
+
+' TEST CODE -- REPLACE WITH YOUR OWN
+
+' Square root table
+i var word
+fpx=$10
+gosub IODir
+
+for i=1 to 1000
+fpx=i//2*$10
+gosub IOWrite
+fpx=i   ' number
+gosub floadint
+gosub fsqrt
+fpx=2
+Debug dec i, "  -  "
+gosub fdump
+debug "  Error="
+gosub fswap
+fpx=i
+gosub floadint
+gosub fswap
+gosub fsquare
+gosub fsub
+fpx=1
+gosub fdump
+debug cr
+next
+end
+
+
+
+' END OF TEST CODE ----
+
+
+' Reset the Pak1
+FReset:
+LOW DATAP
+LOW CLK
+HIGH CLK
+HIGH DATAP
+LOW CLK     
+return
+
+' Wait for enable - not used
+FBsyWait:
+  if EnableBit=0 then FBsyWait
+  return
+
+' Wait for +,-,*,/,INT,FLOAT, & DIGIT
+Fwaitdata:
+input DATAP
+if DATAPIN=1 then Fwaitdata
+return
+
+
+'Change sign
+FChs:
+fpb=10
+FSendByte:
+  Shiftout datap,clk,MSBFIRST,[fpb]
+  return
+
+'Absolute Value
+FAbs:
+fpb=17
+goto FSendByte
+
+' Store0
+FSto0:
+fpb=18
+goto FSendByte
+
+'Store1
+FSto1:
+fpb=$92
+goto FSendByte
+
+'Rcl0
+FRcl0:
+fpb=19
+goto FSendByte
+
+'Rcl1
+FRcl1:
+fpb=$93
+goto FSendByte
+
+' Load X with fpxhigh, fpxlow
+FLoadX:
+Shiftout datap,clk,MSBFIRST,[1,fpxb3,fpxb2,fpxb1,fpxb0]
+return
+
+' Load Y
+FLoadY:
+Shiftout datap,clk,MSBFIRST,[2,fpxb3,fpxb2,fpxb1,fpxb0]
+return
+
+
+' Load X with 0
+FZeroX:
+Shiftout datap,clk,MSBFIRST,[1,0,0,0,0]
+return
+
+' Load Y with 0
+FZeroY:
+Shiftout datap,clk,MSBFIRST,[2,0,0,0,0]
+return
+
+' Load an integer from FPX to X
+FLoadInt: 
+Shiftout datap,clk,MSBFIRST,[1,0,0,fpx.highbyte,fpx.lowbyte]
+' Convert to Int
+Shiftout datap,clk,MSBFIRST,[7]
+goto fpstat
+
+' to int
+FInt:
+Shiftout datap,clk,MSBFIRST,[11]
+gosub Fwaitdata
+Shiftin datap,clk,MSBFIRST,[fpstatus]
+if fpstatus<>0 then FInterr
+
+
+' Read the X register
+FreadX:
+fpb=3
+gosub FSendByte
+ShiftIn datap,clk,MSBPRE,[fpxb3,fpxb2,fpxb1,fpxb0]
+fpx = fpxlow
+FInterr:
+return
+
+
+' Swap X and Y
+FSwap:
+fpb=4
+goto FSendByte
+
+' Load X with pi
+FPI: 
+Shiftout datap,clk,MSBFIRST,[1,$80,$49,$F,$DB]
+return
+
+' Load X with e
+Fe:
+Shiftout datap,clk, MSBFIRST,[1,$80,$2D,$F8,$54]
+return
+
+' X=X*Y
+FMult:
+fpb=12
+fpstats:
+gosub FSendByte
+fpstat:
+gosub FWaitdata
+Shiftin datap,clk,MSBPRE,[fpstatus]
+return ' status
+
+' X=X/Y
+FDiv:
+fpb=13
+goto fpstats
+
+' X=X+Y
+FAdd:
+fpb=15
+goto fpstats
+
+' X=X-Y
+FSub:
+fpb=14
+goto fpstats
+
+' Get Digit (fpx is digit #) return in fpdigit
+FGetDigit:
+Shiftout datap,clk,MSBFIRST,[5,fpx]
+Fgetdigw:
+gosub fwaitdata
+ShiftIn datap,clk,MSBPRE,[fpdigit]
+return 
+
+
+' Dump a number fpx is # of digits before decimal point
+' Assumes 6 digits after decimal point
+FDump:
+fdj var byte
+fdnz var bit
+fdjj var byte
+fdjj=fpx
+fpx=0
+fdnz=0
+gosub FgetDigit
+' Remove this line to print + and space
+if fpdigit="+" or fpdigit=" " then Fdumppos
+Debug fpdigit
+Fdumppos
+for fdj=1 to fdjj
+  fpx=fdjj+1-fdj
+  gosub FgetDigit
+  if fpdigit="0" and fdnz=0 then FdumpNext
+  fdnz=1
+  Debug fpdigit
+Fdumpnext
+next
+Debug "."
+for fpx=$81 to $86
+  gosub FgetDigit
+  Debug fpdigit
+next 
+return
+
+' Set options in fpx
+' $80 = saturate
+' $40 = round
+FOption:
+  Shiftout datap,clk,MSBFIRST,[$10,fpx]
+  return
+
+FXtoY:
+  fpb=$17
+  goto FSendByte
+
+FYtoX:
+  fpb=$18
+  goto FSendByte
+
+' Set I/O Direction (dir in fpx)
+IODir:
+  Shiftout datap,clk,MSBFIRST,[$14,fpx]
+  return
+
+' Write bits in FPX to I/O port
+IOWrite:
+  Shiftout datap,clk,MSBFIRST,[$16,fpx]
+  return
+
+' Read bits to FPX
+IORead:
+  fpb=$15
+  gosub FSendByte
+  Shiftin datap,clk,MSBPRE,[fpx]
+  return
+
+' Square Root, set tolerance below
+fsqrt:
+gosub fsto1    ' R1=target
+    ' guess half the original #
+fpxhigh=$8000
+fpxlow=0
+gosub floady
+gosub fdiv
+gosub fsto0    ' R0=guess
+goto fsqrterr
+
+freguess:
+gosub frcl0   ' get guess
+gosub fsquare      ' square it
+gosub fswap   ' put it in Y
+gosub frcl1   ' get target
+gosub fswap   ' x=guess squared; y=target
+gosub fsub    ' subtract
+gosub freadx  ' get x to fpxhigh,fpxlow
+gosub frcl0   ' get guess
+gosub fswap   ' y=guess
+fpx=2         ' x=2
+gosub floadint
+gosub fmult   ' x=2*guess
+gosub fswap   ' y=2*guess
+gosub floadx  ' x=guess squared - target
+gosub fdiv    ' x=x/y
+gosub fswap   ' y=x/y term
+gosub frcl0   ' x=guess
+gosub fsub    ' x=guess-term
+gosub fsto0   ' new guess
+fsqrterr:
+gosub fsquare
+gosub fswap
+gosub frcl1
+gosub fsub
+gosub fabs
+' Select your error tolerance
+' more precise values may fail to converge or take a long time
+' check for error<.01
+fpxhigh=$7823
+fpxlow=$D70A
+' check for error <.001
+'fpxhigh=$7503
+'fpxlow=$126f
+' check for error<.0001 - warming may not converge
+'fpxhigh=$7151
+'fpxlow=$B717
+gosub floady
+gosub fsub
+fpx=0
+gosub fgetdigit
+if fpdigit="+" then freguess
+' Found it!
+gosub frcl0
+return
+End
+
+' X=X**2 ; does not destroy Y, but destroys fpxlow/fpxhigh
+Fsquare:
+  gosub fswap      ' get y
+  gosub freadx     ' save it
+  gosub fytox      ' y->x
+  gosub fmult      ' x=x*y 
+  gosub floady     ' restore old y
+  return
+

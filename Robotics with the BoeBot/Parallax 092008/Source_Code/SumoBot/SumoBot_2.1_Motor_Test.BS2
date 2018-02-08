@@ -1,0 +1,64 @@
+' -----[ Title ]----------------------------------------------------------------
+' Mini Sumo 2.1 : Motor Test
+' {$STAMP BS2}
+
+' -----[ I/O Definitions ]------------------------------------------------------
+
+LMotor          CON     13                      ' left servo motor
+RMotor          CON     12                      ' right servo motor
+
+' -----[ Constants ]------------------------------------------------------------
+
+LFwdFast        CON     1000                    ' left motor forward; fast
+LFwdSlow        CON      800                    ' left motor forward; slow
+LStop           CON      750                    ' left motor stop
+LRevSlow        CON      700                    ' left motor reverse; slow
+LRevFast        CON      500                    ' left motor reverse; fast
+
+RFwdFast        CON      500                    ' right motor forward; fast
+RFwdSlow        CON      700                    ' right motor forward; slow
+RStop           CON      750                    ' right motor stop
+RRevSlow        CON      800                    ' right motor reverse; slow
+RRevFast        CON     1000                    ' right motor reverse; fast
+
+' -----[ Variables ]------------------------------------------------------------
+
+pulses          VAR     Byte                    ' counter for motor control
+
+' -----[ Initialization ]-------------------------------------------------------
+
+Start_Delay:
+  PAUSE 2000                                    ' time to disconnect cable
+
+' -----[ Main Code ]------------------------------------------------------------
+
+Main:
+  FOR pulses = 1 TO 125                         ' forward slow - about 12 inches
+    PULSOUT LMotor, LFwdSlow
+    PULSOUT RMotor, RFwdSlow
+    PAUSE 20
+  NEXT
+
+  FOR pulses = 1 TO 110                         ' pivot turn - left wheel (ccw)
+    PULSOUT LMotor, LStop
+    PULSOUT RMotor, RFwdSlow
+    PAUSE 20
+  NEXT
+
+  FOR pulses = 1 TO 50                          ' forward fast
+    PULSOUT LMotor, LFwdFast
+    PULSOUT RMotor, RFwdFast
+    PAUSE 20
+  NEXT
+
+  FOR pulses = 1 TO 30                          ' spin turn - clockwise
+    PULSOUT LMotor, LFwdFast
+    PULSOUT RMotor, RRevFast
+    PAUSE 20
+  NEXT
+
+Hold_Position:
+  PULSOUT LMotor, LStop
+  PULSOUT RMotor, RStop
+  PAUSE 20
+  GOTO Hold_Position

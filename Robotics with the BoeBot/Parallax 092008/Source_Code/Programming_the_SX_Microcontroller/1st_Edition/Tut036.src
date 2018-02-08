@@ -1,0 +1,52 @@
+; TUT036.SRC
+; ----------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE   TURBO
+
+RESET   Start
+
+org     $08
+Ix      ds    1
+
+org     $000
+
+; Subroutine returns f(w) in w
+;
+WToSin
+  jmp   pc+w
+  retw  127
+  retw  130
+  retw  133
+  retw  136
+  retw  139
+  retw  143
+  retw  146
+  retw  149
+  retw  152
+  retw  155
+  retw  158
+  retw  161
+  retw  164
+  retw  167
+  retw  170
+  retw  173
+  
+Start
+  clr   Ix
+loop
+  mov   w, Ix
+  call  WToSin
+  inc   Ix
+  clrb  Ix.4
+  jmp   loop

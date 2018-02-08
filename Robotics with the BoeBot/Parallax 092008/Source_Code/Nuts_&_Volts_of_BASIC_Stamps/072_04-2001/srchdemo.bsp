@@ -1,0 +1,158 @@
+' Listing 1
+' Nuts & Volts - Stamp Applications, April 2001
+
+' {$STAMP BS2p,OWSEARCH.BSP,DSNAMES.BSP}
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... SRCHDEMO.BSP
+' Purpose... Demonstrates Dallas 1-Wire Search Algorithm
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 27 FEB 2001
+' Updated... 05 MAR 2001 
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' The purpose of this program is to demonstrate the use of external
+' program slots to hold code code or subroutines.  When first downloaded
+' to the BS2p, the number of Dallas 1-Wire devices is unknown (flag value
+' of $FF).  This program reads that flag and if it is $FF, the search
+' program slot is called to conduct the search.  Search results are
+' written directly to the this program's EE (thanks to the BS2p STORE
+' function).
+'
+' When the search is complete, a list of all found devices is displayed
+' in a DEBUG window.
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+' 28 FEB 2001 - Version 1 complete and tested
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+OWpin		CON	15			' 1-Wire bus
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+SearchPgm	CON	1			' search program slot
+NamesPgm	CON	2			' DalSemi OW device names
+
+' 1-Wire Support
+'
+OW_FERst	CON	%0001			' Front-End Reset
+OW_BERst	CON	%0010			' Back-End Reset
+OW_BitMode	CON	%0100
+OW_HighSpd	CON	%1000
+
+ReadROM		CON	$33			' read ID, serial num, CRC
+MatchROM	CON	$55			' look for specific device
+SkipROM		CON	$CC			' skip ROM (one device)
+SearchROM	CON	$F0			' search 
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+thisSlot	VAR	Nib			' this program's slot (0 - 7)
+devices		VAR	Byte			' 1-Wire devices found
+addr		VAR	Word			' EE address of device SN
+offset		VAR	Nib			' offset byte of device SN
+idx		VAR	Byte			' loop counter
+dByte		VAR	Byte			' data byte
+devType		VAR	Byte			' device type (first byte of SN)
+devName		VAR	Byte			' device identifier
+strPtr		VAR	Word			' string pointer
+char		VAR	Byte			' string character to print
+crcErrors	VAR	Byte			' indicates problems with search
+
+tempROM	VAR	Byte(8)				' data from 1-Wire device
+crcVal	VAR	Byte				' CRC of returned data
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+Num_OW	DATA	$FF				' number of 1-Wire devices
+OW_Data	DATA	0(80)				' space for 10 1-Wire SN's
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Initialize:
+  READ Num_OW,dByte				' ROM codes present?
+  IF (dByte < $FF) THEN Main			' yes, run this program
+
+  DEBUG CLS
+  PAUSE 5
+  DEBUG "Searching for 1-Wire devices...",CR
+
+  GET 127,thisSlot				' get this pgm slot #
+  PUT 126,thisSlot				' save it
+  PUT 125,OWpin					' save OW I/O 
+  PUT 124,OW_Data				' save data storage start
+  PUT 123,0					' clear CRC errors
+
+  RUN SearchPgm					' run the search program
+  
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Main:
+  GET 123,crcErrors
+  IF (crcErrors = 0) THEN ShowDevices
+  DEBUG "Warning: CRC errors during search.",CR
+
+ShowDevices:
+  READ Num_OW,devices				' get number of devices
+  DEBUG CR,DEC devices," device"
+  IF (devices = 1) THEN SkipEss
+  DEBUG "s"
+
+SkipEss:
+  DEBUG " present.",CR
+  IF devices = 0 THEN Done
+
+  FOR idx = 1 TO devices			' display each one
+    DEBUG CR, DEC2 idx," : "
+    addr = 8 * (idx - 1) + OW_Data		' calculate device address
+    STORE thisSlot				' point to local EEPROM
+    FOR offset = 0 TO 7				' eight bytes per device
+      READ (addr + offset),dByte		' read it from EEPROM
+      DEBUG HEX2 dByte				' show it
+    NEXT
+    READ addr,devType				' get device type
+    GOSUB DisplayDeviceType			' display it
+  NEXT
+
+Done:
+  DEBUG CR
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+' This subroutine is used to display the part number and description of
+' a connected device.  The text data and pointers to it are stored in the
+' EE of a different program slot.  
+
+DisplayDeviceType:
+  DEBUG " -> "
+  addr = devType * 2 + $600			' calulate string pointer addr
+  STORE NamesPgm				' point to names EEPROM
+  READ addr,strPtr.LowByte			' get the string location
+  READ addr+1,strPtr.HighByte
+
+ReadAChar:
+  READ strPtr,char				' read character from string
+  IF (char = 0) THEN DevTypeDone		' at end? (0 = Yes)
+  DEBUG char					' no, print the char
+  strPtr = strPtr + 1				' point to next char
+  GOTO ReadAChar
+
+DevTypeDone:
+  RETURN
+
+

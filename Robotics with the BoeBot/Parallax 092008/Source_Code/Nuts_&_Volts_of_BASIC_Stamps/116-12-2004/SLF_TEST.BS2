@@ -1,0 +1,103 @@
+' =========================================================================
+'
+'   File...... SLF_TEST.BS2
+'   Purpose... Serial Line Follower Test
+'   Author.... Jon Williams -- Parallax, Inc.
+'   E-mail.... jwilliams@parallax.com
+'   Started...
+'   Updated... 10 OCT 2004
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Simple test program for the Serial Line Follower module
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Sio             PIN     15                      ' use BOE servo connector
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+#SELECT $STAMP
+  #CASE BS2, BS2E, BS2PE
+    T1200       CON     813
+    T2400       CON     396
+    T4800       CON     188
+    T9600       CON     84
+    T19K2       CON     32
+    T38K4       CON     6
+  #CASE BS2SX, BS2P
+    T1200       CON     2063
+    T2400       CON     1021
+    T4800       CON     500
+    T9600       CON     240
+    T19K2       CON     110
+    T38K4       CON     45
+#ENDSELECT
+
+Inverted        CON     $4000
+Open            CON     $8000
+
+Baud            CON     Open | T9600            ' open for AppMod protocol
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+version         VAR     Byte(3)
+response        VAR     Byte
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  PAUSE 100
+  DEBUG CLS,
+        "Serial Line Follower", CR,
+        "--------------------", CR,
+        "Ver: "
+
+Get_Version:
+  SEROUT Sio, Baud, ["!LFV"]                    ' request version
+  SERIN Sio, Baud, 1000, Reset, [STR version\3] ' receive version string
+  DEBUG STR version
+
+
+Robot_Screen:
+  DEBUG CRSRXY, 0, 4,
+        "     ---------    ", CR,
+        "  X |         | X ", CR,
+        "  +-| xxxxxxx |-+ ", CR,
+        "  X |         | X ", CR,
+        "    |         |   ", CR,
+        "    |         |   ", CR,
+        "    |         |   ", CR,
+        "    |         |   ", CR,
+        "     ---( )---    ", CR
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  SEROUT Sio, Baud, ["!LFW"]                    ' request white line bits
+  SERIN Sio, Baud, 1000, Main, [response]       ' wait for response
+  DEBUG CRSRXY, 6, 6, BIN7 response             ' display on screen
+  PAUSE 200
+  GOTO Main
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------

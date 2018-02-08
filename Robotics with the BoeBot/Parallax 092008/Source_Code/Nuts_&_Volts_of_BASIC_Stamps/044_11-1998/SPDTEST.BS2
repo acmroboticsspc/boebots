@@ -1,0 +1,74 @@
+' Program Listing 45.2
+' Nuts & Volts: Stamp Applications, November 1998
+
+' ----[ Title ]-----------------------------------------------------------
+'
+' Program... SPDTEST.BS2
+' Purpose... Speed monitor for code sections
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' WWW....... http://members.aol.com/jonwms
+' Started... 23 SEP 1998
+' Updated... 23 SEP 1998
+
+
+' ----[ Program Description ]--------------------------------------------
+'
+' This program is designed to test code fragments for execution speed. The
+' speed is measured in milliseconds in order to allow PAUSE commands into
+' the code for speed tuning.
+'
+' The program monitors a high-going pulse on Pin 15 and displays the
+' result (in milliseconds) on a SEETRON LCD. To use, connect a spare pin
+' on your project to pin 15. At the beginning of your test section, inser
+' HIGH x (where x is your output pin). At the end of the section place
+' LOW x to stop the timing.
+
+
+' -----[ Revision History ]-----------------------------------------------
+
+
+' -----[ I/O Definitions ]------------------------------------------------
+'
+LCDpin	CON	0			' SEETRON LCD serial line
+PInput	CON	15			' PULSIN pin
+
+
+' -----[ Constants ]------------------------------------------------------
+'
+N2400	CON	$418D			' 2400b baud, inverted
+Inst	CON	254			' backpack LCD instruction byte
+ClrLCD	CON	1			' clear the LCD
+CrsrHm	CON	2			' move to line 1, col 1
+
+
+' -----[ Variables ]------------------------------------------------------
+'
+pTime	VAR	Word			' pulse width (2 us units)
+msTm1	VAR	Word			' ms - whole portion
+msTm2	VAR	Word			' ms - fractional portion
+
+
+' -----[ EEPROM Data ]----------------------------------------------------
+'
+
+
+' -----[ Initialization ]-------------------------------------------------
+'
+
+Init:	PAUSE 1000			' let LCD intialize
+
+	SEROUT LCDpin,N2400,[Inst,ClrLCD,"Ready..."]
+	PAUSE 200
+
+
+' -----[ Main ]-----------------------------------------------------------
+
+Main:	PULSIN PInput, 1, pTime
+	msTm1 = pTime / 500
+	msTm2 = pTime / 5 // 100
+	SEROUT LCDpin,N2400,[Inst,CrsrHm,DEC msTm1,".",DEC2 msTm2," ms     "]
+	GOTO Main
+
+
+' -----[ Subroutines ]---------------------------------------------------- 

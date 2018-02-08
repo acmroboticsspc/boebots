@@ -1,0 +1,180 @@
+' -----[ Title ]-----------------------------------------------------------
+' Gripper Program 2.8: Infrared Remote Control
+
+'{$STAMP BS2}
+'{$PBASIC 2.5}
+
+' -----[ Program Description ]---------------------------------------------
+' Control Boe-Bot Gripper with Sony Infrared Remote Control
+'
+' Remote Control Key:        Robot Motion:
+' -----------------------    -------------
+' Up    Arrow / Channel +    Forward
+' Down  Arrow / Channel -    Backward
+' Right Arrow / Volume  +    Right
+' Left  Arrow / Volume  -    Left
+' "5"                        Gripper Open/Close
+'
+' Revision History
+' Based on Gripper Program 1.8, updates include:
+' - Both new and old gripper servos are supported.
+'   Set #DEFINE NewGripServo = 1 for newer servo, = 0 for older.
+'    Newer are marked "standard", older are marked "STD"
+' - Both new and old wheel servos are supported.
+'   Set #DEFINE NewWheelServo = 1 for newer servo, = 0 for older.
+'   Newer are marked "continuous rotation", older marked "PM" (Pre-Modified)
+' - PBASIC 2.5
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+GripServo      PIN     14                    ' Gripper servo on P14
+LeftServo      PIN     13                    ' Left wheel servo on P13
+RightServo     PIN     12                    ' Right wheel servo on P12
+SonyIR         PIN     8                     ' Infrared Detector on P8
+
+' -----[ Constants ]-------------------------------------------------------
+
+' Choose your type of wheel servo.  1 for newer, 0 for older.
+#DEFINE NewWheelServo = 1                    ' Newer continuous rotation servo
+'#DEFINE NewWheelServo = 0                   ' Older pre-modified servo
+
+' Choose your type of gripper servo.  1 for newer, 0 for older.
+#DEFINE NewGripServo = 1                     ' Newer standard servo
+'#DEFINE NewGripServo = 0                    ' Older STD servo
+
+#IF (NewWheelServo = 1) #THEN                ' Newer continuous rotation servo
+  ClockWise    CON     650                   ' Clockwise wheel rotation
+  CtrClkWise   CON     850                   ' Counter clockwise wheel rotation
+  TravelPulses CON     20                    ' Num pulses for fwd/back travel
+  TurnPulses   CON     12                    ' Num pulses for turning
+#ELSE                                        ' For older pre-modified servo
+  ClockWise    CON     500                   ' Clockwise wheel rotation
+  CtrClkWise   CON     1000                  ' Counter clockwise wheel rotation
+  TravelPulses CON     30                    ' Num pulses for fwd/back trav
+  TurnPulses   CON     15                    ' Num pulses for turning
+#ENDIF
+
+#IF (NewGripServo = 1) #THEN                 ' For newer Standard gripper servo
+  StepSize     CON     20                    ' Step size for gripper servo
+#ELSE                                        ' For older STD gripper servo
+  StepSize     CON     10                    ' Step size for gripper servo
+#ENDIF
+
+CloseGripper   CON     700                   ' Replace with values
+OpenGripper    CON     1200                  ' for your gripper
+ToOpen         CON     1                     ' These become values telling
+ToClose        CON     0                     ' gripper whether to open or close
+NegEdge        CON     0                     ' For 0-1-0 config,IRremote PULSIN
+
+' -----[ Variables ]-------------------------------------------------------
+
+pulses         VAR     Word                  ' Quantity of pulses to servo
+pulsewidth     VAR     Word                  ' Width of pulse sent to servo
+gripCommand    VAR     Bit                   ' Should the gripper open or close
+startPulse     VAR     Word                  ' Start pulse duration
+pulse0         VAR     Word                  ' Pulse 0 duration
+pulse1         VAR     Word                  ' Pulse 1 duration
+pulse2         VAR     Word                  ' Pulse 2 duration
+dataRemote     VAR     Nib                   ' Stores data from SonyRemoteCtrl
+
+' -----[ Initialization ]--------------------------------------------------
+
+DIRS = %11111011111111                       ' Inputs: P8 Infrared Detector
+OUTS = %00000000000000
+
+GOSUB Open                                   ' Start with gripper open
+
+' -----[ Main Routine ]----------------------------------------------------
+
+Main:
+DO
+  GOSUB Read_Remote                          ' Get data from Sony remote ctrl
+  GOSUB Navigate                             ' Move the Boe_Bot
+LOOP
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' The Read_Remote subroutine reads data from a Sony-Compatible infrared
+' remote control and stores data into the variable dataRemote
+'
+' dataRemote Value:     Corresponding KeyPress:
+'                0      Up Arrow / Channel + Key
+'                1      Dn Arrow / Channel - Key
+'                2      Rt Arrow / Volume  + Key
+'                3      Lt Arrow / Volume  - Key
+'                4      "5" Key
+'
+Read_Remote:
+  DO                                         ' Look for start pulse
+    PULSIN SonyIR, NegEdge, startPulse       ' Read in first 4 pulses
+    PULSIN SonyIR, NegEdge, pulse0
+    PULSIN SonyIR, NegEdge, pulse1
+    PULSIN SonyIR, NegEdge, pulse2           ' Start pulse is 2.4ms, and
+  LOOP UNTIL (startPulse >= 1000)            ' 1000 PULSIN units is 2000us=2ms
+
+' If BIT9 is 0, then was a short pulse.  If BIT9 is 1, was a long pulse.
+' Short pulse stands for zero, long pulse stands for one (Sony Standard)
+  dataRemote.BIT0 = pulse0.BIT9        ' Store each pulse as a 0 or 1
+  dataRemote.BIT1 = pulse1.BIT9        ' into dataRemote variable
+  dataRemote.BIT2 = pulse2.BIT9
+
+  RETURN
+
+Navigate:                                    ' GOSUB to appropriate motion
+  ON dataRemote GOSUB Forward, Backward, Right, Left, Open_Close
+  RETURN
+
+Open_Close:                                  ' Decides whether to
+  IF (gripCommand = ToOpen) THEN             ' open or close the gripper
+    GOSUB Open
+  ELSE
+    GOSUB Close
+  ENDIF
+  gripCommand =  ~gripCommand                ' Next time, do the opposite
+  RETURN
+
+Forward:                                     ' Move Boe-Bot a set distance
+  FOR pulses = 1 TO TravelPulses
+    PULSOUT RightServo, ClockWise
+    PULSOUT LeftServo,  CtrClkWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Backward:
+  FOR pulses = 1 TO TravelPulses
+    PULSOUT RightServo, CtrClkWise
+    PULSOUT LeftServo,  ClockWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Left:
+  FOR pulses = 1 TO TurnPulses
+    PULSOUT RightServo, ClockWise
+    PULSOUT LeftServo,  ClockWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Right:
+  FOR pulses = 1 TO TurnPulses
+    PULSOUT RightServo, CtrClkWise
+    PULSOUT LeftServo,  CtrClkWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Open:                                        ' Open the gripper
+  FOR pulsewidth = CloseGripper TO OpenGripper STEP StepSize
+    PULSOUT GripServo, pulsewidth
+    PAUSE 20
+  NEXT
+  RETURN
+
+Close:                                       ' Close the gripper
+  FOR pulsewidth = OpenGripper TO CloseGripper STEP StepSize
+    PULSOUT GripServo, pulsewidth
+    PAUSE 20
+  NEXT
+  RETURN

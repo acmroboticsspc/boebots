@@ -1,0 +1,15 @@
+'This BS2-IC program reads and displays the StampMem's version number
+
+Version		VAR	BYTE
+  
+CheckVersionNumber:
+  SEROUT 0,84,["ZERN"]		'Get Version Number of StampMem
+  SERIN 0,84,1000,NoVersion,[Version]
+  DEBUG "StampMem is version ",DEC1 Version DIG 1, ".", DEC Version DIG 0
+STOP
+
+NoVersion:
+  'StampMem did not respond
+  DEBUG "ERROR! StampMem did not respond!"
+STOP
+

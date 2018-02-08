@@ -1,0 +1,71 @@
+;=======================================================================
+;TITLE:         debug_demo.src
+;
+;PURPOSE:       Modifies three registers to demonstrate the SX-Key's 
+;               debug display.  Use Run -> Debug (or CTRL+D) to program
+;               the SX, then click the Step or Poll button to see the
+;               results.
+;
+;AUTHOR:        Parallax, Inc.
+;
+;REVISIONS:
+;  06/09/98	Original release.
+;  09/17/04	Updated to support SASM.
+;
+;CONNECTIONS:
+;  None.
+;
+;DETAILS:
+;  Program the SX chip using the Run -> Debug (or CTRL+D) option.  Then
+;  click the Step button to step through each instruction (taking note 
+;  of the changes on screen) or use the Poll button to run full speed 
+;  with updates to the display every loop iteration.  The Watch window
+;  shows the values of registers IncReg, DecReg and NotReg in decimal.
+;  NOTE: You must disconnect any crystal or resonator from the SX chip
+;  in order to properly debug since the SX-Key will need to provide the
+;  clock signal.
+;=======================================================================
+
+;-------------------------- DEVICE DIRECTIVES --------------------------
+
+		DEVICE		SX28,OSCHS2,TURBO
+
+IFDEF	__SASM  ;SASM Directives
+		DEVICE		STACKX,OPTIONX
+		IRC_CAL		IRC_SLOW
+		
+ELSE		;Parallax Assember Directives
+		DEVICE		STACKX_OPTIONX
+ENDIF
+
+		RESET		Main
+
+;------------------------------ VARIABLES ------------------------------
+			
+IncReg		EQU	8			;The register to increment
+DecReg		EQU	9			;The register to decrement
+NotReg		EQU	10			;The register to invert
+
+;---------------------------- DEBUG SETTINGS ---------------------------
+
+		FREQ	50_000_000
+	
+;Create watch window to display values of registers in unsigned decimal.
+		WATCH	IncReg,8,UDEC
+		WATCH	DecReg,8,UDEC
+		WATCH	NotReg,8,UDEC
+
+;---------------------------- MAIN PROGRAM -----------------------------
+
+Main
+;Increment IncReg, decrement DecReg and invert NotReg in a loop.
+
+		inc	IncReg			;Increment IncReg
+		dec	DecReg			;Decrement DecReg
+		not	NotReg			;Invert NotReg
+		break				;Break to update display
+		jmp	Main			;loop
+
+
+
+

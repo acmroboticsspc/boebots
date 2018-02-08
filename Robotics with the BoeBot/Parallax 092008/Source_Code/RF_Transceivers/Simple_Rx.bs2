@@ -1,0 +1,31 @@
+'{$STAMP BS2}
+'*********************************************************************************************************
+'* Program:  Simple_Rx.BS2         Author:   Jeff A. Martin, Parallax, Inc.                              *
+'* Date:     1/28/00               Revision: 1.0                                                         *
+'*                                                                                                       *
+'* Description:                                                                                          *
+'* This BS2-IC code demonstrates simple receiving with the Parallax RF Transceivers.                     *
+'*                                                                                                       *
+'* This code must be run on a BASIC Stamp 2, interfaced to an RF Transceiver Part#27988 or an            *
+'* RF Receiver Part#27987.  This code is meant to interface with a second Stamp 2 running             *
+'* Simple_Tx.BS2.                                                                                        *
+'*                                                                                                       *
+'* Wiring:  Refer to the "Set Up Constants" section below for pin wiring indications.  Make sure to      *
+'* connect the transceiver's MODE pin to +5 volts (Vdd) to place the transceiver into serial mode.       * 
+'*********************************************************************************************************
+
+'---Set up Variables---
+Value 	VAR BYTE							'Holds data value being transmitted
+
+'---Set up Constants---
+Rx	 	CON 13							'Receive I/O pin number
+N9600		CON $4054							'Baud mode value for 9600 baud, 8,N,1
+
+
+'---------------------------------------- Main Routine -------------------------------------------
+
+'Receive data
+ReceiverMain:
+  SERIN Rx,N9600,[Value]						'Receive one byte
+  DEBUG "Receiving: ",DEC3 Value,CR
+GOTO ReceiverMain								'Then start over again	

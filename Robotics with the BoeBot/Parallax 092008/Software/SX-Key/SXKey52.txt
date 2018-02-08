@@ -1,0 +1,430 @@
+
+						L A B E L S
+
+-------------------------------------------------------------------------------------------------------------------------------
+	Label					Description
+-------------------------------------------------------------------------------------------------------------------------------
+
+	labelname				global label
+	:labelname				local label
+
+
+						O P E R A T O R S
+
+-------------------------------------------------------------------------------------------------------------------------------
+	Expression Operator			Description
+-------------------------------------------------------------------------------------------------------------------------------
+
+	\					Macro argument	Unaries
+	||					Absolute
+	+					(no effect)
+	-					Negate
+	~					Not
+
+	&					And		Binaries
+	|					Or
+	^					Xor
+	+					Add
+	-					Subtract
+	*					Multiply
+	/					Divide
+	//					Mod
+	<<					Shift left
+	>>					Shift right (arithmetic)
+	><					Reverse bits
+	.					Bit Address
+
+	=<					Below or equal	Conditionals
+	=>					Above or equal
+	=					Equal
+	<>					Not equal
+	<					Below
+	>					Above
+
+	(					Begin sub expression
+	)					End sub expression
+
+
+						D I R E C T I V E S
+
+-------------------------------------------------------------------------------------------------------------------------------
+	Directive				Description
+-------------------------------------------------------------------------------------------------------------------------------
+
+	DEVICE	setting,setting...		Establish device settings (should precede other directives/instructions)
+
+	ID	'8string'			Establish device ID
+
+	RESET	address				Assemble 'JMP address' at last location for reset
+
+label	=	value				Assign value to variable label - variable labels can be reassigned with '='
+
+label	EQU	value				Assign value to constant label - constant labels cannot be reassigned
+
+	ORG	address				Set origin to address
+
+	DS	locations			Define space: origin=origin+locations
+
+	DW	data,data,...			Define word(s)
+
+	IFDEF	label				Begin conditional block if label defined
+	IFNDEF	label				Begin conditional block if label undefined
+	IF	condition			Begin conditional block if true
+	ELSE					Alternate condition
+	ENDIF					End conditional block
+
+	REPT	count				Begin repeat block
+	ENDR					End repeat block
+
+label	MACRO	{argcount}			Begin macro definition
+	EXITM					Exit macro, useful within IF blocks within macro definitions
+	ENDM					End macro definition
+
+	EXPAND					Expand macros (default)
+	NOEXPAND				Don't expand macros
+
+	CASE					Enable case-sensitivity
+	NOCASE					Disable case-sensitivity
+
+	ERROR	'message'			Force error message. Useful within IF blocks. If within MACRO, shows caller
+
+	END					End source
+
+	BREAK					Set breakpoint in code - only 1 allowed
+
+	WATCH	bitaddress,bits/chrs,style	Set variable to watch (style: UDEC/SDEC/UHEX/SHEX/UBIN/SBIN/FSTR/ZSTR)
+
+	FREQ	hertz				Set clock frequency from 400,000 to 110,000,000 (default is 50,000,000)
+
+
+						I N S T R U C T I O N S
+
+-------------------------------------------------------------------------------------------------------------------------------
+Instruction		Words	Flags	W used	Description			Microchip PIC16C5x Equivalent
+-------------------------------------------------------------------------------------------------------------------------------
+
+						========================
+						byte-oriented operations
+						========================
+
+MOV	W,#lit		1	-	-	Move literal into W		MOVLW lit
+MOV	W,fr		1	Z	-	Move fr into W			MOVF fr,0
+MOV	fr,W		1	-	-	Move W into fr			MOVWF fr
+MOV	fr,#lit		2	-	W	Move literal into fr		MOVLW lit; MOVWF fr
+MOV	fr1,fr2		2	Z	W	Move fr2 into fr1		MOVF fr2,0; MOVWF fr1
+	
+ADD	W,fr		1	C,DC,Z	-	Add fr into W			ADDWF fr,0
+ADD	fr,W		1	C,DC,Z	-	Add W into fr			ADDWF fr,1
+ADD	fr,#lit		2	C,DC,Z	W	Add literal into fr		MOVLW lit; ADDWF fr,1
+ADD	fr1,fr2		2	C,DC,Z	W	Add fr2 into fr1		MOVF fr2,0; ADDWF fr1,1
+
+MOV	W,fr-W		1	C,DC,Z	-	Move fr-W into W		SUBWF fr,0
+SUB	fr,W		1	C,DC,Z	-	Subtract W from fr		SUBWF fr,1
+SUB	fr,#lit		2	C,DC,Z	W	Subtract literal from fr	MOVLW lit; SUBWF fr,1
+SUB	fr1,fr2		2	C,DC,Z	W	Subtract fr2 from fr1		MOVF fr2,0; SUBWF fr1,1
+
+AND	W,#lit		1	Z	-	AND literal into W		ANDLW lit
+AND	W,fr		1	Z	-	AND fr into W			ANDWF fr,0
+AND	fr,W		1	Z	-	AND W into fr			ANDWF fr,1
+AND	fr,#lit		2	Z	W	AND literal into fr		MOVLW lit; ANDWF fr,1
+AND	fr1,fr2		2	Z	W	AND fr2 into fr1		MOVF fr2,0; ANDWF fr,1
+
+OR	W,#lit		1	Z	-	OR literal into W		IORLW lit
+OR	W,fr		1	Z	-	OR fr into W			IORWF fr,0
+OR	fr,W		1	Z	-	OR W into fr			IORWF fr,1
+OR	fr,#lit		2	Z	W	OR literal into fr		MOVLW lit; IORWF fr,1
+OR	fr1,fr2		2	Z	W	OR fr2 into fr1			MOVF fr2,0; IORWF fr1,1
+
+XOR	W,#lit		1	Z	-	XOR literal into W		XORLW lit
+XOR	W,fr		1	Z	-	XOR fr into W			XORWF fr,0
+XOR	fr,W		1	Z	-	XOR W into fr			XORWF fr,1
+XOR	fr,#lit		2	Z	W	XOR literal into fr		MOVLW lit; XORWF fr,1
+XOR	fr1,fr2		2	Z	W	XOR fr2 into fr1		MOVF fr2,0; XORWF fr1,1
+
+CLR	W		1	Z	-	Clear W				CLRW
+CLR	fr		1	Z	-	Clear fr			CLRF fr
+
+MOV	W,++fr		1	Z	-	Move fr+1 into W		INCF fr,0
+INC	fr		1	Z	-	Increment fr			INCF fr,1
+
+MOV	W,--fr		1	Z	-	Move fr-1 into W		DECF fr,0
+DEC	fr		1	Z	-	Decrement fr			DECF fr,1
+
+MOV	W,<<fr		1	C	-	Move left-rotated fr into W	RLF fr,0
+RL	fr		1	C	-	Rotate left fr			RLF fr,1
+
+MOV	W,>>fr		1	C	-	Move right-rotated fr into W	RRF fr,0
+RR	fr		1	C	-	Rotate right fr			RRF fr,1
+	
+MOV	W,<>fr		1	-	-	Move nibble-swapped fr into W	SWAPF fr,0
+SWAP	fr		1	-	-	Swap nibbles in fr		SWAPF fr,1
+
+NOT	W		1	Z	-	Perform not on W		XORLW 0FFh
+MOV	W,/fr		1	Z	-	Move not'd fr into W		COMF fr,0
+NOT	fr		1	Z	-	Perform not on fr		COMF fr,1
+
+TEST	W		1	Z	-	Test W for zero			IORLW 0
+TEST	fr		1	Z	-	Test fr for zero		MOVF fr,1
+
+						=======================
+						bit-oriented operations
+						=======================
+
+CLRB	bit		1	-	-	Clear bit			BCF bit
+CLC			1	C	-	Clear carry			BCF 3,0
+CLZ			1	Z	-	Clear zero			BCF 3,2
+
+SETB	bit		1	-	-	Set bit				BSF bit
+STC			1	C	-	Set carry			BSF 3,0
+STZ			1	Z	-	Set zero			BSF 3,2
+
+ADDB	fr,bit		2	Z	-	Add bit into fr			BTFSC bit; INCF fr,1
+ADDB	fr,/bit		2	Z	-	Add not bit into fr		BTFSS bit; INCF fr,1
+
+SUBB	fr,bit		2	Z	-	Subtract bit from fr		BTFSC bit; DECF fr,1
+SUBB	fr,/bit		2	Z	-	Subtract not bit from fr	BTFSS bit; DECF fr,1
+
+MOVB	bit1,bit2	4	-	-	Move bit2 into bit1		BTFSS bit2; BCF bit1; BTFSC bit2; BSF bit1
+MOVB	bit1,/bit2	4	-	-	Move not bit2 into bit1		BTFSC bit2; BCF bit1; BTFSS bit2; BSF bit1
+
+						============================
+						inc/dec-conditional branches
+						============================
+
+MOVSZ	W,++fr		1	-	-	Move fr+1 into W, skip if zero	INCFSZ fr,0
+INCSZ	fr		1	-	-	Increment fr, skip if zero	INCFSZ fr,1
+IJNZ	fr,addr		2 *	-	-	Increment fr, jump if not zero	INCFSZ fr,1; GOTO addr
+
+MOVSZ	W,--fr		1	-	-	Move fr-1 into W, skip if zero	DECFSZ fr,0
+DECSZ	fr		1	-	-	Decrement fr, skip if zero	DECFSZ fr,1
+DJNZ	fr,addr		2 *	-	-	Decrement fr, jump if not zero	DECFSZ fr,1; GOTO addr
+
+						============================
+						compare-conditional branches
+						============================
+
+CSE	fr,#lit		3	C,DC,Z	W	Compare, skip if equal		MOVLW lit; SUBWF fr,0; BTFSS 3,2
+CSE	fr1,fr2		3	C,DC,Z	W	Compare, skip if equal		MOVF fr2,0; SUBWF fr1,0; BTFSS 3,2
+CSNE	fr,#lit		3	C,DC,Z	W	Compare, skip if not equal	MOVLW lit; SUBWF fr,0; BTFSC 3,2
+CSNE	fr1,fr2		3	C,DC,Z	W	Compare, skip if not equal	MOVF fr2,0; SUBWF fr1,0; BTFSC 3,2
+CSA	fr,#lit		3	C,DC,Z	W	Compare, skip if above		MOVLW /lit; ADDWF fr,0; BTFSS 3,0
+CSA	fr1,fr2		3	C,DC,Z	W	Compare, skip if above		MOVF fr1,0; SUBWF fr2,0; BTFSC 3,0
+CSAE	fr,#lit		3	C,DC,Z	W	Compare, skip if above or equal	MOVLW lit; SUBWF fr,0; BTFSS 3,0
+CSAE	fr1,fr2		3	C,DC,Z	W	Compare, skip if above or equal	MOVF fr2,0; SUBWF fr1,0; BTFSS 3,0
+CSB	fr,#lit		3	C,DC,Z	W	Compare, skip if below		MOVLW lit; SUBWF fr,0; BTFSC 3,0
+CSB	fr1,fr2		3	C,DC,Z	W	Compare, skip if below		MOVF fr2,0; SUBWF fr1,0; BTFSC 3,0
+CSBE	fr,#lit		3	C,DC,Z	W	Compare, skip if below or equal	MOVLW /lit; ADDWF fr,0; BTFSC 3,0
+CSBE	fr1,fr2		3	C,DC,Z	W	Compare, skip if below or equal	MOVF fr1,0; SUBWF fr2,0; BTFSS 3,0
+
+CJE	fr,#lit,addr	4 *	C,DC,Z	W	Compare, jump if equal		MOVLW lit; SUBWF fr,0; BTFSC 3,2; GOTO addr
+CJE	fr1,fr2,addr	4 *	C,DC,Z	W	Compare, jump if equal		MOVF fr2,0; SUBWF fr1,0; BTFSC 3,2; GOTO addr
+CJNE	fr,#lit,addr	4 *	C,DC,Z	W	Compare, jump if not equal	MOVLW lit; SUBWF fr,0; BTFSS 3,2; GOTO addr
+CJNE	fr1,fr2,addr	4 *	C,DC,Z	W	Compare, jump if not equal	MOVF fr2,0; SUBWF fr1,0; BTFSS 3,2; GOTO addr
+CJA	fr,#lit,addr	4 *	C,DC,Z	W	Compare, jump if above		MOVLW /lit; ADDWF fr,0; BTFSC 3,0; GOTO addr
+CJA	fr1,fr2,addr	4 *	C,DC,Z	W	Compare, jump if above		MOVF fr1,0; SUBWF fr2,0; BTFSS 3,0; GOTO addr
+CJAE	fr,#lit,addr	4 *	C,DC,Z	W	Compare, jump if above or equal	MOVLW lit; SUBWF fr,0; BTFSC 3,0; GOTO addr
+CJAE	fr1,fr2,addr	4 *	C,DC,Z	W	Compare, jump if above or equal	MOVF fr2,0; SUBWF fr1,0; BTFSC 3,0; GOTO addr
+CJB	fr,#lit,addr	4 *	C,DC,Z	W	Compare, jump if below		MOVLW lit; SUBWF fr,0; BTFSS 3,0; GOTO addr
+CJB	fr1,fr2,addr	4 *	C,DC,Z	W	Compare, jump if below		MOVF fr2,0; SUBWF fr1,0; BTFSS 3,0; GOTO addr
+CJBE	fr,#lit,addr	4 *	C,DC,Z	W	Compare, jump if below or equal	MOVLW /lit; ADDWF fr,0; BTFSS 3,0; GOTO addr
+CJBE	fr1,fr2,addr	4 *	C,DC,Z	W	Compare, jump if below or equal	MOVF fr1,0; SUBWF fr2,0; BTFSC 3,0; GOTO addr
+
+						========================
+						bit-conditional branches
+						========================
+
+SB	bit		1	-	-	Skip if bit			BTFSS bit
+SC			1	-	-	Skip if carry			BTFSS 3,0
+SZ			1	-	-	Skip if zero			BTFSS 3,2
+
+SNB	bit		1	-	-	Skip if not bit			BTFSC bit
+SNC			1	-	-	Skip if not carry		BTFSC 3,0
+SNZ			1	-	-	Skip if not zero		BTFSC 3,2
+
+JB	bit,addr	2 *	-	-	Jump to address if bit		BTFSC bit; GOTO addr
+JC	addr		2 *	-	-	Jump to address if carry	BTFSC 3,0; GOTO addr
+JZ	addr		2 *	-	-	Jump to address if zero		BTFSC 3,2; GOTO addr
+
+JNB	bit,addr	2 *	-	-	Jump to address if not bit	BTFSS bit; GOTO addr
+JNC	addr		2 *	-	-	Jump to address if not carry	BTFSS 3,0; GOTO addr
+JNZ	addr		2 *	-	-	Jump to address if not zero	BTFSS 3,2; GOTO addr
+
+						======================
+						unconditional branches
+						======================
+
+SKIP			1	-	-	Skip next instruction word	BTFSC/BTFSS 2,0
+
+JMP	addr		1 *	-	-	Jump to address			GOTO addr
+JMP	PC+W		1	C,DC,Z	-	Add W into PC			ADDWF 2,1
+JMP	W		1	-	-	Move W into PC			MOVWF 2
+
+CALL	addr		1 *	-	-	Call to address			CALL addr
+
+RETW	lit,lit...	1	-	-	Return from call, literal in W	RETLW lit
+RET			1	-	-	Return from call		<none>
+RETP			1	-	-	Return from call, load PA2:PA0	<none>
+RETI			1	-	-	Return from interrupt		<none>
+RETIW			1	-	-	Return from interrupt, fix RTCC	<none>
+
+			Note: Skips should be followed only by single-word instructions, except in the case of PAGE's.
+
+			* Increase by 1 word if @addr used to insert PAGE instruction.
+
+						==========================
+						i/o and control operations
+						==========================
+
+PAGE	addr		1	-	-	Load PA0:PA2, skip continues	<none>
+BANK	fr		1	-	-	Load FSR.4:FSR.6		<none>
+MODE	lit		1	-	-	Load M (same as MOV M,#lit)	<none>
+
+MOV	M,#lit		1	-	-	Move literal into M		<none>
+MOV	M,W		1	-	-	Move W into M			<none>
+MOV	M,fr		2	Z	W	Move fr into M			<none>
+MOV	W,M		1	-	-	Move M into W			<none>
+MOV	fr,M		2	-	W	Move M into fr			<none>
+
+MOV	!port,W		1	-	-	Move W into port's TRIS		TRIS port (port=5 to 7)
+MOV	!port,#lit	2	-	W	Move literal into port's TRIS	MOVLW lit; TRIS port (port=5 to 7)
+MOV	!port,fr	2	Z	W	Move fr into port's TRIS	MOVF fr,0; TRIS port (port=5 to 7)
+
+MOV	!OPTION,W	1	-	-	Move W into OPTION		OPTION
+MOV	!OPTION,#lit	2	-	W	Move literal into OPTION	MOVLW lit; OPTION
+MOV	!OPTION,fr	2	Z	W	Move fr into OPTION		MOVF fr,0; OPTION
+
+CLR	!WDT		1	TO,PD	-	Clear WDT and prescaler		CLRWDT
+SLEEP			1	TO,PD	-	Clear WDT and enter sleep mode	SLEEP
+
+IREAD			1	-	-	Read MODE:W into MODE:W		<none>
+
+NOP			1	-	-	No operation			NOP
+
+						===============================================================================
+						Backward-Compatibility Instructions for Parallax PIC16Cxx Assembler (SPASM.EXE)
+						===============================================================================
+
+LSET	addr		0-3	-	-	Use PAGE addr, instead		BCF/BSF 3,5+...
+LJMP	addr		1-4	-	-	Use JMP @addr, instead		BCF/BSF 3,5+...; GOTO addr
+LCALL	addr		1-4	-	-	Use CALL @addr, instead		BCF/BSF 3,5+...; CALL addr
+
+
+						S Y M B O L S
+
+-------------------------------------------------------------------------------------------------------------------------------
+Pre-Defined Symbols
+-------------------------------------------------------------------------------------------------------------------------------
+
+******** DEVICE Directive Symbols
+
+	- used to establish device parameters
+	- multiple DEVICE statements allowed to accomodate parameters
+
+    Example:	DEVICE	DRT960MS, OSCHS3, BOR42
+		DEVICE	CARRYX, PROTECT
+
+DRT18MS				Device reset timer waits 18ms			(default: DRT18MS)
+DRT960MS			Device reset timer waits 960ms
+DRT60MS				Device reset timer waits 60ms
+DRT60US				Device reset timer waits 60us
+
+OSCHS3				External crystal/resonator - high-speed level 3	(default: OSCHS3)
+OSCHS2				External crystal/resonator - high-speed level 2
+OSCHS1				External crystal/resonator - high-speed level 1
+OSCXT2				External crystal/resonator - standard level 2
+OSCXT1				External crystal/resonator - standard level 1
+OSCLP2				External crystal/resonator - low-power level 2
+OSCLP1				External crystal/resonator - low-power level 1
+OSCRC				External RC network
+OSC4MHZ				Internal 4MHz oscillator
+OSC1MHZ				Internal 1MHz oscillator
+OSC128KHZ			Internal 128KHz oscillator
+OSC32KHZ			Internal 32KHz oscillator
+
+DRIVEOFF			OSC2 output drive off (use for clock/osc packs)	(default: on)
+FEEDBACKOFF			OSC feedback resistor off (for clock/osc packs)	(default: on)
+XTLBUFD				Same as DRIVEOFF
+IFBD				Same as FEEDBACKOFF
+
+BOR42				Brownout reset at VDD < 4.2V			(default: Brownout off)
+BOR26				Brownout reset at VDD < 2.6V
+BOR22				Brownout reset at VDD < 2.2V
+
+CARRYX				ADD/SUB uses Carry flag				(default: ADD/SUB ignores Carry flag)
+SYNC				Input Syncing enabled - 2-clock delay on inputs	(default: Input Syncing disabled)
+SLEEPCLOCK			Clock is enabled during sleep - fast wakeup	(default: Clock is disabled during sleep)
+WATCHDOG			Watchdog Timer enabled				(default: Watchdog Timer disabled)
+PROTECT				Code Protect enabled				(default: Code Protect disabled)
+
+
+
+******** Dynamic Equates (always reflect current values)
+
+%		=	Current REPT index (=0 if outside of a REPT block)
+$		=	Current origin
+
+
+******** Register/Bit Equates
+
+IND		=	$00			Indirect addressing register
+
+RTCC		=	$01			RTCC register
+WREG		=	$01			W register
+
+PC		=	$02			Program counter low-byte register
+
+STATUS		=	$03			Status register
+C		=	STATUS.0		Carry bit
+DC		=	STATUS.1		Digit carry bit
+Z		=	STATUS.2		Zero bit
+PD		=	STATUS.3		Power-down bit
+TO		=	STATUS.4		Time-out bit
+PA0		=	STATUS.5		Page preselect bit 0
+PA1		=	STATUS.6		Page preselect bit 1
+PA2		=	STATUS.7		Page preselect bit 2
+
+FSR		=	$04			File select register
+
+RA		=	$05			RA i/o register
+RB		=	$06			RB i/o register
+RC		=	$07			RC i/o register
+
+
+******** Backward-Compatibility Symbols for Parallax PIC16Cxx Assembler (SPASM.EXE)
+
+		DEVICE Directive Symbols
+
+HS_OSC						OSCHS				(default: HS_OSC)
+XT_OSC						OSCXT
+LP_OSC						OSCLP
+RC_OSC						OSCRC
+
+WDT_OFF						(no equivalent)			(default: WDT_OFF)
+WDT_ON						WATCHDOG
+
+PROTECT_OFF					(no equivalent)			(default: PROTECT_OFF)
+PROTECT_ON					PROTECT
+
+		Register Equates
+
+INDIRECT	=	$00			Indirect addressing register
+INDF		=	$00
+
+TMR0		=	$01			RTCC register
+
+PCL		=	$02			Program counter low-byte register
+
+PORT_A		=	$05			RA i/o register
+PORT_B		=	$06			RB i/o register
+PORT_C		=	$07			RC i/o register
+
+
+----------------------------------------------------------------------------------
+Hex Format:
+
+Low-byte/high-byte (8-bit) format used - byte counts and addresses are doubled.
+
+$0000-$0FFF	=	CODE words
+$1000-$100F	=	ID words (nibble-per-word used to make 8 characters)
+$1010		=	FUSE word
+$1011		=	FUSEX word

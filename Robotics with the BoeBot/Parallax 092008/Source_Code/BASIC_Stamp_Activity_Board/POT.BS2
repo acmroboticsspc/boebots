@@ -1,0 +1,20 @@
+'************************************************************************
+'*  Basic Stamp Activity Board Sample Program            Potentiometer  *
+'*  9 September, 1997                                           (BS-2)  *
+'*                                                                      *
+'*  This program demonstrates the use of the on-board potentiometer.    *
+'*  Simply place the 'X2' jumper to the '2' position. Hit 'Alt-R to     *
+'*  compile and download. By changing in the potentiometer position     *
+'*  you change its resistence. The Stamp will detect the change in      *
+'*  resistence and display the result.                                  *
+'************************************************************************
+temp	var	word		' Create a 16-bit variable for storage
+Ain	con	7		' Create an alias for the pin connected
+
+START:	high Ain		' Bring the Ain pin up to 5 Vdc
+	pause 5 		' Allow time for the capacitor to charge
+	rctime Ain,1,temp	' Measure the RC-time discharge
+	debug ?temp		' Display the result
+	pause 100		' Wait 0.1 Seconds
+	goto START		' Repeat forever
+'**********************************************************************

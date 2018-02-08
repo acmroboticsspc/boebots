@@ -1,0 +1,68 @@
+' -----[ Title ]------------------------------------------------------
+'
+' File......  PAK_NUM2.BS2
+' Purpose...  Using PAK VI for recognicing ciphers from keyboard
+'             to control the period of flashing LED
+' Author....  Klaus Zahnert
+' Started...  06/16/01
+' Updated... 
+
+' -----[ Program Description ]----------------------------------------
+' BASIC Stamp 2SX is connected to PC's keyboard by using the PAK VI
+' keyboard-controller to make input for cyphers 0...9. Timing-value 
+' for blinking the LED is alligned to keypressed cyphers with shedules. 
+' this program runs for demonstration PAK VI with polling from BS2SX.
+' 
+
+' -----[ Revision History ]-------------------------------------------
+'
+' 
+
+' -----[ Constants ]--------------------------------------------------
+'
+LED 		con 15 				'pin to drive LED
+'baudval	con 16624                       'BS2SX/9600/8/n/1 direct con.
+baudval		con 16468			'BS2  /9600/8/n/1 direct con.
+t_out		con 100				'wait for SERIN-response (ms)
+datinpin	con 12
+fpin		con 13   
+' -----[ Variables ]--------------------------------------------------
+'
+border	var word                       'generated with precalc.shedule
+n		var word	       'Schleifenindex    
+datinbyt	var byte
+datoldbyt	var byte
+cipher	var byte
+' -----[ Initialization ]---------------------------------------------
+' 
+'{$STAMP BS2}                       
+
+high LED
+low  fpin                              'PAK 6 enable 2
+border 	=   10                         'Startwert
+' -----[ Main Code ]--------------------------------------------------
+'
+
+
+start: 	For n = 1 to border  		'toggle LED with period(keypr)
+      		serin datinpin,baudval,t_out,go_on,[datinbyt]
+go_on: 		If datinbyt <> datoldbyt then calc 	'need new period?
+            next 
+ 
+   	    toggle LED
+	    goto start
+
+calc :      lookdown datinbyt,[6,103,51,102,25,101,50,100,12,99],cipher
+            'makes cipher :    0,  1, 2,  3, 4,  5, 6,  7, 8  9 
+
+ 	    lookup   cipher  ,[1,2,4,7,12,22,42,75,135,255],border
+            'makes value for bord1 from shedules position, given by cipher
+            debug "Ziffer = ", dec cipher, TAB,TAB,"Zeitkonst.= ",dec border,cr
+            
+            datoldbyt = datinbyt 'store datinbyt in datoldbyt to compare again
+            goto start
+
+
+' -----[ Subroutines ]------------------------------------------------
+'
+'no

@@ -1,0 +1,60 @@
+'{$STAMP BS2}
+
+' Program: ADC0838.BS2
+' This program selects and reads each channel of the National Semiconductor
+' ADC0838 8-Channel, 8-bit analog-to-digital converter.  Single/MSB First
+' mode is used.  Connections to the ADC are shown below.
+
+'                      -------U-------
+'                 -> --| 1        20 |-- Vcc  (to +5)
+'                 -> --| 2        19 |-- N/C
+'                 -> --| 3        18 |-- CS*  (to I/O pin 0 of Stamp II)
+'  0 to 5 Volt    -> --| 4  ADC   17 |-- DI   (to I/O pin 1 of Stamp II)
+'  analog inputs  -> --| 5  0838  16 |-- CLK  (to I/O pin 3 of Stamp II)
+'                 -> --| 6        15 |-- N/C
+'                 -> --| 7        14 |-- DO   (to I/O pin 2 of Stamp II)
+'                 -> --| 8        13 |-- SE*  (to +5)
+'   (to ground)  Com --| 9        12 |-- Vref (to +5)
+'   (to ground) DGnd --| 10       11 |-- AGnd (to ground)
+'                       ---------------
+'  * indicates an active low pin
+
+ADCRes		VAR	BYTE	' A-to-D result: one byte. 
+CS		CON	0	' Chip select is pin 0. 
+ADCIn		CON	1	' Data input to ADC is pin 1. 
+ADCOut		CON	2	' Data output from ADC is pin 2.
+CLK		CON	3	' Clock is pin 3. 
+
+Channel		VAR	BYTE	' Number of the channel we want to measure
+InitBits	VAR	BYTE    ' Sequence of bits for initialization
+
+OUTA = %0001	' Set Chip Select High to deselect ADC
+DIRA = %1011	' Set direction bits properly
+
+Again:
+  DEBUG HOME
+  FOR Channel = 0 TO 7  ' Go through all the channels
+    LOW CS		' Activate the ADC0838. 
+
+    'Calculate initialization bits.  Bit definitions are as follows:
+    'Bits 7..5 = all 0's (will be ignored by the ADC)
+    'Bit 4 = 1 (Start bit)
+    'Bit 3 = 1 (Single mode)
+    'Bit 2 = Odd channel selector (bit 0 of channel #)
+    'Bit 1 = Channel selector (bit 2 of channel #)
+    'Bit 0 = Channel selector (bit 1 of channel #) 
+    InitBits = %11000 | ((Channel & %001) << 2) | ((Channel & %110) >> 1)
+  
+    'Shift out the initialization bits
+    SHIFTOUT ADCIn,CLK,MSBFIRST,[InitBits\8]
+
+    'Shift in the 8-bit data
+    SHIFTIN ADCOut,CLK,MSBPOST,[ADCRes\8]
+ 
+    HIGH CS		' Deactivate the ADC0838. 
+
+    ' Show us the conversion result. 
+    DEBUG "Channel ",DEC Channel, ": ",DEC ADCRes,CR	
+    PAUSE 1000		' Wait a second. 
+  NEXT			' Select next channel
+GOTO Again		' Do it again. 

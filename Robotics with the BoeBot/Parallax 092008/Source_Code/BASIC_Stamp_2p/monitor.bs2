@@ -1,0 +1,108 @@
+' This program demonstrates setting a limit in a BS2
+' application program by your web browser. 
+' BASIC Stamp Activity Board with a serial LCD was 
+' used as target hardware.
+' The BS2 application reads periodically the pot meter value, 
+' displays them on LCD and sends an email when the value is 
+' over the limit.
+' The serial link is connected to a PC's COM Port running
+' Mondo Mini webserver.
+
+		
+
+LCD		con 1				' Serial LCD on P1
+LED 		con 10			
+POTIN 	con 7				' Potentiometer on P7
+N2400 	con $418c			' Baudrate for serial LCD
+I 		con 254 			' Instruction prefix value.
+CLR 		con 1 			' LCD clear-screen instruction
+
+string 	VAR byte(8)			' Command string
+limit		VAR byte			' Byte variable for limit
+adc		var word			' Word variable for ADC
+number	var word			' Word variable for number conversion
+ii		var nib			' Index
+email_sent	var bit			' Flag
+
+
+	dirs =%0000111100000000
+	outC = %1111
+
+	limit = 15				' Initialize limit with maximum
+
+	'Initialize the LCD
+	pause 1000
+	serout LCD,n2400,[I,CLR] 	' Clear the LCD screen.
+	pause 1
+	serout LCD,n2400,[I,128]	
+	serout LCD,n2400,["Value:"] 	' Print message.
+	serout LCD,n2400,[I,138]	
+	serout LCD,n2400,["Limit:"] 	' Print message.
+
+	
+	'Tell MondoMini to clear all commands queued up
+	SEROUT 16,84+$4000,1,["CC;"]
+
+start:
+	high LED: pause 100: 		' Blink LED
+	low LED 
+
+	gosub read_pot			' read pot meter value
+
+	if adc > limit then alert	' Alert if adc exceeds limit
+	email_sent = 0
+	SEROUT 16,84+$4000,1,["M1= ;"]
+
+display_values:
+	serout LCD,n2400,[I,135]	' Print values on LCD
+	serout LCD,N2400,[dec2 adc.lowbyte] 
+	serout LCD,n2400,[I,145]
+	serout LCD,N2400,[dec2 limit]
+
+	'Report the value of pot meter amd limit
+	SEROUT 16,84+$4000,1,["P1=",dec adc.lowbyte,";"]
+	SEROUT 16,84+$4000,1,["P2=",dec limit,";"]
+	
+
+	'Query the MondoMini for a command.
+	SEROUT 16,84+$4000,1,["QC;"]
+
+	'Wait 1000 ms for a command from MondoMini
+	SERIN 16,84+$4000,1000,no_command,[STR string\7\";"]
+
+	'Test for "P2=xxx"
+	IF (string(0)<>"P" OR string(1)<>"2" OR string(2)<>"=") THEN next_command
+	number = 0
+	ii = 3 
+m1:	if string(ii) = 0 then number_end
+	number = number * 10 + string(ii) - 48
+	ii = ii + 1
+	goto m1		
+number_end:
+	limit = number.lowbyte
+
+next_command:
+	' Insert further commands if needed
+
+no_command:
+	goto start
+
+read_pot:
+	high potin
+	pause 1
+	rctime POTIN, 1, adc
+	adc=adc/2
+	adc=adc.nib2
+	return
+
+alert:
+	if email_sent = 1 then display_values
+	SEROUT 16,84+$4000,1,["EM=info@ckuehnel.ch;"]
+ 	SEROUT 16,84+$4000,1,["BASIC Stamp indicates ;"]
+ 	SEROUT 16,84+$4000,1,["an alert situation!\n;"]
+	SEROUT 16,84+$4000,1,["Please check!;"]
+ 	SEROUT 16,84+$4000,1,["EM;"]
+ 	SEROUT 16,84+$4000,1,["M1=BASIC Stamp just sent an email alert!;"]
+
+	email_sent = 1				' EMail was sent
+	goto display_values

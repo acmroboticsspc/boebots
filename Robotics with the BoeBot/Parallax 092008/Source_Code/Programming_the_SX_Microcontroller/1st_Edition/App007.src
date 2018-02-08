@@ -1,0 +1,93 @@
+; APP007.SRC - PWM VP with constant period
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+  watch PwmAcc, 8, UDEC
+  watch PwmVal, 8, UDEC
+  watch PwmPin, 1, UBIN
+  watch rb.0,   1, UBIN
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+
+org     $08
+PwmAcc  ds 1                            ; Current value for pulse width
+PwmVal  ds 1                            ; Contents determines pulse width
+rbBuff  ds 1                            ; Buffer for Port B output
+Timer   ds 1                            ; Delay counter (for demonstration
+                                        ; purposes)
+Incr    ds 1                            ; Increment value for demonstration
+
+PwmPin  equ rbBuff.0                    ; PWM bit in the buffer
+Trigger equ rb.1                        ; Trigger output for Oscilloscope
+
+org     $000
+
+;** PWM VP (constant frequency) ********************************
+
+; This part of the ISR does the PWM part
+;
+  setb  Trigger                         ; Oscilloscope trigger
+  setb  PwmPin                          ; Set PWM bit in advance
+  csb   PwmAcc, PwmVal                  ; If PWM value reached, 
+    clrb  PwmPin                        ; clear PWM bit
+  inc   PwmAcc                          ; Increment current value
+  mov   w, ++PwmAcc                     ; Test if PwmAcc = 255
+  snz                                   ; if so,
+    clr PwmAcc                          ; clear PwmAcc
+  sz
+    jmp :Exit
+  
+; This part of the ISR is for demonstration purposes only, it con-
+; tinuously modifies the contents of PwmVal, i.e. the pulse width.
+;
+:Timers
+  decsz Timer                           ; Decrement timer
+    jmp :Exit                           ; If no underflow, continue 
+  mov Timer, #15                        ; Re-initialize the timer 
+  add PwmVal, Incr                      ; Increment or decrement PwmVal
+  sz                                    ; If PwmVal = 0 toggle increment/
+    jmp :Exit                           ; decrement
+  sb Incr.7                             ; If increment = -1,
+    jmp :Minus                          ;
+  inc Incr                              ; set it to
+  inc Incr                              ; +1
+  jmp :Exit
+:Minus
+  dec Incr                              ; If increment = +1, set it
+  dec Incr                              ; to -1
+  dec PwmVal                            ; Adjust PwmVal from 0
+  dec PwmVal                            ; to 254
+;
+; End of demo part
+
+:Exit    
+  clrb  Trigger                         ; Oscilloscope trigger
+  mov   rb, rbBuff                      ; Output port data
+  mov   w, #-195
+  retiw
+
+org     $100
+
+;** Mainline program *******************************************
+;
+Start
+  mov   PwmVal, #0
+  clr   PwmAcc
+  clr   Timer
+  clr   Timer+1
+  mov   Incr, #1
+  mov   !rb, #%11111100
+  mov   !option,#%10011111              ; Enable RTCC interrupt
+
+Loop
+  jmp Loop

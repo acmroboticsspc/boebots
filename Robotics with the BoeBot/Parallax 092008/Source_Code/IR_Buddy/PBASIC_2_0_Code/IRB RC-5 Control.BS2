@@ -1,0 +1,142 @@
+' ==============================================================================
+'
+'   File...... IRB RC-5 Control.BS2
+'   Purpose... Simple RC-5 Control Demonstration
+'   Author.... Parallax
+'   E-mail.... stamptech@parallaxinc.com
+'   Started...
+'   Updated... 15 NOV 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+
+' This program uses the Parallax IR Buddy to receive and decode RC-5 commands
+' from a multi-function remote control.  Numbers 1 - 4 are converted into pin
+' controls.  LEDs are used to display the state of each control pin.  
+'
+' This program is system code sensitive, allowing the same remote to indepen-
+' dently control multiple projects without interference.
+'
+' Remote #1 toggles pin 0
+' Remote #2 toggles pin 1
+' Remote #3 toggles pin 2
+' Remote #4 toggles pin 3
+'
+' Note that repeated keys are ignored to prevent possible problems from rapid
+' toggling of the device connected to the IO control pin.
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+
+IRbSIO          CON     15                      ' IR Buddy serial I/O
+
+Ports		VAR	OutA			' LED / device control pins
+Port1           CON     0
+Port2           CON     1
+Port3           CON     2
+Port4           CON     3
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+IRbRc5Rx        CON     $72                     ' RC5 protocol RX
+
+IRb96           CON      84 + $8000             ' 9600 baud, open
+IRb48           CON     188 + $8000             ' 4800 baud, open
+IRb24           CON     396 + $8000             ' 2400 baud, open
+IRbBaud         CON     IRb96
+
+BufEnd          CON     254                     ' end of buffer
+System          CON     0                       ' system code for this Stamp
+
+On              CON      1
+Off             CON      0
+AllOff          CON     13                      ' "Mute" key on Philips remote
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+buffer          VAR     Byte(8)                 ' RC-5 RX buffer
+idx             VAR     Nib			' loop counter
+sysCode         VAR     Byte			' received system code
+cmdCode         VAR     Byte			' received command code
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Setup:
+  Ports = Off					' all outputs off
+  DirA = %1111					' all ports are outputs
+
+  GOSUB IR_Buddy_Reset
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  SEROUT IRbSIO, IRbBaud, [IRbRc5Rx, 10]        ' start RC-5 RX
+  SERIN  IRbSIO, IRbBaud, [STR buffer\8\255]    ' get data
+
+Process_Commands:
+  FOR idx = 0 TO 6 STEP 2
+    sysCode = buffer(idx)                       ' extract system code
+    IF (sysCode = BufEnd) THEN Loop_Pad		' reached end of buffer
+    IF (sysCode <> System) THEN Skip_Key        ' check for valid system code
+      cmdCode = buffer(idx + 1)                 ' extract command
+
+Check_All_Off:
+    IF (cmdCode <> AllOff) THEN Check_Toggle
+      Ports = Off				' all outputs off
+
+Check_Toggle:
+    IF (cmdCode = 0) OR (cmdCode > 4) THEN Skip_Key
+      TOGGLE (cmdCode - 1)
+
+Skip_Key:
+  NEXT
+
+Loop_Pad:
+  PAUSE 500                                     ' give IR Buddy time to work
+  GOTO Main
+
+  END
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+' Reset the IR Buddy.  This code is useful for clearing data from the RX
+' buffer and prepping to switch modes.  Timing specific; do not change.
+
+IR_Buddy_Reset:
+  LOW IRbSIO                                    ' signal reset
+  PAUSE 5
+  INPUT IRbSIO                                  ' release reset signal
+  PAUSE 50                                      ' allow time for reset actions
+  RETURN

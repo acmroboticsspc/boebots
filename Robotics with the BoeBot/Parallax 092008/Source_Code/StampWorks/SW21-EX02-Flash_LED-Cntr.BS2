@@ -1,0 +1,53 @@
+' =========================================================================
+'
+'   File....... SW21-EX02-Flash_LED-Cntr.BS2
+'   Purpose.... Advanced LED Flasher
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Flashes an LED connected to P0, controlled by the value of a bit that's
+' part of another variable.  This program will work, unmodified, on
+' any BS2-family module.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Strobe          PIN     0                       ' LED on P0
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+IsOn            CON     1                       ' on for active-high LED
+IsOff           CON     0                       ' off for active-high LED
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+cntr            VAR     Nib                     ' simple counter, 0 - 15
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  Strobe = IsOff
+  OUTPUT Strobe                                 ' enable pin to drive LED
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    Strobe = cntr.BIT0
+    PAUSE 500
+    cntr = cntr + 1
+  LOOP

@@ -1,0 +1,27 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 13.1
+;=======================================================================
+
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	start_point
+		freq	50000000   		; 50 Mhz
+
+		org	0
+start_point
+		mov	ra,#%1111
+		mov	!ra,#%1110
+
+
+; set threshold here $C = Schmitt $D = CMOS
+  		mov 	m,#$C
+		mov 	!rb,#%11111110
+		mov 	m,#$F
+
+
+; Here is where the action is!
+mainloop
+		movb 	ra.0,/rb.0
+		jmp 	mainloop

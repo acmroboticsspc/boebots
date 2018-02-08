@@ -1,0 +1,271 @@
+' =========================================================================
+'
+'   File....... DS1307.BS2
+'   Purpose.... DS1307 demo with a BS2/BS2e/BS2sx
+'   Author..... Jon Williams, Parallax
+'   E-mail..... jwilliams@parallax.com
+'   Started....
+'   Updated.... 08 SEP 2004
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+SDA             PIN     0                       ' I2C serial data line
+SCL             PIN     1                       ' I2C serial clock line
+HrsIn           PIN     2                       ' adjust minutes button
+MnsIn           PIN     3                       ' adjust hours button
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+Ack             CON     0                       ' acknowledge bit
+Nak             CON     1                       ' no ack bit
+
+DS1307          CON     %1101 << 4
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+slvAddr         VAR     Byte                    ' I2C slave address
+devNum          VAR     Nib                     ' device number (0 - 7)
+addrLen         VAR     Nib                     ' bytes in word addr (0 - 2)
+wrdAddr         VAR     Word                    ' word address
+
+i2cData         VAR     Byte                    ' data to/from device
+i2cWork         VAR     Byte                    ' work byte for TX routine
+i2cAck          VAR     Bit                     ' Ack bit from device
+
+idx             VAR     Nib
+
+secs            VAR     Byte                    ' DS1307 time registers
+mins            VAR     Byte
+hrs             VAR     Byte
+day             VAR     Byte                    ' weekday
+date            VAR     Byte                    ' day in month, 1 - 31
+month           VAR     Byte
+year            VAR     Byte
+control         VAR     Byte                    ' SQWV I/O control
+
+buttons         VAR     Nib                     ' debounced button inputs
+btnHr           VAR     buttons.BIT1            ' advance hours
+btnMn           VAR     buttons.BIT0            ' advance minutes
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Check_Module:
+  #IF ($stamp >= BS2P) #THEN
+    #ERROR "Use I2COUT and I2CIN!"
+  #ENDIF
+
+Setup:
+  slvAddr = DS1307                              ' 1 byte in word address
+  addrLen = 1
+
+  DEBUG CLS
+  DEBUG "DS1307 Demo", CR,
+        "-----------"
+
+Reset_Clock:
+  idx = HrsIn + MnsIn
+  IF (idx = %00) THEN                           ' if both pressed, reset
+    secs = $00
+    mins = $00
+    hrs = $06                                   ' 6:00 AM
+    day = 5                                     ' Thur
+    date = $01                                  ' 1st
+    month = $01                                 ' January
+    year = $04                                  ' 2004
+    control = 0                                 ' disable SQW output
+    GOSUB Set_Clock                             ' block write clock regs
+  ENDIF
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Get_Clock
+    hrs = hrs & $3F
+    DEBUG CRSRXY, 0, 2,
+          HEX2 hrs, ":", HEX2 mins, ":", HEX2 secs
+    PAUSE 100
+    GOSUB Get_Buttons
+    IF (buttons > %00) THEN
+      hrs = hrs.NIB1 * 10 + hrs.NIB0            ' BCD to decimal
+      hrs = hrs + btnHr // 24                   ' update
+      hrs  = (hrs / 10 << 4) + (hrs // 10)      ' decimal to BCD
+      mins = mins.NIB1 * 10 + mins.NIB0
+      mins = mins + btnMn // 60
+      mins = (mins / 10 << 4) + (mins // 10)
+      secs = 0                                  ' reset
+      GOSUB Set_Clock
+    ENDIF
+  LOOP
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Get_Buttons:
+  buttons = %0011                               ' assume pressed
+  FOR idx = 1 TO 5
+    btnHr = btnHr & ~HrsIn                      ' validate inputs
+    btnMn = btnMn & ~MnsIn
+    PAUSE 5
+  NEXT
+  RETURN
+
+
+' Do a block write to clock registers
+
+Set_Clock:
+  GOSUB I2C_Start                               ' send Start
+  i2cWork = slvAddr & %11111110                 ' send slave ID (write)
+  GOSUB I2C_TX_Byte
+  IF (i2cAck = Nak) THEN Set_Clock              ' wait until not busy
+  i2cWork = 0                                   ' point at secs register
+  GOSUB I2C_TX_Byte
+  FOR idx = 0 TO 7                              ' write secs to control
+    i2cWork = secs(idx)
+    GOSUB I2C_TX_Byte
+  NEXT
+  GOSUB I2C_Stop
+  RETURN
+
+
+' Do a block read from clock registers
+
+Get_Clock:
+  GOSUB I2C_Start                               ' send Start
+  i2cWork = slvAddr & %11111110                 ' send slave ID (write)
+  GOSUB I2C_TX_Byte
+  IF (i2cAck = Nak) THEN Get_Clock              ' wait until not busy
+  i2cWork = 0                                   ' point at secs register
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_Start
+  i2cWork = slvAddr | %00000001                 ' send slave ID (read)
+  GOSUB I2C_TX_Byte
+  FOR idx = 0 TO 6                              ' read secs to year
+    GOSUB I2C_RX_Byte
+    secs(idx) = i2cWork
+  NEXT
+  GOSUB I2C_RX_Byte_Nak                         ' read control
+  control = i2cWork
+  GOSUB I2C_Stop
+  RETURN
+
+
+' =====[ High Level I2C Subroutines]=======================================
+
+' Random location write
+' -- pass device slave address in "slvAddr"
+' -- pass bytes in word address (0, 1 or 2) in "addrLen"
+' -- word address to write passed in "wrdAddr"
+' -- data byte to be written is passed in "i2cData"
+
+Write_Byte:
+  GOSUB I2C_Start                               ' send Start
+  i2cWork = slvAddr & %11111110                 ' send slave ID (write)
+  GOSUB I2C_TX_Byte
+  IF (i2cAck = Nak) THEN Write_Byte             ' wait until not busy
+  IF (addrLen > 0) THEN
+    IF (addrLen = 2) THEN
+      i2cWork = wrdAddr.BYTE1                   ' send word address (1)
+      GOSUB I2C_TX_Byte
+    ENDIF
+    i2cWork = wrdAddr.BYTE0                     ' send word address (0)
+    GOSUB I2C_TX_Byte
+  ENDIF
+  i2cWork = i2cData                             ' send data
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_Stop
+  RETURN
+
+
+' Random location read
+' -- pass device slave address in "slvAddr"
+' -- pass bytes in word address (0, 1 or 2) in "addrLen"
+' -- word address to write passed in "wrdAddr"
+' -- data byte read is returned in "i2cData"
+
+Read_Byte:
+  GOSUB I2C_Start                               ' send Start
+  IF (addrLen > 0) THEN
+    i2cWork = slvAddr & %11111110               ' send slave ID (write)
+    GOSUB I2C_TX_Byte
+    IF (i2cAck = Nak) THEN Read_Byte            ' wait until not busy
+    IF (addrLen = 2) THEN
+      i2cWork = wrdAddr.BYTE1                   ' send word address (1)
+      GOSUB I2C_TX_Byte
+    ENDIF
+    i2cWork = wrdAddr.BYTE0                     ' send word address (0)
+    GOSUB I2C_TX_Byte
+    GOSUB I2C_Start
+  ENDIF
+  i2cWork = slvAddr | %00000001                 ' send slave ID (read)
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_RX_Byte_Nak
+  GOSUB I2C_Stop
+  i2cData = i2cWork
+  RETURN
+
+
+' -----[ Low Level I2C Subroutines]----------------------------------------
+
+' *** Start Sequence ***
+
+I2C_Start:                                      ' I2C start bit sequence
+  INPUT SDA
+  INPUT SCL
+  LOW SDA
+
+Clock_Hold:
+  DO : LOOP UNTIL (SCL = 1)                     ' wait for clock release
+  RETURN
+
+
+' *** Transmit Byte ***
+
+I2C_TX_Byte:
+  SHIFTOUT SDA, SCL, MSBFIRST, [i2cWork\8]      ' send byte to device
+  SHIFTIN SDA, SCL, MSBPRE, [i2cAck\1]          ' get acknowledge bit
+  RETURN
+
+
+' *** Receive Byte ***
+
+I2C_RX_Byte_Nak:
+  i2cAck = Nak                                  ' no Ack = high
+  GOTO I2C_RX
+
+I2C_RX_Byte:
+  i2cAck = Ack                                  ' Ack = low
+
+I2C_RX:
+  SHIFTIN SDA, SCL, MSBPRE, [i2cWork\8]         ' get byte from device
+  SHIFTOUT SDA, SCL, LSBFIRST, [i2cAck\1]       ' send ack or nak
+  RETURN
+
+
+' *** Stop Sequence ***
+
+I2C_Stop:                                       ' I2C stop bit sequence
+  LOW SDA
+  INPUT SCL
+  INPUT SDA
+  RETURN

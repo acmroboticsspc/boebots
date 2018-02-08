@@ -1,0 +1,23 @@
+' Program Listing 36.3
+' Starslsh.BS2
+' Jeff Martin, Parallax Technical Support Engineer
+' Stamp Applications: Nuts and Volts February 1998
+' First, set up our variables
+A	VAR	WORD
+X	VAR	WORD
+
+'Initialize the value
+A = 52
+
+'Now do our modified calculation, multiply by 4.35 'with the */ operator
+X = A */ 1113  
+
+'Now display it on the PC screen and move to the 'next line
+DEBUG DEC A," * 4.35 = ",DEC X,CR
+
+'Now let's try one more time
+A = 196
+
+X = A */ 1113  
+
+DEBUG DEC A," * 4.35 = ",DEC X

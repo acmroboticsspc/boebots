@@ -1,0 +1,106 @@
+' Program Listing 48.2. RPB2_299.BS2 Storing Serial Data Automatically 
+' with the RPB
+
+'RPB2_299.BS2 - Storing Serial Data Automatically with the RPB: 
+'This program waits for the characters "START" to be received. Once 
+'received the RPB has its internal baud rate reset to 9600 by the WRITE
+'POINTER command. This command also has the effect of pointing any 
+'subsequent FIFO write operations to address location '0000'hex. Data is 
+'then loaded into the RPB while it is in FIFO write mode until the 
+'BS2 receives the characters "STOP". The READ END OF FIFO command is used 
+'to find the last address pointed to by the FIFO write operation. This 
+'value is always the same as the number of bytes stored during
+'the FIFO write operation. The last byte of data written during a FIFO 
+'write operation will be at one less than the value returned by the READ 
+'END OF FIFO command. 
+'
+'********************************************************************
+'Program Variables
+'
+Address		VAR	Word		
+'Stores address in RAM to write or read from	
+Addr_lo		VAR 	Address.lowbyte	
+'Address is broken into bytes for sending to the RPB
+Addr_hi		VAR	Address.highbyte	
+'Address is broken into bytes for sending to the RPB
+DataByte	VAR	Byte			
+'Used to hold data to be sent or received
+End_Addr	VAR	Word			
+'Stores Read End of FIFO pointer
+End_Addr_lo	VAR 	End_Addr.lowbyte		
+'Pointer broken into bytes for receiving from the RPB
+End_Addr_hi	VAR	End_Addr.highbyte		
+'Pointer broken into bytes for receiving from the RPB
+'********************************************************************
+'Pin Assignments
+'
+FMEN		CON	15  'Enables/disables data from serial data source
+FMBS2		CON	14  'From Master pin: sends data/commands to the RPB
+TMBS2		CON	12  'To Master pin: receives data from the RPB
+R_W		CON	11  'Read/Write pin: selects type of FIFO operation
+MODE		CON	10  'Mode pin: enables/disables FIFO mode 
+'********************************************************************
+'Communication Constants
+'
+Sync		CON	$55 'Sync byte
+B_Read 		CON	$01 'Byte Read command
+W_Pointer	CON	$05 'Write Pointer command 
+EOF_Pointer	CON	$07 'Read End of FIFO command	
+Baud		CON	84  '9600 baud
+'********************************************************************
+'Initialization of registers
+Initialize:
+	High	FMEN		'Disable data from serial data source
+	High 	MODE		'Disable FIFO mode
+	High	R_W		'Default to FIFO read
+	Pause	500		'Allow RPB time to power up
+	debug 	CR,CR,"Initialized",CR			
+'********************************************************************
+MainProgram:
+'Wait for "START" from serial data source, display message when received
+'
+	Low	FMEN		'Enable data from serial data source
+	Serin	FMBS2,Baud,[wait("START")]
+	debug 	"START Received",CR
+	High	FMEN		'Disable data from serial data source
+'
+'At this point the RPB has reset itself due to the "START" data and has 
+'returned to a default baud rate of 2400. The Write Pointer command is 
+'used to reset the address that the FIFO write operation will start at, 
+'and reset the RPB baud rate to 9600 for further data.
+	Address	= 0		'Pointer will be reset to '0000'hex
+	Serout	FMBS2,Baud,[Sync,W_Pointer,Addr_hi,Addr_lo]
+	Input 	FMBS2		'Make FMBS2 an input pin
+	debug 	"Resetting FIFO Pointer",CR	
+	debug 	"Entering FIFO Buffer Mode",CR
+	Pause	100				
+'
+'Enable FIFO write operation and wait for "STOP" to be received
+	Low	FMEN		'Enable data from serial source
+	Low	R_W		'Select FIFO write
+	Low	MODE		'Enable FIFO buffer
+	Serin	FMBS2,Baud,[waitSTOP")]
+	High	MODE		'Disable FIFO buffer after "STOP"
+	High	R_W		'Default to FIFO read
+	High	FMEN		'Disable data from serial source
+	Debug 	"STOP received",CR,CR
+'
+'The Read End of FIFO command is used to determine how many bytes of data 
+'were stored during the FIFO write operation. This value is used to set up 
+'a For-Next loop to read back all of the data and display it using the 
+'Debug command. 
+
+	Serout	FMBS2,Baud,[Sync,EOF_Pointer]	
+	Serin	TMBS2,Baud,[End_Addr_hi,End_Addr_lo]
+	Debug 	"Number of bytes in message = ",Dec End_Addr,CR
+	Debug	"Data received after START is...",CR
+	For 	Address = 0 to End_Addr-1	
+
+' Read data from '0000'hex to (End_Addr - 1)	
+		Serout 	FMBS2,Baud,[Sync,B_Read,Addr_hi,Addr_lo]
+		Serin	TMBS2,Baud,[DataByte]
+		Debug	DataByte 'Display data read	
+	Next
+	Goto	Initialize	'Start over
+	END:	
+END:				'End of program

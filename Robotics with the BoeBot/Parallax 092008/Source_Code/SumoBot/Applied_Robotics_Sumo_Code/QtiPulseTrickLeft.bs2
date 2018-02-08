@@ -1,0 +1,37 @@
+' Applied Robotics with the SumoBot - QtiPulseTrickLeft.bs2
+
+' {$STAMP BS2}                               ' Target device = BS2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+qtiStateLeft   VAR     Bit                   ' Store left QTI state
+time           VAR     Word                  ' Store QTI decay time
+threshold      VAR     Word                  ' Store b/w threshold
+
+' Calibrate QTIs
+
+HIGH 10                                      ' Turn on left QTI
+HIGH 9                                       ' Discharge QTI capacitor
+PAUSE 1                                      ' Wait for discharge
+RCTIME 9, 1, time                            ' Vo decay time as cap charges
+threshold = time / 4                         ' Use to set threshold
+
+IF threshold > 220 THEN                      ' Account for code overhead
+  threshold = threshold - 220
+ELSE
+  threshold = 0
+ENDIF
+
+' Main Routine
+
+DO
+
+  HIGH 9                                     ' Discharge QTI capacitor
+  PAUSE 1                                    ' Wait for discharge
+  INPUT 9                                    ' Start RC decay
+  PULSOUT 6, threshold                       ' Wait until threshold time
+  qtiStateLeft = IN9                         ' Save state of P9
+
+  DEBUG HOME, ? qtiStateLeft                 ' Display state of P9
+  PAUSE 100                                  ' Delay for slower PCs
+
+LOOP

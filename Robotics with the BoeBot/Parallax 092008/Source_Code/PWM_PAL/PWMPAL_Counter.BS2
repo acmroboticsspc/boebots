@@ -1,0 +1,80 @@
+' =========================================================================
+'
+'   File....... PWMPAL_Counter.BS2
+'   Purpose.... Background Counter Demonstration
+'   Author..... Parallax
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 18 JUN 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+
+' Activate PWM output when P8 is high -- count control input (counter 1)
+' and the PWM pulses (counter 2)
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+PpPin           PIN     0                       ' PWMPAL Serial I/O
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+T9600           CON     84
+T19200          CON     32
+T38400          CON     6
+PpBaud          CON     T38400
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+cntr1           VAR     Word                    ' counter for P8 (switch)
+cntr2           VAR     Word                    ' counter for P9 (PWM in)
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Setup:
+  SEROUT PpPin, PpBaud, ["!PWMM1", $90, $01, $90, $01]
+  SEROUT PpPin, PpBaud, ["!PWMSS", %00010001]
+  SEROUT PpPin, PpBaud, ["!PWMSP", %00000011]
+  SEROUT PpPin, PpBaud, ["!PWMX0"]
+
+  DEBUG CLS,
+        "Counter 1 : ", CR,
+        "Counter 2 : "
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    ' get counter values
+    SEROUT PpPin, PpBaud, ["!PWMC1"]
+    SERIN  PpPin, PpBaud, [cntr1.BYTE0, cntr1.BYTE1]
+    SEROUT PpPin, PpBaud, ["!PWMC2"]
+    SERIN  PpPin, PpBaud, [cntr2.BYTE0, cntr2.BYTE1]
+
+    ' show counter values
+    DEBUG CRSRXY, 12, 0, DEC cntr1, CLREOL,
+          CRSRXY, 12, 1, DEC cntr2, CLREOL
+
+    PAUSE 1000                                  ' loop delay - Stamp busy
+  LOOP
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------

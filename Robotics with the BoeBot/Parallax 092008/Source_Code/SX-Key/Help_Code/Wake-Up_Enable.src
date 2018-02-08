@@ -1,0 +1,101 @@
+;=======================================================================
+;TITLE:         Wake-Up_Enable.src
+;
+;PURPOSE:       This SX28 code demonstrates setup and use of MIWU pins
+;               (Multi-Input Wake-Up).
+;
+;AUTHOR:        Parallax, Inc.
+;
+;REVISIONS:
+;  08/12/99 -   Initial release.
+;  09/17/04 -   Updated to support SASM.
+;
+;CONNECTIONS:
+;  For circuit simplicity, this code has internal pull-up resisters
+;  configured on all Port B pins.  Simply connect at least one Port B pin
+;  to a button and connect the other end of the button to ground.
+;
+;DETAILS:
+;  To configure MIWU Mode, the Wake-Up Enable and Wake-Up Edge registers
+;  must be set and the Wake-Up Pending register must be cleared.  It is
+;  important to clear the Wake-Up Pending register at initialization as
+;  well as during the interrupt since the SX will not trigger any
+;  additional interrupts on that pin unless the corresponding bit is
+;  clear.  The Wake-Up Pending register defaults to all ones ($FF).
+;  NOTE: The SX will not trigger an I/O pin interrupt if the SX-Key is
+;  single-stepping or walking during debug mode.  Running or polling
+;  during debug mode will allow triggering of these interrupts, however.
+;
+;  Use Run -> Debug option to program SX chip. After it has downloaded and
+;  the Debug screens appear, click on the Poll button to run the code in
+;  polling mode.  The code will run full speed, but will update the screen
+;  at the BREAK directive (below).  Try pressing the button you connected
+;  to a Port B pin while watching the RB register.  You should see the
+;  corresponding bits change to 1 briefly (indicating the detection and
+;  clearing of the edge).  The BREAK is inside of the interrupt routine,
+;  thus, no update of the screen even occurs until an edge is detected and
+;  the interrupt is activated.  If this code is Run (instead of Polled),
+;  it will run at full speed until a button is pressed.
+;=======================================================================
+
+
+;-------------------------- DEVICE DIRECTIVES --------------------------
+
+		DEVICE		SX28,OSC4MHZ,TURBO
+
+IFDEF	__SASM  ;SASM Directives
+		DEVICE		STACKX,OPTIONX
+		IRC_CAL		IRC_SLOW
+		
+ELSE		;Parallax Assember Directives
+		DEVICE		STACKX_OPTIONX
+ENDIF
+
+		RESET		Initialize
+
+;---------------------------- DEBUG SETTINGS ---------------------------
+
+		FREQ	4_000_000
+	
+;-------------------------- INTERRUPT ROUTINE --------------------------
+
+		ORG 	$00
+Interrupt
+		mov	W,#$19			;Allow checking Wake-Up Pending register
+		mov	M,W
+		BREAK				;Setting a breakpoint here demonstrates proper operation during 
+						;Running or Polling within the Debug window.
+		mov	!rb,#%00000000		;Perform swap between W and WKPND_B (Clear WKPND_B)
+						;At this point W holds Wake-up Pending status.
+						;Note: We're actually clearing all the flags in the pending register.
+		reti
+
+;------------------------ INITIALIZATION ROUTINE -----------------------
+		ORG 	$40
+Initialize
+		;Wake-Up Enable Configuration
+		mov	W,#$1A			;Allow Wake-Up Edge configuration
+		mov	M,W
+		mov	!rb,#%11111111		;Set port B bits 0-7 to falling edge
+
+		mov	W,#$1B			;Allow Wake-Up Enable configuration
+		mov	M,W
+		mov	!rb,#%11110000		;Set port B bits 4-7 to normal, bits 0-3 to Wake-Up Enable
+
+		mov	W,#$1E			;Allow Pull-up configuration
+		mov	M,W				
+		mov	!rb,#%00000000		;Port B bits 0-7 with pullups
+
+		mov	W,#$1F			;Allow Direction configuration
+		mov	M,W
+		mov	!rb,#%11111111		;Set port B bits 0-7 to input direction
+
+		mov	W,#$19			;Allow Wake-Up Pending access
+		mov	M,W
+		mov	!rb,#%00000000		;Clear Wake-Up Pending (WKPND_B)
+
+
+;---------------------------- MAIN PROGRAM -----------------------------
+
+Main		
+		jmp	Main

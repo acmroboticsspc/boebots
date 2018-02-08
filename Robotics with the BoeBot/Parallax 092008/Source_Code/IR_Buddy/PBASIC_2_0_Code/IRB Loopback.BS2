@@ -1,0 +1,140 @@
+' ==============================================================================
+'
+'   File...... IRB Loopback.BS2
+'   Purpose... IR Buddy Loopback Test
+'   Author.... Parallax, Inc.
+'   E-mail.... stamptech@parallaxinc.com
+'   Started...
+'   Updated... 15 NOV 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' This program tests the data link between the BASIC Stamp and the IR Buddy.
+' Testing this link is useful when a there is a long run between components;
+' especially when small-guage wire is used.  The program tests each baud rate
+' at various hold-off periods.  If link problems are detected, the program
+' will abort.
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+
+IRbSIO		CON	15			' IR Buddy serial I/O
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+IRbLoopback	CON	$4C			' loopback test
+
+IRbMod		CON	38			' modulation freq: 30, 38 or 56
+
+IRb96		CON	 84 + $8000		' 9600 baud, open
+IRb48		CON	188 + $8000		' 4800 baud, open
+IRb24		CON	396 + $8000		' 2400 baud, open
+
+CrsrXY		CON	 2			' DEBUG position command
+ClrEOL		CON	11			' Clear DEBUG line to right
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+testNum		VAR	Nib			' test number (fore each baud)
+testVal		VAR	Byte			' test value
+buffer		VAR	Byte(4)			' receive buffer
+idx		VAR	Nib			' loop counter
+
+testBaud	VAR	Word
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Setup:
+  GOSUB IR_Buddy_Reset
+
+  PAUSE 250                                     ' let DEBUG window open
+  DEBUG CLS
+  DEBUG "IR Buddy Loopback Test", CR
+  DEBUG "----------------------", CR
+  DEBUG CR
+  DEBUG "Baud: ", CR
+  DEBUG CR
+  DEBUG "Data: "
+
+  
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  FOR testNum = 0 TO 2
+    LOOKUP testNum, [2400, 4800, 9600], testBaud
+    DEBUG CrsrXY, 6, 3, DEC testBaud            ' display test baud rate
+
+    LOOKUP testNum, [IRb24, IRb24, IRb24], testBaud
+    
+    FOR testVal = 0 TO 255			' loop through holdoff values
+      SEROUT IRbSIO, testBaud, [IRbLoopback, testVal]
+      SERIN  IRbSIO, testBaud, 300, TO_Error, [STR buffer\4]
+
+      FOR idx = 0 TO 3				' display rx buffer
+        DEBUG CrsrXY, 6, (idx + 5)
+        DEBUG DEC buffer(idx), ClrEOL, CR 
+      NEXT
+
+      IF (buffer(0) <> testVal) THEN Packet_Error
+      IF (buffer(1) <> testVal) THEN Packet_Error
+      IF (buffer(2) <> 254) THEN Packet_Error
+      IF (buffer(3) <> 255) THEN Packet_Error
+    NEXT ' testVal
+  NEXT ' testNum
+
+Test_Complete:
+  DEBUG CR, "Test Complete - PASS"
+  END
+
+TO_Error:
+  DEBUG CR, "Timeout Error - check connection"
+  END
+
+Packet_Error:
+  DEBUG CR, "Packet Error"
+  END
+
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+' Reset the IR Buddy.  This code is useful for clearing data from the RX
+' buffer and prepping to switch modes.  Timing specific; do not change.
+
+IR_Buddy_Reset:
+  LOW IRbSIO                                    ' signal reset
+  PAUSE 5
+  INPUT IRbSIO                                  ' release reset signal
+  PAUSE 50                                      ' allow time for reset actions
+  RETURN

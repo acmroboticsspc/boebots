@@ -1,0 +1,55 @@
+'Program: control.bs2 (BS2 to RS485 interface via a SN75176 chip)
+'
+'This program interfaces a BASIC Stamp 2 to an RS485 network
+' using the SN75176 Differential Bus Tranceiver chip from
+' TI.  This program is meant to operate with another Stamp 2
+' connected to the same RS485 network and is running the
+' slave.bs2 program.
+'
+' Pins 2 and 3 of the SN75176 chip are connected to pin 0 of
+'  the Stamp 2.  Pins 1 and 4 of the SN75176 chip are
+'  connected to Pin 1 of the Stamp 2.
+'
+' This program expects an active-low button or switch to be 
+'  connected to pin 2 of the Stamp2. When the button or switch
+'  sets pin 2 low, the character "L" is sent over the RS485
+'  network.  When the button or switch sets pin 2 high then
+'  the character "H" is sent over the network.
+'
+' Note. Setting pin 0 on the Stamp 2 high puts the SN75176 into 
+'  transmit mode.  So any serial data transmitted out of pin 1 on
+'  the Stamp 2 will be transmitted over the RS485 network.
+'
+
+'========== Variables =============
+btnWk var byte 				'Workspace for the BUTTON command
+
+'========== Initialize ============
+input 2					'Make pin 2 the button input
+output 0				'Make pin 0 an output
+high 0					'Put the SN75176 into transmit mode
+
+'========== Begin Program =========
+
+ if(in2<>1)then loop1:			'If pin 2 is initially High, send...
+  SEROUT 1,16468,1,["H"]		'... an "H" over the RS485 network
+
+'========== Main Loop =============
+
+loop1:
+  BUTTON 2,0,255,0,btnWk,1,preloop2	'Wait till pin 2 is low
+  goto loop1
+
+preloop2:
+ SEROUT 1,16468,1,["L"]			'Send a "L" over the RS485 network.
+
+loop2:
+  BUTTON 2,1,255,250,btnWk,1,loop_again 'Wait till pin 2 goes high
+  goto loop2
+
+loop_again:
+  SEROUT 1,16468,1,["H"]		'Send an "H" over the rs485 network.
+
+goto loop1:				'Loop forever
+
+

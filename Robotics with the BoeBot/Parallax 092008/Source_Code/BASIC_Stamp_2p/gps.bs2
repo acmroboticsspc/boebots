@@ -1,0 +1,73 @@
+' -----[ Title ]------------------------------------------------------
+'
+' File...... gps.bs2
+' Purpose... Raeding of GPS information 
+' Author.... Claus Kuehnel  
+' Started... 2001-07-27 
+' Updated... 
+
+' -----[ Program Description ]----------------------------------------
+' 
+' The program reads the VTG sentence from NMEA protocoll sent by a GPS
+' receiver each second. An LED signalizes a speed over four different
+' speed limits. 
+
+' -----[ Revision History ]-------------------------------------------
+'
+
+' -----[ Directives ]-------------------------------------------------
+'
+'{$STAMP BS2} 			'specifies a BS2
+
+' -----[ Constants ]--------------------------------------------------
+'
+B4800 con 188			'4800 Baud for NMEA default
+RxD	con 16			'Serial I/O Pin 16
+
+SpeedLimit1 con 50		'Speddlimits
+SpeedLimit2 con 80
+SpeedLimit3 con 100
+SpeedLimit4 con 120
+
+LED1	con 8				'
+LED2	con 9
+LED3 	con 10
+LED4	con 11
+     
+' -----[ Variables ]--------------------------------------------------
+'
+speed	var word
+value var word   
+
+' -----[ Initialization ]---------------------------------------------
+'
+
+' -----[ Main Code ]--------------------------------------------------
+'
+loop:	'Read the VTG sentence from GPS
+	'$GPVTG,315.0,T,315.0,M,040.0,N,074.1,K*48
+	serin RxD, B4800, [wait("VTG,"), wait(","), wait(","),wait(","),wait(","),wait(","),wait(","),dec speed]
+	value = 999
+	lookdown speed, > [SpeedLimit4, SpeedLimit3, SpeedLimit2, SpeedLimit1], value
+	branch value, [_SL4, _SL3, _SL2, _SL1] 
+	goto loop
+
+' -----[ Subroutines ]------------------------------------------------
+'
+_SL1:	outc = $F		'LEDs off
+	low LED1		'LED1 on
+	goto loop
+
+_SL2:	outc = $F		'LEDs off
+	low LED2		'LED2 on
+	goto loop
+
+_SL3:	outc = $F		'LEDs off
+	low LED3		'LED3 on
+	goto loop
+
+_SL4:	outc = $F		'LEDs off
+	low LED4		'LED4 on
+	goto loop
+
+' -----[ Data ]-------------------------------------------------------

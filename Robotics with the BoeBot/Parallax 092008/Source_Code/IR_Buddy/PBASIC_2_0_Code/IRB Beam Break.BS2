@@ -1,0 +1,150 @@
+' ==============================================================================
+'
+'   File...... IRB Beam Break.BS2
+'   Purpose... Intelligent detection of broken IR path
+'   Author.... Parallax, Inc.
+'   E-mail.... stamptech@parallaxinc.com
+'   Started...
+'   Updated... 15 NOV 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' This program will detect a broken IR path between the two IR Buddies.  The
+' program sends random values between the devices to prevent defeat by an
+' "unauthorized" transmitter.
+'
+' Note: For best performance, shield IR Buddies from external interference
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+
+IRbTX		CON	15			' transmitter IRB
+IRbRX		CON	14			' receiver IRB
+
+AlarmLED	CON	0
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+IRbRc5Tx	CON	$74			' RC-5 protocol TX
+IRbRc5Rx	CON	$72			' RC-5 protocol RX
+
+IRbMod		CON	38			' modulation freq: 30, 38 or 56
+
+IRb96		CON	 84 + $8000		' 9600 baud, open
+IRb48		CON	188 + $8000		' 4800 baud, open
+IRb24		CON	396 + $8000		' 2400 baud, open
+IRbBaud		CON	IRb96
+
+Busy		CON	0			' IRB is transmitting
+ErrorLevel	CON	5			' max errors before alarm
+
+CrsrXY		CON	 2			' DEBUG position command
+ClrEOL		CON	11			' Clear DEBUG line to right
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+randVal		VAR	Word			' pseudo-random value
+sysOut		VAR	Byte			' system code for RC-5 TX
+cmdOut		VAR	Byte			' command code for RC-5 TX
+sysIn		VAR	Byte			' system code for RC-5 RX
+cmdIn		VAR	Byte			' command code for RC-5 RX
+errors		VAR	Nib			' error count
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Setup:
+  GOSUB IR_Buddy_Reset				' reset TX and RX side
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  RANDOM randVal				' create pseudo-random value
+  sysOut = randVal.HighByte & %00011111		' extract system value
+  cmdOut = randVal.LowByte & %00111111		' extract command value
+
+TX_Code:
+  SEROUT IRbTX, IRbBaud, [IRbRc5Tx, 0, IRbMod, sysOut, cmdOut]
+  PAUSE 5                                       ' let IRB grab SIO line
+
+TX_Wait:
+  IF (Ins.LowBit(IRbTX) = Busy) THEN TX_Wait	' wait for TX to end
+
+RX_Code:
+  SEROUT IRbRX, IRbBaud, [IRbRc5Rx, 10]		' get codes from other side
+  SERIN  IRbRX, IRbBaud, [STR sysIn\2\254]	' expecting just two bytes
+
+Display:
+  DEBUG Home					' display status
+  DEBUG "Out", TAB, DEC3 sysOut, TAB, DEC3 cmdOut, CR
+  DEBUG "In", TAB, DEC3 sysIn, TAB, DEC3 cmdIn, CR, CR
+  DEBUG "Errors: ", DEC errors, ClrEOL
+
+Check_Codes:
+  IF (sysIn <> sysOut) THEN Codes_Bad		' check system code
+  IF (cmdIn <> cmdOut) THEN Codes_Bad		' check command code
+
+Codes_Okay:
+  errors = 0					' clear errors
+  LOW AlarmLED					' alarm off
+  GOTO Main
+
+Codes_Bad:
+  errors = errors + 1				' update error count
+  IF (errors < ErrorLevel) THEN Main		' continue if error count okay
+
+Alarm_On:
+  HIGH AlarmLED					' alarm on
+  PAUSE 1000
+  
+  ' other alarm code here
+
+  GOTO Main
+  END
+
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+' Reset the IR Buddy.  This code is useful for clearing data from the RX
+' buffer.  Timing specific; do not change.
+
+IR_Buddy_Reset:
+  LOW IRbTX					' signal reset
+  LOW IRbRX
+  PAUSE 5
+  INPUT IRbTX					' release reset signal
+  INPUT IRbRX
+  PAUSE 50					' allow time for reset actions
+  RETURN

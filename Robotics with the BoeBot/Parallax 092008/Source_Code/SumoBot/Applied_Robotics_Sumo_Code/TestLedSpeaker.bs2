@@ -1,0 +1,35 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - TestLedSpeaker.bs2
+' Tests the LED and piezospeaker circuit connected to P5 by flashing
+' the LED on/off 15 times, then playing a tone on the speaker.
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+LedSpeaker     PIN     5                     ' LED/speaker connected to P5
+
+' -----[ Variables ]----------------------------------------------------------
+
+counter        VAR     Byte                  ' Loop counting variable
+
+' -----[ Initialization ]-----------------------------------------------------
+
+DEBUG CLS, "LED flashing..."                 ' Prompt to check LED
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+FOR counter = 1 TO 30                        ' Flash LED on/off 15 times
+  TOGGLE LedSpeaker
+  PAUSE 250
+NEXT
+
+DEBUG CR, "Speaker playing tone"             ' Prompt to listen for tone
+
+FREQOUT LedSpeaker, 2000, 3000               ' Play 3 kHz tone for 2 seconds
+
+DEBUG CR, "All done."                        ' Prompt user - program finished
+
+END
+

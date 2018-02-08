@@ -1,0 +1,150 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' BS2p Plus Pack
+'
+' File...... PP_LCDDEMO1.BSP
+' Purpose... Basic LCD Demo - Single Line Mode
+' Author.... Parallax, Inc.
+' E-mail.... stamptech@parallaxinc.com
+' Started...
+' Updated... 26 SEP 2001
+
+' {$STAMP BS2p}
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program demonstrates LCD basics using the BS2p.
+'
+' To run this program on the BS2p Demo Board, connect the LCD and install
+' Jumper X6. Adjust contrast pot for best display.
+'
+' Refer to the Hitachi HD44780 documentation for details on LCD control.
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+LCDpin  CON     0                               ' connect LCD to OutL
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+NoCmd           CON     $00                     ' No command in LCDOUT
+ClrLCD          CON     $01                     ' clear the LCD
+CrsrHm          CON     $02                     ' move cursor to home position
+CrsrLf          CON     $10                     ' move cursor left
+CrsrRt          CON     $14                     ' move cursor right
+DispLf          CON     $18                     ' shift displayed chars left
+DispRt          CON     $1C                     ' shift displayed chars right
+DDRam           CON     $80                     ' Display Data RAM control
+
+DispCtrl        CON     %00001000               ' display control command
+
+On              CON     1
+Off             CON     0
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+cmd             VAR     Byte                    ' command sent to LCD
+display         VAR     cmd.Bit2                ' display on/off bit
+cursor          VAR     cmd.Bit1                ' cursor on/off bit
+blinking        VAR     cmd.Bit0                ' blinking on/off bit
+
+char            VAR     cmd                     ' character sent to LCD
+idx             VAR     Byte                    ' loop counter
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  PAUSE 500                                     ' let the LCD settle
+  LCDCMD LCDpin,%00110000 : PAUSE 5             ' 8-bit mode
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00100000 : PAUSE 0             ' 4-bit mode
+  LCDCMD LCDpin,%00001100 : PAUSE 0             ' no crsr, no blink
+  LCDCMD LCDpin,%00000110                       ' inc crsr, no disp shift
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  LCDCMD LCDpin,ClrLCD                          ' clear display
+  PAUSE 500
+
+Splash_Screen
+  LCDOUT LCDpin,NoCmd,["THE BASIC STAMP!"]
+  PAUSE 2000
+
+Cursor_On:
+  LCDCMD LCDpin,CrsrHm                          ' move the cursor home
+  cmd = DispCtrl
+  display = On
+  cursor = On
+  LCDCMD LCDpin,cmd
+  PAUSE 500
+
+Move_Cursor:
+  FOR idx = 1 TO 15                             ' move the cursor across display
+    LCDCMD LCDpin,CrsrRt
+    PAUSE 150
+  NEXT
+
+  FOR idx = 14 TO 0                             ' go backward by moving cursor
+    cmd = DDRam + idx                           '  to a specific address
+    LCDCMD LCDpin,cmd
+    PAUSE 150
+  NEXT
+
+  PAUSE 1000
+
+Block_Cursor:
+  cmd = DispCtrl
+  display = On
+  blinking = On                                 ' enable block cursor
+  LCDCMD LCDpin,cmd
+  PAUSE 2000
+  blinking = Off                                ' turn it off
+  LCDCMD LCDpin,cmd
+
+Flash_Display:
+  cmd = DispCtrl
+  display = On
+
+  FOR idx = 1 TO 10                             ' flash display by
+    display = ~display                          '  toggling display bit
+    LCDCMD LCDpin,cmd
+    PAUSE 250
+  NEXT
+
+  PAUSE 1000
+
+Shift_Display:
+  FOR idx = 1 TO 16                             ' shift display to right
+    LCDCMD LCDpin,DispRt
+    PAUSE 100
+  NEXT
+
+  PAUSE 1000
+
+  FOR idx = 1 TO 16                             ' shift display back
+    LCDCMD LCDpin,DispLf
+    PAUSE 100
+  NEXT
+
+  PAUSE 1000
+  GOTO Main                                     ' do it all over
+  END
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'

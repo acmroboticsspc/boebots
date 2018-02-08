@@ -1,0 +1,305 @@
+' =========================================================================
+'
+'   File....... 2-Wire LCD.BPE
+'   Purpose.... 2-Wire LCD interface using the Microchip MCP23016
+'   Author..... Jon Williams
+'   E-mail..... jwilliams@parallax.com
+'   Started....
+'   Updated.... 13 MAR 2004
+'
+'   {$STAMP BS2pe}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program uses the Microchip MCP23016 IO port expander to create a
+' 2-wire (I2C) LCD terminal.  The code can be used with any 1-, 2-, or
+' 4-line character LCD (note that this program is configured for a multi-
+' line LCD) with the Hitachi HD44780A driver (or equivalent).  The terminal
+' includes a status LED and four input buttons.
+'
+' Connections:
+'
+'   GP0.0 -> GP0.7      LCD Buss (D0 -> D7)
+'   GP1.0 -> GP1.3      active-low pushbuttons
+'   GP1.4               active high LED (via 470 ohms to Vss)
+'   GP1.5               LCD Enable
+'   GP1.6               LCD R/W
+'   GP1.7               LCD RS
+'   Clock               3.9K to Vdd; 33 pF to Vss
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+SDA             PIN     0                       ' I2C data pin
+SCL             PIN     SDA + 1                 ' I2C clock pin
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+' MCP23016
+
+DevType         CON     %0100 << 4              ' Device type
+DevAddr         CON     %000 << 1               ' address = %000 -> %111
+Wr23016         CON     DevType | DevAddr       ' write to MCP23016
+Rd23016         CON     Wr23016 | 1             ' read from MCP23016
+
+GP0             CON     $00                     ' register addresses
+GP1             CON     $01
+OLAT0           CON     $02
+OLAT1           CON     $03
+IPOL0           CON     $04
+IPOL1           CON     $05
+IODIR0          CON     $06
+IODIR1          CON     $07
+INTCAP0         CON     $08
+INTCAP1         CON     $09
+IOCON0          CON     $0A
+IOCON1          CON     $0B
+
+' LCD
+
+LcdCls          CON     $01                     ' clear the LCD
+LcdHome         CON     $02                     ' move cursor home
+LcdCrsrL        CON     $10                     ' move cursor left
+LcdCrsrR        CON     $14                     ' move cursor right
+LcdDispL        CON     $18                     ' shift chars left
+LcdDispR        CON     $1C                     ' shift chars right
+
+LcdDDRam        CON     $80                     ' Display Data RAM control
+LcdCGRam        CON     $40                     ' Character Generator RAM
+LcdLine1        CON     $80                     ' DDRAM address of line 1
+LcdLine2        CON     $C0                     ' DDRAM address of line 2
+
+LastCol         CON     15                      ' for 16-column LCD
+
+Is_On           CON     1
+Is_Off          CON     0
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+lcdIO           VAR     Byte                    ' data to/from LCD
+lcdCtrl         VAR     Byte                    ' LCD control byte
+lcdLED          VAR     lcdCtrl.BIT4            ' LED output
+lcdE            VAR     lcdCtrl.BIT5            ' enable
+lcdRW           VAR     lcdCtrl.BIT6            ' read or write
+lcdRS           VAR     lcdCtrl.BIT7            ' data or command
+
+addr            VAR     Word                    ' ee address for strings
+column          VAR     Byte
+idx             VAR     Nib
+
+btns            VAR     Nib
+btn0            VAR     btns.BIT0
+btn1            VAR     btns.BIT1
+btn2            VAR     btns.BIT2
+btn3            VAR     btns.BIT3
+
+ledStatus       VAR     Bit
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+CC0             DATA    $0E, $1F, $1C, $18, $1C, $1F, $0E, $00
+CC1             DATA    $0E, $1F, $1F, $18, $1F, $1F, $0E, $00
+CC2             DATA    $0E, $1F, $1F, $1F, $1F, $1F, $0E, $00
+
+Msg1            DATA    "2-WIRE TERMINAL", 0
+Msg2            DATA    "BUTTONS", 0
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Validate:
+  #IF ($STAMP < BS2P) #THEN                     ' check BASIC Stamp type
+    #ERROR "Requires BS2p/BS2pe"                ' stop if not BS2p/BS2pe
+  #ENDIF
+
+Setup:
+  PAUSE 500
+  I2COUT SDA, Wr23016, IODIR0, [%00000000]      ' GP0 pins are outputs
+  I2COUT SDA, Wr23016, IODIR1, [%00001111]      ' GP1.0 - GP1.3 are inputs
+  I2COUT SDA, Wr23016, IPOL1, [%00001111]       ' invert button inputs
+
+Lcd_Init:
+  lcdIO = %00110000                             ' wake-up
+  GOSUB LCD_Command
+  PAUSE 5
+  GOSUB LCD_Command
+  GOSUB LCD_Command
+  lcdIO = %00111000                             ' 8-bit, 2-line, 5x7 font
+  GOSUB LCD_Command
+  lcdIO = %00001100                             ' no crsr, no blink
+  GOSUB LCD_Command
+  lcdIO = %00000110                             ' inc crsr, no disp shift
+  GOSUB LCD_Command
+
+Download_Chars:
+  lcdIO = LcdCGRam                              ' point to CCGRAM
+  GOSUB LCD_Command
+  FOR addr = CC0 TO (CC2 + 7)                   ' write custom chars
+    READ addr, lcdIO
+    GOSUB LCD_Write
+  NEXT
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  lcdIO = LcdCls                                ' clear the LCD
+  GOSUB LCD_Command
+  addr = Msg1                                   ' write "2-WIRE TERMINAL"
+  GOSUB Put_String
+  PAUSE 2000
+
+Read_Demo:
+  DEBUG CLS, "Reading from LCD: "
+  PAUSE 500
+  lcdIO = LcdHome
+  GOSUB LCD_Command                             ' move cursor to L1, C0
+  FOR column = 0 TO 15
+    GOSUB LCD_Read                              ' read byte at cursor
+    DEBUG lcdIO                                 ' show in Debug window
+  NEXT
+
+Animation:
+  FOR column = 0 TO LastCol                     ' loop through colums
+    FOR idx = 0 TO 4                            ' loop through "cells"
+      lcdIO = LcdLine1 + column
+      GOSUB LCD_Command                         ' move to current position
+      LOOKUP idx, [2, 1, 0, 1, " "], lcdIO      ' get "cell"
+      GOSUB LCD_Write                           ' write it
+      PAUSE 50
+    NEXT
+  NEXT
+
+Button_Demo:
+  lcdIO = LcdCls                                ' clear LCD
+  GOSUB LCD_Command
+  addr = Msg2                                   ' write "BUTTONS"
+  GOSUB Put_String
+
+Show_Buttons:
+  GOSUB Get_Buttons                             ' get buttons status
+  lcdIO = LcdLine2                              ' move to line 2, col 1
+  GOSUB LCD_Command
+  FOR idx = 3 TO 0                              ' loop through buttons
+    LOOKUP btns.LOWBIT(idx), ["-*"], lcdIO
+    GOSUB LCD_Write
+  NEXT
+
+Update_LED:
+  IF (btns = %1111) THEN                        ' all buttons pressed?
+    GOSUB LED_On                                ' yes, LED on
+  ELSE
+    GOSUB LED_Off                               ' no, LED off
+  ENDIF
+
+  GOTO Show_Buttons
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' Send command to LCD
+' -- put command byte in 'lcdIO'
+
+LCD_Command:                                    ' write command to LCD
+  I2CIN SDA, Rd23016, GP1, [lcdCtrl]            ' get control bits
+  lcdRS = 0                                     ' set to command mode
+  I2COUT SDA, Wr23016, GP1, [lcdCtrl]           ' update control bits
+
+
+' Write character to current cursor position
+' -- but byte to write in 'lcdIO'
+
+LCD_Write:
+  I2COUT SDA, Wr23016, GP0, [lcdIO]             ' put byte on LCD buss
+  I2CIN SDA, Rd23016, GP1, [lcdCtrl]            ' get control bits
+  lcdE = 1
+  I2COUT SDA, Wr23016, GP1, [lcdCtrl]           ' blip E line
+  lcdE = 0
+  lcdRS = 1                                     ' return to char mode
+  I2COUT SDA, Wr23016, GP1, [lcdCtrl]
+  RETURN
+
+
+' Reads byte from LCD
+' -- set cursor position before calling
+' -- returns byte read in 'lcdIO'
+
+LCD_Read:
+  I2COUT SDA, Wr23016, IODIR0, [%11111111]      ' make GP0 pins inputs
+  I2CIN SDA, Rd23016, GP1, [lcdCtrl]            ' get control bits
+  lcdRW = 1                                     ' set to read mode
+  I2COUT SDA, Wr23016, GP1, [lcdCtrl]
+  lcdE = 1
+  I2COUT SDA, Wr23016, GP1, [lcdCtrl]
+  I2CIN SDA, Rd23016, GP0, [lcdIO]              ' get byte from LCD
+  lcdE = 0                                      ' restore E
+  lcdRW = 0                                     ' back to write mode
+  I2COUT SDA, Wr23016, GP1, [lcdCtrl]           ' update control bits
+  I2COUT SDA, Wr23016, IODIR0, [%00000000]      ' return buss to outputs
+  RETURN
+
+
+' Writes stored (in DATA statement) zero-terminated string to LCD
+' -- position LCD cursor
+' -- point to 0-terminated string (first location in 'addr')
+
+Put_String:
+  DO
+    READ addr, lcdIO                            ' read char from addr
+    addr = addr + 1                             ' update addr
+    IF (lcdIO = 0) THEN EXIT                    ' terminate loop if 0
+    GOSUB LCD_Write                             ' else write char
+   LOOP
+  RETURN
+
+
+' Get buttons status (1 = pressed)
+
+Get_Buttons:
+  I2CIN SDA, Rd23016, GP1, [lcdCtrl]            ' read port 1 bits
+  btns = lcdCtrl                                ' get low nib
+  RETURN
+
+
+' Turn Terminal LED On
+
+LED_On:
+  I2CIN SDA, Rd23016, GP1, [lcdCtrl]            ' read port 1 bits
+  IF (lcdLED = Is_Off) THEN                     ' check LED bit
+    lcdLED = Is_On                              ' turn on if off now
+    I2COUT SDA, Wr23016, GP1, [lcdCtrl]         ' update port 1 bits
+  ENDIF
+  RETURN
+
+
+' Turn Terminal LED Off
+
+LED_Off:
+  I2CIN SDA, Rd23016, GP1, [lcdCtrl]            ' read port 1 bits
+  IF (lcdLED = Is_On) THEN                      ' check LED bit
+    lcdLED = Is_Off                             ' turn off if on now
+    I2COUT SDA, Wr23016, GP1, [lcdCtrl]         ' update port 1 bits
+  ENDIF
+  RETURN
+
+
+' Set LED output to value of ledStatus
+
+Set_LED:
+  I2CIN SDA, Rd23016, GP1, [lcdCtrl]            ' read port 1 bits
+  IF (lcdLED <> ledStatus) THEN                 ' check LED bit
+    lcdLED = ledStatus                          ' set LED to new status
+    I2COUT SDA, Wr23016, GP1, [lcdCtrl]         ' update port 1 bits
+  ENDIF
+  RETURN

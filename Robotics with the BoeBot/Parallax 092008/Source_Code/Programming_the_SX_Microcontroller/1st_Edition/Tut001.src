@@ -1,0 +1,18 @@
+; TUT001.SRC
+; ----------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+DEVICE  SX28L
+DEVICE  TURBO, STACKX, OPTIONX
+IRC_CAL IRC_FAST
+FREQ    50_000_000
+RESET   0
+
+  mov    !rb, #%11111110
+Loop
+  clrb   rb.0
+  setb   rb.0
+  jmp    Loop

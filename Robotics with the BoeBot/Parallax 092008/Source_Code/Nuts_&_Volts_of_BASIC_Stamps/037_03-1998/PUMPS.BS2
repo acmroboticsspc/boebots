@@ -1,0 +1,140 @@
+' Program Listing 37.1
+' Nuts & Volts: Stamp Applications, March 1998
+
+' ----[ Title ]-----------------------------------------------------------
+'
+' File...... PUMPS.BS2
+' Purpose... SEE G12864 Serial Graphics LCD Demo
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' WWW....... http://members.aol.com/jonwms
+' Started... 24 JAN 98
+' Updated... 15 FEB 98
+
+
+' ----[ Program Description ]---------------------------------------------
+'
+' This program is a very simplistic pumping station demonstration that
+' takes advantage of the graphics capabilities of the Scott Edwards
+' Electronics G12864 Serial Graphics LCD. "Flow" demand is sensed by the
+' BS2 (potentiometer input) and converted to a group of pumps. The flow
+' and pump status is displayed on the G12864. 
+' 
+' Two custom screens are downloaded to the G12864: the pumping station
+' graphic and an updated fonts screen. Graphics animation is accomplished
+' by adding custom characters to the second fonts page and combining the
+' custom characters with the pump station graphic.
+'
+' G12864 Configuration Switch Settings:
+' 1 : Off	(Run)
+' 2 : On	(9600 baud)
+' 3 : On	(BL On)
+' 4 : Off	(Esc)
+' 5 : Off	(Protect EE - must be On to download custom graphics)
+' 6 : On	(Screen 2)
+
+
+' ----[ Revision History ]------------------------------------------------
+'
+' 25 JAN 98 : Version 1 complete
+' 15 FEB 98 : Added filtering to smooth sensor input
+
+
+' ----[ Constants ]-------------------------------------------------------
+'
+FloSnsr	CON	7			' RCTIME input for *flow* (on BSAC)
+HiFlow	CON	1520			' highest allowable flow
+
+GxLCD	CON	2			' serial output on pin 2
+N9600	CON	$4054			' 9600-bps output
+FloPos	CON	64+25			' Print flow at position 25
+
+' G12864 codes
+ClrLCD	CON	12			' Clear LCD text screen
+PosCmd	CON	16			' Position cursor
+
+' Custom character addresses
+Pmp0a	CON	128			' pump off, left
+Pmp0b	CON	129			' pump off, right
+Pmp1a	CON	130			' pump on, left
+Pmp1b	CON	131			' pump on, right
+ErrorA	CON	132			' pump with X, left
+ErrorB	CON	133			' pump with X, right
+
+
+' ----[ Variables ]-------------------------------------------------------
+'
+rawFlow	VAR	WORD			' raw flow from *sensor* (RCTIME)
+oldFlow	VAR	WORD			' last flow reading
+newFlow	VAR	WORD			' new flow reading
+fCheck	VAR	BYTE			' overflow check
+pumps	VAR	NIB			' pump status
+pump1	VAR	pumps.Bit0
+pump2	VAR	pumps.Bit1
+pump3	VAR	pumps.Bit2
+pump4	VAR	pumps.Bit3
+
+x	VAR	BYTE			' loop counter
+
+' ----[ EEPROM Data ]-----------------------------------------------------
+'
+
+' ----[ Initialization ]--------------------------------------------------
+'
+Init:	PAUSE 1000			' let the G12864 initialize
+	' clear text; all pumps off
+	SEROUT GxLCD,N9600,[ClrLCD]
+	newFlow = 0
+	GOSUB ShoFlo
+
+
+' ----[ Main Code ]-------------------------------------------------------
+'
+Main:	HIGH FloSnsr			' discharge RC cap
+	PAUSE 5
+	RCTIME FloSnsr,1,rawFlow	' read the sensor
+	rawFlow = rawFlow */ $0043	' scale to 0 - 1600 (approx)
+					' (rawFlow * 0.26)
+
+	' filter by combining in 60/40 (old/raw) ratio
+	newFlow = (oldFlow */ $009A)+(rawFlow */ $0066)
+
+	IF newFlow > HiFlow THEN OvrFlo ' flow is too high -- shut down
+	GOSUB ShoFlo			' update the display
+
+	oldFlow = newFlow		' save last flow reading
+	PAUSE 500			' delay between readings
+	GOTO Main			' do it all again
+
+
+' ----[ Subroutines ]-----------------------------------------------------
+'
+ShoFlo:	' show flow
+	SEROUT GxLCD,N9600,[PosCmd,FloPos,DEC4 newFlow]
+
+	' calculate pumps
+	pumps = newFlow / 100
+	fCheck = newFlow // 100
+	IF fCheck < 25 THEN ShPmps	' if over by 25+, inc pump level
+	pumps = pumps + 1
+
+	' show pumps
+ShPmps:	SEROUT GxLCD,N9600,[PosCmd, 65,(Pmp0a+(2*pump1)),(Pmp0b+(2*pump1))]
+	SEROUT GxLCD,N9600,[PosCmd, 81,(Pmp0a+(2*pump2)),(Pmp0b+(2*pump2))]
+	SEROUT GxLCD,N9600,[PosCmd, 97,(Pmp0a+(2*pump3)),(Pmp0b+(2*pump3))]
+	SEROUT GxLCD,N9600,[PosCmd,113,(Pmp0a+(2*pump4)),(Pmp0b+(2*pump4))]
+	RETURN
+
+
+OvrFlo:	pumps = %0000
+	SEROUT GxLCD,N9600,[PosCmd,FloPos," Error"]
+	FOR x = 1 TO 49 STEP 16
+	  SEROUT GxLCD,N9600,[PosCmd,(64+x),Pmp0a,Pmp0b]
+	NEXT
+	PAUSE 500
+	SEROUT GxLCD,N9600,[PosCmd,FloPos, "      "]
+	FOR x = 1 TO 49 STEP 16
+	  SEROUT GxLCD,N9600,[PosCmd,(64+x),ErrorA,ErrorB]
+	NEXT
+	PAUSE 500
+	GOTO OvrFlo

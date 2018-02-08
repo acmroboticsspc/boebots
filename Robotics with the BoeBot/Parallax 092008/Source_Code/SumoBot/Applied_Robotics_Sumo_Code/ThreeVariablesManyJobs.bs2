@@ -1,0 +1,85 @@
+' Applied Robotics with the SumoBot - ThreeVariablesManyJobs.bs2
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+' Variable Declarations
+
+counter        VAR     Byte
+temp           VAR     Word
+compare        VAR     Word
+
+' Set aside EEPROM storage space
+
+Values         DATA    (40)
+Threshold       DATA    Word 0
+
+' Get threshold value and store it in EEPROM
+
+DEBUG CLS,
+      "Enter a threshold value", CR,
+      "between 100 and 1000", CR,
+      ">"
+
+DEBUGIN DEC temp
+WRITE Threshold, Word temp
+
+' Get values and store them to EEPROM
+
+DEBUG CR,
+      "Enter up to 20 values", CR,
+      "between 100 and 1000", CR,
+      "Press 0 (zero) when done", CR,
+      ">"
+
+counter = 0
+DO UNTIL counter >= 40 OR temp = 0
+
+  DEBUGIN DEC temp
+  WRITE Values + counter, Word temp
+  counter = counter + 2
+  DEBUG ">"
+
+LOOP
+
+' Display & compare values? (y/n)
+
+DEBUG CR, "Compare values to ", CR,
+          "threshold? (y/n)", CR,
+          ">"
+
+DEBUGIN temp
+
+' Display and compare values
+
+IF temp = "y" OR temp = "Y" THEN
+
+  DEBUG CR,
+        "            Threshold", CR,
+        "Value       Comparison", CR,
+        "----------  ----------", CR
+  counter = 0
+  READ Threshold, Word compare
+
+  DO UNTIL counter >= 40 OR temp = 0
+
+    READ Values + counter, Word temp
+    DEBUG CRSRX, 0, DEC5 temp, CRSRX, 12
+    IF temp > compare THEN
+      DEBUG "greater than"
+    ELSEIF temp < compare THEN
+      DEBUG "less than"
+    ELSE
+      DEBUG "equal to"
+    ENDIF
+    DEBUG CR
+    counter = counter + 2
+
+  LOOP
+
+ENDIF
+
+DEBUG CR, "All done!"
+
+END
+

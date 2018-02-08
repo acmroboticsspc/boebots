@@ -1,0 +1,228 @@
+; APP004.SRC - Generating a sine wave
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+;SX18_20
+SX28 
+;SX48_52 
+;SX48_52_ES
+
+IFDEF __SASM
+  IFDEF SX18_20
+    device   SX18L, oschs2, turbo, stackx, optionx
+  ENDIF
+  IFDEF SX28 
+    device   SX28L, oschs2, turbo, stackx, optionx
+  ENDIF
+  IFDEF SX48_52_ES
+    device   oschs,turbo, stackx, optionx
+  ELSE
+    IFDEF SX48_52
+      device oschs2
+    ENDIF
+  ENDIF
+    IRC_CAL  IRC_FAST
+    freq     50_000_000                                                                 
+ELSE
+  IFDEF SX18_20
+    device   SX18, oschs2, turbo, stackx, optionx
+  ENDIF
+  IFDEF SX28
+    device   SX28, oschs2, turbo, stackx, optionx
+  ENDIF
+  IFDEF SX48_52_ES
+    device   SX52, oschs, turbo, stackx, optionx
+  ELSE
+    IFDEF SX48_52
+      device   SX52, oschs2   
+    ENDIF
+  ENDIF
+ENDIF
+
+id    'SinGen1'                                                                         
+reset reset_entry       ;set reset vector
+
+;***********************************************************************
+; Macros
+;***********************************************************************
+
+_bank macro 1
+  bank  \1
+  IFDEF SX48_52
+    IFDEF SX48_52_ES
+      IF \1 & %00010000
+        setb  fsr.4
+      ENDIF
+    ELSE
+      IF \1 & %10000000 
+        setb  fsr.7
+      ELSE
+        clrb  fsr.7
+      ENDIF
+    ENDIF
+  ENDIF
+endm
+
+_mode macro 1
+  IFDEF SX48_52
+    mov   w, #\1 & $1F
+    mov   m, w
+  ELSE
+    mov   m, #\1 & $0F
+  ENDIF
+endm
+   
+IFDEF SX48_52
+global_org   =   $0A
+ELSE
+global_org   =   $08
+ENDIF
+
+           org  global_org
+
+;VP_begin DAC Sine1
+dacIndex   equ  global_org
+;VP_end
+
+;***********************************************************************
+; Port Assignment
+;***********************************************************************
+
+RC_latch   equ   %00000000      ; SX18/20/28/48/52 port C latch init
+RC_DDIR    equ   %00000000      ; SX18/20/28/48/52 port C DDIR value
+
+;***********************************************************************
+; Pin Definitions                                               
+;***********************************************************************
+;VP_begin DAC Sine1
+DAC_PORT   equ   rc
+;VP_end
+
+;***********************************************************************
+; Program constants
+;***********************************************************************
+
+int_period equ   195            ; RTCC Interrupt rate
+
+IFDEF SX48_52
+DDIR_W     equ   $1F            ; Write Port Direction
+ELSE
+DDIR_W     equ   $0F            ; Write Port Direction
+ENDIF
+
+INTERRUPT_ORG    equ $000
+RESET_ENTRY_ORG  equ $1fb
+PAGE3_ORG        equ $400
+MAIN_PROGRAM_ORG equ $600
+
+      org   INTERRUPT_ORG
+ISR
+
+;VP_begin DAC Sine1
+      mov  w, dacIndex          ; Load parameter for WtoSin
+      call WtoSin               ; Subroutine returns f(w) in w
+      page ISR                  ; Adjust the page
+      mov  DAC_PORT, w          ; Output the value
+      inc  dacIndex             ; Next Index
+;VP_end
+                
+isrOut
+       mov  w, #-int_period
+       retiw
+WtoSin
+       page SinTable
+       jmp  w
+
+       org  RESET_ENTRY_ORG
+        
+reset_entry    
+       page _resetEntry
+       jmp  _resetEntry
+
+;***********************************************************************
+       org  PAGE3_ORG
+;***********************************************************************
+SinTable
+  retw 127,130,133,136,139,143,146,149,152,155,158,161,164,167,170,173
+  retw 176,178,181,184,187,190,192,195,198,200,203,205,208,210,212,215
+  retw 217,219,221,223,225,227,229,231,233,234,236,238,239,240,242,243
+  retw 244,245,247,248,249,249,250,251,252,252,253,253,253,254,254,254
+  retw 254,254,254,254,253,253,253,252,252,251,250,249,249,248,247,245
+  retw 244,243,242,240,239,238,236,234,233,231,229,227,225,223,221,219
+  retw 217,215,212,210,208,205,203,200,198,195,192,190,187,184,181,178
+  retw 176,173,170,167,164,161,158,155,152,149,146,143,139,136,133,130
+  retw 127,124,121,118,115,111,108,105,102, 99, 96, 93, 90, 87, 84, 81
+  retw  78, 76, 73, 70, 67, 64, 62, 59, 56, 54, 51, 49, 46, 44, 42, 39
+  retw  37, 35, 33, 31, 29, 27, 25, 23, 21, 20, 18, 16, 15, 14, 12, 11
+  retw  10,  9,  7,  6,  5,  5,  4,  3,  2,  2,  1,  1,  1,  0,  0,  0
+  retw   0,  0,  0,  0,  1,  1,  1,  2,  2,  3,  4,  5,  5,  6,  7,  9
+  retw  10, 11, 12, 14, 15, 16, 18, 20, 21, 23, 25, 27, 29, 31, 33, 35
+  retw  37, 39, 42, 44, 46, 49, 51, 54, 56, 59, 62, 64, 67, 70, 73, 76
+  retw  78, 81, 84, 87, 90, 93, 96, 99,102,105,108,111,115,118,121,124
+                
+;***********************************************************************
+       org  MAIN_PROGRAM_ORG
+;***********************************************************************
+_resetEntry
+                
+      mov   w,#RC_latch         ; Initialize RC data latch
+      mov   rc,w      
+      _mode DDIR_W              ; Point MODE to write DDIR register
+      mov   w,#RC_DDIR          ; Setup RC Direction register
+      mov   !rc,w       
+   ;***********************************************************************
+   ; Clear all Data RAM locations
+   ;***********************************************************************
+IFDEF SX48_52                   ; SX48/52 RAM clear routine
+      mov   w,#$0a              ; reset all ram starting at $0A
+      mov   fsr,w
+:zero_ram   
+      clr   ind                 ; clear using indirect addressing
+      incsz fsr                 ; repeat until done
+        jmp :zero_ram
+
+      _bank bank0               ; clear bank 0 registers
+      clr   $10
+      clr   $11
+      clr   $12
+      clr   $13
+      clr   $14
+      clr   $15
+      clr   $16
+      clr   $17
+      clr   $18
+      clr   $19
+      clr   $1a
+      clr   $1b
+      clr   $1c
+      clr   $1d
+      clr   $1e
+      clr   $1f
+
+ELSE                            ; SX18/20/28 RAM clear routine
+      clr   fsr                 ; reset all ram banks
+:zero_ram   sb fsr.4            ; are we on low half of bank?
+      setb  fsr.3               ; If so, don't touch regs 0-7
+      clr   ind                 ; clear using indirect addressing
+      incsz fsr                 ; repeat until done
+      jmp   :zero_ram
+ENDIF
+
+RTCC_PS_OFF  =  %00001000       ; Assigns prescaler to RTCC (PSA lo)
+PS_111       =  %00000111       ; RTCC = 1:256, WDT = 1:128
+
+OPTIONSETUP  equ RTCC_PS_OFF | PS_111
+
+      mov   !option, #OPTIONSETUP
+      jmp   @mainLoop
+
+;***********************************************************************
+; MAIN PROGRAM CODE 
+;***********************************************************************
+
+mainLoop
+      jmp   mainLoop
+END

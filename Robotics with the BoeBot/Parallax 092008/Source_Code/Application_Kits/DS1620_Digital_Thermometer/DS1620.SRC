@@ -1,0 +1,156 @@
+; Program: DS1620.SRC (interface with DS1620 digital thermometer)
+
+; This program presents PIC assembly language subroutines for communicating
+; with the DS1620 digital thermometer chip. It also provides tables of
+; predefined constants called "protocols" that control the chip's various
+; operating modes. This demo configures the DS1620 as a temperature
+; sensor slaved to a controller ("CPU" mode) and requests that it perform
+; continuous temperature measurements. The '1620 may also be configured as
+; a standalone thermostat with setpoint stored in nonvolatile EEPROM.
+
+; ========================= Define I/O Pins =======================
+RST	=	ra.0	; Reset-- 0 = inactive, 1 = active.
+CLK	=	ra.1	; Clock pin.
+DQ	=	ra.2	; Data in/out.
+DQin	=	4	; TRIS ra for DQ = input
+DQout	=	0	; TRIS ra for DQ = output.
+
+; ======================== Define Variables =======================
+	org	8	; RAM above special-function registers.
+DSdata	ds	1	; Byte for I/O with DS1620.
+bits	ds	1	; Number of clock cycles for serial shifts.
+flags	ds	1	; Bit flags.
+temp1	ds	1	; Counter for delays.
+temp2	ds	1	; Counter for delays.
+sign	=	flags.0 ; Ninth bit of DSdata for temperature values.
+clk9	=	flags.1 ; bit flag: 1= 9-bit xfer, 0= 8-bit xfer.
+
+; ===================== Define DS1620 Constants ===================
+; >>> Constants for configuring the DS1620
+Rconfig =	0ACh	; Protocol for 'Read Configuration.'
+Wconfig =	00Ch	; Protocol for 'Write Configuration.'
+CPU	=	10b	; Config bit: serial thermometer mode.
+NoCPU	=	00b	; Config bit: standalone thermostat mode.
+OneShot 	=	01b	; Config bit: one conversion per start request.
+Cont	=	00b	; Config bit: continuous conversions after start.
+; >>> Constants for serial thermometer applications.
+StartC	=	0EEh	; Protocol for 'Start Conversion.'
+StopC	=	022h	; Protocol for 'Stop Conversion.'
+Rtemp	=	0AAh	; Protocol for 'Read Temperature.'
+; >>> Constants for programming thermostat functions.
+RhiT	=	0A1h	; Protocol for 'Read High-Temperature Setting.'
+WhiT	=	001h	; Protocol for 'Write High-Temperature Setting.'
+RloT	=	0A2h	; Protocol for 'Read Low-Temperature Setting.'
+WloT	=	002h	; Protocol for 'Write Low-Temperature Setting.'
+
+; ================= Set Up Device and Start Program ===============
+	device	pic16c54,xt_osc,wdt_off,protect_off
+	reset	start
+	org	0
+
+; Main program start.
+; To demonstrate communication with the DS1620, we're going to set its
+; configuration register to CPU mode and continuous conversion, then
+; continuously read the temperature. The results of the temperature readings
+; will be written to port RB (eight lsbs) and ra.3 (msb). You can view the readings
+; (in binary) by connecting LEDs to these pins through 220-ohm resistors.
+
+start	mov	ra,#0		; Clear ports
+	mov	rb,#0
+	mov	!ra,#DQout	; Port ra: all outputs.
+	mov	!rb,#0		; Output for eight lsbs of temp reading.
+	clrb	clk9		; Clear the ninth-bit clock flag.
+	setb	CLK		; Set the clock to prepare for comms.
+	mov	DSdata,#Wconfig ; Put write-config protocol into output byte.
+	call	Shout		; Send it to the 1620.
+	mov	DSdata,#CPU	; Configure as thermometer...
+	OR	DSdata,#Cont	; ...continuous conversion.
+	call	Shout		; Send that to the 1620.
+	clrb	RST		; Deactivate the 1620.
+	call	delay		; Wait for EEPROM programming cycle.
+	mov	DSdata,#StartC	; Start conversions by sending
+	call	Shout		; the start protocol to the 1620.
+	clrb	RST		; Deactivate the 1620.
+:loop	call	delay		; Short *delay between reads.
+	mov	DSdata,#Rtemp	; Send read-temperature protocol.
+	call	Shout
+	call	Shin		; Get the temperature data.
+	movb	ra.3,sign	; Write ninth bit to ra.3.
+	mov	rb,DSdata	; Write lower eight bits to port rb.
+	jmp	:loop		; Repeat forever.
+
+; * Note that the DS1620 can only perform one conversion per second.
+; With a 4-MHz clock, this demo routine reads it about five times a
+; second. This doesn't do any harm, since the DS1620 provides the
+; old reading until a new one is available, but it doesn't do any
+; good either! In an actual application, you'll want to read the '1620
+; only as often as appropriate.
+
+; ================== DS1620 Communication Routines ================
+; >> Note that callable subroutines should normally come _before_ the
+; body of the program (or be placed there in program memory using "org"
+; directives) to ensure that call destinations fall in the lower 256
+; addresses of a program-memory page. In example programs like this
+; we frequently break this rule since it makes the program more readable.
+
+; Shout shifts out the 8 bits of DSdata and, optionally, the ninth bit
+; stored in sign. Eight-bit transfers are required for sending instructions
+; (called protocols) to the DS1620. Nine-bit transfers are required for
+; storing temperature data to the 1620's thermostat registers. In either
+; case, the internal loop executes 9 times. For an eight-bit transfer
+; (set up by storing a 0 to clk9) the last clock pulse is skipped. Always
+; looping 9 times has the benefit of leaving the value of DSdata unaltered
+; after a call to Shout. The bits are rotated back into their original
+; positions.
+
+; >> Note: Since all communications with the DS1620 begin with the controller
+; sending a protocol, Shout contains the "setb RST" command required to
+; activate the DS1620. Since communications can end with either an output
+; (Shout) or an input (Shin), Shout does _not_ deactivate the DS1620. Make
+; sure to take care of this detail in your code that uses this routine.
+
+Shout
+	mov	!ra,#DQout	; Set to output.
+	mov	bits,#9 	; Set up for 8- or 9-bit transfer.
+	movb	c,sign		; Put bit8 (sign bit) into carry.
+:begin	setb	RST		; Activate the 1620.
+:loop	rr	DSdata		; Rotate bit0 of DSdata into carry.
+	clrb	CLK		; Set up for clock pulse
+	movb	DQ,c		; Move carry bit to input of 1620.
+	mov	w,--bits	; Pulse the clock line for each of
+	snz			; first 8 bits. On the ninth bit,
+	snb	clk9		; pulse the clock only if clk9 = 1.
+	setb	CLK		; Finish the pulse if conditions are met.
+	djnz	bits,:loop	; Loop 9 times.
+	ret
+
+; Shin shifts in data from the 1620. If the data to be received is
+; a 9-bit temperature, the lower 8 bits are in DSdata and the 9th (sign)
+; bit is in the carry bit. If the data is a configuration byte, ignore the
+; extra bit in carry.
+
+; >> Note: When a program receives input from the DS1620, it is always the
+; end of the communication, so Shin incorporates the command "clrb RST"
+; to deactivate the DS1620.
+
+Shin
+	mov	!ra,#DQin	; Set DQ to input.
+	mov	bits,#9 	; Nine-bit transfer.
+	clc			; Clear carry bit.
+:loop	rr	DSdata		; Move carry into bit7, shift bits right.
+	clrb	CLK		; Clock in the bit on falling edge.
+	movb	c,DQ		; Get the bit
+	setb	CLK		; Finish the clock pulse.
+	djnz	bits,:loop	; Loop 9 times.
+	clrb	RST		; Deactivate the 1620.
+	ret
+
+; General-purpose delay routine (200+ ms at 4 MHz).
+; Not required by DS1620 routines per se, but used to wait for EEPROM
+; programming cycles to finish (50 ms max) and to wait an interval
+; between temperature readings.
+
+delay	djnz	temp1,delay
+	djnz	temp2,delay
+	ret
+

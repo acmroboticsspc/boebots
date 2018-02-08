@@ -1,0 +1,432 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' File...... SIMPLE GPS.BSP
+' Purpose... Simple GPS Interface
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 16 JUL 2001
+' Updated... 07 FEB 2002
+
+' {$STAMP BS2p}
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' Reads NMEA data string from GPS receiver and parses data.  GPS string is
+' buffered into scratchpad RAM with SPSTR modifier.  Once in SPRAM, data is
+' parsed out based on its position.
+'
+' $GPRMC,POS_UTC,POS_STAT,LAT,LAT_D,LON,LON_D,SPD,HDG,DATE,MAG_VAR,MAG_REF,*CC
+'
+'  POS_UTC  - UTC of position. Hours, minutes and seconds. (hhmmss)
+'  POS_STAT - Position status. (A = Data valid, V = Data invalid)
+'  LAT      - Latitude (ddmm.ffff)
+'  LAT_D    - Latitude direction. (N = North, S = South)
+'  LON      - Longitude (dddmm.ffff)
+'  LON_D    - Longitude direction (E = East, W = West)
+'  SPD      - Speed over ground. (knots) (0.0 - 999.9)
+'  HDG      - Heading/track made good (degrees True) (x.x)
+'  DATE     - Date (ddmmyy)
+'  MAG_VAR  - Magnetic variation (degrees) (x.x)
+'  MAG_REF  - Magnetic variation (E = East, W = West)
+'  *CC      - Checksum
+'
+' Custom Garmin string:
+'
+' $PGRMZ,ALT,F,X*CC
+'
+'  ALT,F    - Altitude in feet
+'  X        - Position fix dimensions (2 = user, 3 = GPS)
+'  *CC      - Checksum
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+GPSpin          CON     0                       ' GPS serial input
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+N4800           CON     16884                   ' baud rate for GPS
+
+MoveTo          CON     2                       ' DEBUG positioning command
+LF              CON     10                      ' linefeed
+ClrRt           CON     11                      ' clear line right of cursor
+
+EST             CON     -5                      ' Eastern Standard Time
+CST             CON     -6                      ' Central Standard Time
+MST             CON     -7                      ' Mountain Standard Time
+PST             CON     -8                      ' Pacific Standard Time
+
+EDT             CON     -4                      ' Eastern Daylight Time
+CDT             CON     -5                      ' Central Daylight Time
+MDT             CON     -6                      ' Mountain Daylight Time
+PDT             CON     -7                      ' Pacific Daylight Time
+
+UTCfix          CON     CST                     ' for Dallas, Texas
+Comma           CON     ","
+DegSym          CON     176                     ' degrees symbol for report
+MinSym          CON      39                     ' minutes symbol
+SecSym          CON      34                     ' seconds symbol
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+idx             VAR     Byte                    ' index into GPS data in SPRAM
+flags           VAR     Byte                    ' holds bit values
+valid           VAR     Flags.Bit3              ' is data valid?
+
+tmHrs           VAR     Byte                    ' time fields
+tmMins          VAR     Byte
+tmSecs          VAR     Byte
+
+latDeg          VAR     Byte                    ' latitude
+latMin          VAR     Byte
+latSec          VAR     Word
+latNS           VAR     flags.Bit0              ' 0 = N
+
+longDeg         VAR     Byte                    ' longitude
+longMin         VAR     Byte
+longSec         VAR     Word
+longEW          VAR     flags.Bit1              ' 0 = E
+
+speed           VAR     Word                    ' in tenths of mph
+altitude        VAR     Word                    ' in feet
+
+day             VAR     Byte                    ' day of month, 1 - 31
+month           VAR     flags.Nib1              ' month, 1 - 12
+year            VAR     Byte                    ' year, 00 - 99
+
+char            VAR     Byte                    ' byte pulled from SPRAM
+workVal         VAR     Word                    ' for numeric conversions
+eeAddr          VAR     workVal                 ' pointer to EE data
+
+field           VAR     Nib                     ' field #
+fldWidth        VAR     field                   ' width of field
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+NotValid        DATA    "No", 0
+IsValid         DATA    "Yes", 0
+DaysInMon       DATA    31,28,31,30,31,30,31,31,30,31,30,31
+MonNames        DATA    "JAN",0,"FEB",0,"MAR",0,"APR",0,"MAY",0,"JUN",0
+                DATA    "JUL",0,"AUG",0,"SEP",0,"OCT",0,"NOV",0,"DEC",0
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  PAUSE 250                                     ' let DEBUG open
+  DEBUG CLS                                     ' clear the screen
+  DEBUG "Simple GPS Interface",CR
+  DEBUG "===================="
+
+Draw_Ruler:
+    FOR idx = 0 TO 65
+      IF (idx = 0) THEN Print_Ones
+      IF (idx // 10) > 0 THEN Print_Ones
+      DEBUG MoveTo, (7 + idx), 3, DEC1 (idx / 10)
+    Print_Ones:
+      DEBUG MoveTo, (7 + idx), 4, DEC1 (idx // 10)
+    Print_Ticks:
+      IF (idx // 10) > 0 THEN Next_Digit
+      DEBUG MoveTo, (7 + idx), 5, "|"
+    Next_Digit:
+  NEXT
+
+Draw_Data_Labels:
+  DEBUG MoveTo, 0,  8, "Signal Valid: "
+  DEBUG MoveTo, 0, 10, "  Local Time: "
+  DEBUG MoveTo, 0, 11, "  Local Date: "
+  DEBUG MoveTo, 0, 13, "    Latitude: "
+  DEBUG MoveTo, 0, 14, "   Longitude: "
+  DEBUG MoveTo, 0, 15, "    Altitude: "
+  DEBUG MoveTo, 0, 16, "       Speed: "
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+
+  ' wait for $GPRMC string and store data in SPRAM
+
+  SERIN GPSpin, N4800, 3000, No_GPS_Data, [WAIT("GPRMC,"), SPSTR 65]
+  GOSUB Parse_GPS_Data                          ' extract data from SPRAM
+
+  ' wait for GARMIN custom string
+  ' -- use DEC to extract altitude
+
+Get_Altitude:
+  SERIN GPSpin, N4800, 2000, Show_GPMRC_String, [WAIT("PGRMZ,"), DEC altitude]
+
+Show_GPMRC_String:
+  DEBUG MoveTo, 0, 6, "$GPRMC,"                 ' print header
+  idx = 0                                       ' start at position UTC
+
+Print_GPRMC_Char:                               ' print the $GPRMC data string
+  GET idx, char                                 ' get char from SPRAM
+  DEBUG char                                    ' display it
+  IF char = "*" THEN Print_Checksum             ' look for checksum indicator
+  idx = idx + 1                                 ' point to next char
+  GOTO Print_GPRMC_Char
+
+Print_Checksum:
+  GET (idx + 1), char                           ' get first checksum char
+  DEBUG char                                    ' display
+  GET (idx + 2), char                           ' get second checksum char
+  DEBUG char, ClrRt                             ' display, clear to end of line
+
+Show_Report:
+  DEBUG MoveTo, 14, 8                           ' was the signal valid?
+  LOOKUP valid, [NotValid, IsValid], eeAddr     ' get answer from EE
+  GOSUB Print_Z_String                          ' print it
+  DEBUG ClrRt                                   ' clear end of line
+  IF (valid = 0) THEN Signal_Not_Valid
+
+Signal_Is_Valid:
+  DEBUG MoveTo, 14, 10, DEC2 tmHrs, ":", DEC2 tmMins, ":", DEC2 tmSecs
+
+  DEBUG MoveTo, 14, 11, DEC2 day, " "
+  eeAddr = (month - 1) * 4 + MonNames           ' get address of month name
+  GOSUB Print_Z_String                          ' print it
+  DEBUG " 20", DEC2 year
+
+  DEBUG MoveTo, 15, 13, DEC2 latDeg, DegSym, " ", DEC2 latMin, MinSym, " "
+  DEBUG DEC2 (latSec / 10), ".", DEC1 (latSec // 10), SecSym, " "
+  DEBUG "N" + (latNS * 5)
+
+  DEBUG MoveTo, 14, 14, DEC3 longDeg, DegSym, " ", DEC2 longMin, MinSym, " "
+  DEBUG DEC2 (longSec / 10), ".", DEC1 (longSec // 10), SecSym, " "
+  DEBUG "E" + (longEW * 18)
+
+  DEBUG MoveTo, 14, 15, DEC altitude, " Feet"
+  DEBUG MoveTo, 14, 16, DEC (speed / 10), ".", DEC1 (speed // 10), " MPH "
+  GOTO Main
+
+Signal_Not_Valid:
+  DEBUG MoveTo, 14, 10, "?", ClrRt              ' clear all fields
+  DEBUG MoveTo, 14, 11, "?", ClrRt
+  DEBUG MoveTo, 14, 13, "?", ClrRt
+  DEBUG MoveTo, 14, 14, "?", ClrRt
+  DEBUG MoveTo, 14, 15, "?", ClrRt
+  DEBUG MoveTo, 14, 16, "?", ClrRt
+  GOTO Main
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'
+No_GPS_Data:
+  DEBUG CLS, "Error: No GPS data detected"
+  PAUSE 2500
+  GOTO Initialize                               ' try again
+
+
+Parse_GPS_Data:
+  idx = 0 : fldWidth = 2                        ' UTC hours
+  GOSUB String_To_Value
+  tmHrs = workVal
+
+  idx = 2 : fldWidth = 2                        ' UTC minutes
+  GOSUB String_To_Value
+  tmMins = workVal
+
+  idx = 4 : fldWidth = 2                        ' UTC seconds
+  GOSUB String_To_Value
+  tmSecs = workVal
+
+  idx = 9 : fldWidth = 2                        ' latitude degrees
+  GOSUB String_To_Value
+  latDeg = workVal
+
+  idx = 11 : fldWidth = 2                       ' latitude minutes
+  GOSUB String_To_Value
+  latMin = workVal
+
+  idx = 14 : fldWidth = 4                       ' latitude fractional minutes
+  GOSUB String_To_Value
+  latSec = workVal ** $0F5C                     ' x 0.06 --> tenths of seconds
+
+  idx = 21 : fldWidth = 3                       ' longitude degrees
+  GOSUB String_To_Value
+  longDeg = workVal
+
+  idx = 24 : fldWidth = 2                       ' longitude minutes
+  GOSUB String_To_Value
+  longMin = workVal
+
+  idx = 27 : fldWidth = 4                       ' longitude fractional minutes
+  GOSUB String_To_Value
+  longSec = workVal ** $0F5C                    ' x 0.06 --> tenths of seconds
+
+  ' get non-numeric data
+
+Get_Valid:
+  GET 7, char
+  valid = 1                                     ' assume valid
+  IF (char = "A") THEN Get_Lat_Dir              ' it is, so skip
+  valid = 0                                     ' set to 0 if not valid
+
+Get_Lat_Dir:
+  latNS = 0                                     ' assume North
+  GET 19, char                                  ' check it
+  IF (char = "N") THEN Get_Long_Dir             ' confirm
+  latNS = 1                                     ' set to 1 if South
+
+Get_Long_Dir:
+  longEW = 0                                    ' assume East
+  GET 33, char                                  ' check it
+  IF (char = "E") THEN Get_Speed                ' confirm
+  longEW = 1                                    ' set to 1 if West
+
+  ' get variable length data
+
+Get_Speed:
+  idx = 34
+  GOSUB Mixed_To_Tenths                         ' convert "xxx.x" to number
+  ' speed = workVal                             ' speed in knots (tenths)
+  speed = workVal + (workVal ** $2699)          ' x 1.1507771555 for mph
+
+  ' get date
+  ' -- past variable data, so we need to use field search
+
+Get_Date:
+  field = 8                                     ' set field to find
+  GOSUB Move_To_Field                           ' go get position
+  PUT 125, idx                                  ' save date position
+
+  fldWidth = 2
+  GOSUB String_To_Value
+  day = workVal                                 ' UTC day, 1 - 31
+
+  GET 125, idx                                  ' get stored position
+  idx = idx + 2 : fldWidth = 2
+  GOSUB String_To_Value
+  month = workVal                               ' UTC month, 1 - 12
+
+  GET 125, idx                                  ' get stored position
+  idx = idx + 4 : fldWidth = 2
+  GOSUB String_To_Value
+  year = workVal                                ' UTC year, 0 - 99
+
+  ' adjust date for local position
+
+Correct_Local_Time_Date:
+  workVal = tmHrs + UTCfix                      ' add UTC offset
+  IF (workVal < 24) THEN Adjust_Time            ' midnight crossed?
+  workVal = UTCfix                              ' yes, so adjust date
+  BRANCH workVal.Bit15, [Location_Leads, Location_Lags]
+
+Location_Leads:                                 ' east of Greenwich
+  day = day + 1                                 ' no, move to next day
+  eeAddr = DaysInMon * (month - 1)              ' get days in month
+  READ eeAddr, char
+  IF (day <= char) THEN Adjust_Time             ' in same month?
+  month = month + 1                             ' no, move to next month
+  day = 1                                       ' first day
+  IF (month < 13) THEN Adjust_Time              ' in same year?
+  month = 1                                     ' no, set to January
+  year = year + 1 // 100                        ' add one to year
+  GOTO Adjust_Time
+
+Location_Lags:                                  ' west of Greenwich
+  day = day - 1                                 ' adjust day
+  IF (day > 0) THEN Adjust_Time                 ' same month?
+  month = month - 1
+  IF (month > 0) THEN Adjust_Time               ' same year?
+  month = 1                                     ' no, set to January
+  eeAddr = DaysInMon * (month - 1)
+  READ eeAddr, day                              ' get new day
+  year = year + 99 // 100                       ' set to previous year
+
+Adjust_Time:
+  tmHrs = tmHrs + (24 + UTCfix) // 24           ' localize hours
+  RETURN
+
+' *********************************************
+' Convert string data (nnnn) to numeric value
+' -- idx      - location of first digit in data
+' -- fldWidth - width of data field (1 to 5)
+' -- workVal  - returns numeric value of field
+' *********************************************
+
+String_To_Value:
+  workVal = 0
+  IF (fldWidth = 0) OR (fldWidth > 5) THEN String_To_Value_Done
+
+Get_Field_Digit:
+  GET idx, char                                 ' get digit from field
+  workVal = workVal + (char - "0")              ' convert, add into value
+  fldWidth = fldWidth - 1                       ' decrement field width
+  IF (fldWidth = 0) THEN String_To_Value_Done
+  workVal = workVal * 10                        ' shift result digits left
+  idx = idx + 1                                 ' point to next digit
+  GOTO Get_Field_Digit
+
+String_To_Value_Done:
+  RETURN
+
+' *****************************************************
+' Convert string data (nnn.n) to numeric value (tenths)
+' -- idx     - location of first digit in data
+' -- workVal - returns numeric value of field
+' *****************************************************
+
+Mixed_To_Tenths:
+  workVal = 0
+
+Get_Mixed_Digit:
+  GET idx, char                                 ' read digit from speed field
+  IF (char = ".") THEN Get_Mixed_Last           ' skip decimal point
+  workVal = (workVal + (char - "0")) * 10       ' add digit, move data left
+  idx = idx + 1                                 ' point to next digit
+  GOTO Get_Mixed_Digit
+
+Get_Mixed_Last:
+  GET (idx + 1), char
+  workVal = workVal + (char - "0")              ' speed in knots
+  RETURN
+
+' ************************************************************
+' Find field location after variable-length data (i.e., speed)
+' -- field - field number
+' -- idx   - returns position of first digit in field
+' ************************************************************
+
+Move_To_Field:
+  idx = 0
+  IF (field = 0) THEN Move_To_Field_Done        ' if zero, we're there
+
+Get_Char:
+  GET idx, char                                 ' get char from SPRAM
+  IF (char = Comma) THEN Found_Comma            ' is it a comma?
+  idx = idx + 1                                 ' no, move to next char
+  GOTO Get_Char
+
+Found_Comma:
+  field = field - 1                             ' was comma, dec field coutner
+  idx = idx + 1                                 ' point to next char
+  IF (field = 0) THEN Move_To_Field_Done        ' if field = 0, we're there
+  GOTO Get_Char
+
+Move_To_Field_Done:
+  RETURN
+
+' *********************************************
+' Print Zero-terminated string stored in EEPROM
+' -- eeAddr - starting character of string
+' *********************************************
+
+Print_Z_String:
+  READ eeAddr, char                             ' get char from EE
+  IF (char = 0) THEN Print_Z_String_Done        ' if zero, we're done
+  DEBUG char                                    ' print the char
+  eeAddr = eeAddr + 1                           ' point to the next one
+  GOTO Print_Z_String
+
+Print_Z_String_Done:
+  RETURN

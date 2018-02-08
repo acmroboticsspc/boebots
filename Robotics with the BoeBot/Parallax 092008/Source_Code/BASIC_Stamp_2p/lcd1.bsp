@@ -1,0 +1,143 @@
+' -----[ Title ]------------------------------------------------------
+'
+' File...... LCD.BSP
+' Purpose... Stamp -> LCD (4-bit interface)
+' Author.... Jon Williams (for BS1)
+'            Claus Kuhnel (adaptions to BS2 & LM041)
+' Started... 16 July 1994
+' Updated... 03 Sept 2001
+
+' -----[ Program Description ]----------------------------------------
+'
+' This program demonstrates the various standard features of an LCD
+' display that uses the Hitatchi HD44780 controller.  
+' The LCD used to test this program was the Hitachi LM041L (16x4).
+'
+' LCD Connections:
+'
+' LCD        (Function)         Stamp
+' ---------------------         -----
+' pin 1         Vss             VSS
+' pin 2         Vdd             VDD
+' pin 3         Vo              
+' pin 4         RS              P3
+' pin 5         R/W             P2
+' pin 6         E               P0
+' pin 7         DB0              
+' pin 8         DB1              
+' pin 9         DB2              
+' pin 10        DB3              
+' pin 11        DB4             P4
+' pin 12        DB5             P5
+' pin 13        DB6             P6
+' pin 14        DB7             P7
+'
+' -----[ Revision History ]-------------------------------------------
+'
+' 07-16-94 : Version 1.0 - compilation of code from last 3 months
+' 09-20-94 : Version 2.0 - adaption to LM041L
+' 09-01-01 : Version 3.0 - adaption to BS2
+' 09-03-01 : Version 3.1 - adaption to BS2p	
+'
+' -----[ Directives ]-------------------------------------------------
+'
+'{$STAMP BS2p} 			'specifies a BS2p
+'
+' -----[ Constants ]--------------------------------------------------
+'
+E		con	0      		' LCD enable pin (1 = enabled)
+RS 		con   3                 ' Register Select (1 = char)
+
+' LCD control characters
+'
+WakeUp 		con %00110000 'Wake-up
+FourBitMode 	con %00100000 'Set to 4-bit mode
+OneLine5x8Font 	con %00100000 'Set to 1 display line, 5x8 font
+OneLine5x10Font 	con %00100100 'Set to 1 display line, 5x10 font
+TwoLine5x8Font 	con %00101000 'Set to 2 display lines, 5x8 font
+TwoLine5x10Font 	con %00101100 'Set to 2 display lines, 5x10 font
+DisplayOff 		con %00001000 'Turn off display, data is retained
+DisplayOn 		con %00001100 'Turn on display, no cursor
+DisplayOnULCrsr 	con %00001110 'Turn on display, with underline cursor
+DisplayOnBLCrsr 	con %00001101 'Turn on display, with blinking cursor
+IncCrsr 		con %00000110 'Auto-increment cursor, no display shift
+IncCrsrShift 	con %00000111 'Auto-increment cursor, shift display left
+DecCrsr 		con %00000100 'Auto-decrement cursor, no display shift
+DecCrsrShift 	con %00000101 'Auto-decrement cursor, shift display right
+ClearDisplay 	con %00000001 'Clear the display
+HomeDisplay 	con %00000010 'Move cursor and display to home position
+ScrollLeft 		con %00011000 'Scroll display to the left
+ScrollRight 	con %00011100 'Scroll display to the right
+CrsrLeft 		con %00010000 'Move cursor left
+CrsrRight 		con %00010100 'Move cursor right
+MoveCrsr 		con %10000000 'Move cursor to position (must add address)
+MoveToCGRAM 	con %01000000 'Move to CGRAM position (must add address)             
+
+Line1		con	$80			' addr line #1 ¦ 80H
+Line2		con  	$C0			' addr line #2 ¦ 80H
+Line3		con  	$90			' addr line #3 ¦ 80H
+Line4		con  	$D0			' addr line #4 ¦ 80H
+ 
+' -----[ Variables ]--------------------------------------------------
+'
+char    	var	byte              ' char sent to LCD
+index   	var	byte              ' loop counter
+
+
+' -----[ Initialization ]---------------------------------------------
+'
+data "THE BASIC STAMP!"     	' preload EEPROM 
+data "A PIC16C57 knows"     	' preload EEPROM
+data "P B A S I C from"     	' preload EEPROM
+data " Parallax Inc.  "     	' preload EEPROM
+	
+	outl = %00000000		' clear the pins
+	dirl = %11111111        ' set P0-P7 as outputs
+	PAUSE 1000              ' let the LCD settle
+
+' Initialize the LCD (Hitatchi HD44780 controller)
+'
+LCDini: 
+	lcdcmd E,WakeUp		' 8-bit mode
+	pause 10
+	lcdcmd E,WakeUp
+	pause 1
+	lcdcmd E,WakeUp
+	pause 1
+	lcdcmd E,FourBitMode    ' 4-bit mode
+	lcdcmd E,TwoLine5x8Font	' set function for LM041
+	lcdcmd E,DisplayOn	' disp on, crsr off, blink off
+	lcdcmd E,IncCrsr		' inc crsr, no disp shift
+	lcdcmd E,ClearDisplay	' clear LCD
+
+' -----[ Main Code ]--------------------------------------------------
+'
+Start:lcdcmd E, ClearDisplay  
+	FOR index = 0 TO 15		    
+	  read index, char              ' get char from EEPROM
+	  lcdout E, IncCrsr, [char]     ' write it
+	NEXT
+		
+	lcdcmd E, MoveCrsr+Line2        ' address second line
+	FOR index = 16 TO 31
+	  read index, char              ' get char from EEPROM
+	  lcdout E, IncCrsr, [char]     ' write it
+	NEXT 
+	
+	lcdcmd E, MoveCrsr+Line3        ' address third line
+	FOR index = 32 TO 47
+	  read index, char              ' get char from EEPROM
+	  lcdout E, IncCrsr, [char]     ' write it
+	NEXT 
+	
+	lcdcmd E, MoveCrsr+Line4        ' address forth line
+	FOR index = 48 TO 63
+	  read index, char              ' get char from EEPROM
+	  lcdout E, IncCrsr, [char]                   ' write it
+	NEXT 
+	PAUSE 2000                      ' wait 2 seconds
+
+	GOTO Start                      ' do it all over
+
+' -----[ Subroutines ]------------------------------------------------
+'

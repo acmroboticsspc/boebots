@@ -1,0 +1,42 @@
+' This program demonstrates sending a variable from BASIC Stamp 2
+' to MondoMini web server.
+' Your web browser can read this value and display. 
+' BASIC Stamp Activity Board was used as target hardware.
+' After pressing a key (P8) the pot meter connected to P7 is read
+' and the pot meter value is sent afterwards.
+' The serial link is connected to a PC's COM Port running
+' MondoMini webserver.
+
+' Created: 28.02.2001 Claus Kuhnel
+
+LCD	CON 1					' Serial LCD on P1
+LED 	CON 10				
+POTIN CON 7					' Potentiometer on P7
+N2400 CON $418c				' Baudrate for serial LCD
+I 	CON 254 				' Instruction prefix value.
+CLR 	CON 1 				' LCD clear-screen instruction
+
+adc	VAR word				' Word variable for ADC
+
+	PAUSE 1000
+	serout LCD,n2400,[I,CLR] 	' Clear the LCD screen.
+	PAUSE 1
+	SEROUT LCD,n2400,[I,128]	
+	SEROUT LCD,n2400,["Value:"] 	' Print message.
+
+start:
+	HIGH LED: PAUSE 500: 		' Blink LED
+	LOW LED :PAUSE 10
+	GOSUB read_pot
+	SEROUT LCD,n2400,[I,135]
+	SEROUT LCD,N2400,[DEC2 adc.lowbyte] ' Print value on LCD
+	SEROUT 16,84+$4000,1,["P1=",DEC adc,";"] 
+	GOTO start
+
+read_pot:
+	HIGH potin
+	PAUSE 1
+	RCTIME POTIN, 1, adc
+	adc=adc/2
+	adc=adc.nib2
+	RETURN

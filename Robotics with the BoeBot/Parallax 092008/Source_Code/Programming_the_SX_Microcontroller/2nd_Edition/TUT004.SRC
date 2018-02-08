@@ -1,0 +1,38 @@
+; TUT004.SRC
+;
+; --------------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" 2nd Edition by Guenther Daubach
+; Copyright (c), by Parallax Inc. 2004
+; --------------------------------------------------------------------
+
+include "Setup28.inc"
+
+RESET   Main
+
+org $08
+Counter1 ds 1
+Counter2 ds 1
+Counter3 ds 1
+
+org $000
+TimeEater
+Loop1
+  decsz Counter1
+    jmp Loop1
+  mov Counter1, #50
+  decsz Counter2
+    jmp Loop1
+  decsz Counter3
+    jmp Loop1
+  ret
+
+  org $100
+Main
+  mov    !rb, #%11111110
+Loop
+  call TimeEater
+  clrb   rb.0
+  call TimeEater
+  setb   rb.0
+  jmp    Loop

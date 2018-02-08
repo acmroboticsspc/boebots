@@ -1,0 +1,65 @@
+' =========================================================================
+'
+'   File....... SW21-EX24-74HC165-2.BS2
+'   Purpose.... Expanded inputs with 74HC165
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates a simple method of turning three BASIC Stamp
+' I/O pins into sixteen digital inputs with two 74HC165 shift registers
+' that have been cascaded.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Clock           PIN     0                       ' shift clock (74HC165.2)
+SerData         PIN     1                       ' serial data (74HC165.7)
+Load            PIN     2                       ' input load (74HC165.1)
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+DelayTime       CON     100
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+xInputs         VAR     Word                    ' external inputs
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  HIGH Load                                     ' make output and high
+  DEBUG CLS,
+        "XInputs   FEDCBA9876543210", CR,
+        "-------   ----------------", CR,
+        "Status    ................"
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Get_165x2                             ' get inputs
+    DEBUG CRSRXY, 10, 2, BIN16 xInputs          ' display current status
+    PAUSE DelayTime                             ' pad the loop a bit
+  LOOP
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Get_165x2:
+  PULSOUT Load, 5                               ' load inputs
+  SHIFTIN SerData, Clock, MSBPRE, [xInputs\16]  ' shift them in
+  RETURN

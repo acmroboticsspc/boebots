@@ -1,0 +1,142 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - FrontIrNavigation.bs2
+' When it sees an object with only one object detecting eye, it corrects
+' it's heading until it sees the object with both eyes.
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+ServoLeft      PIN     13                    ' Left servo connected to P13
+ServoRight     PIN     12                    ' Right servo connected to P12
+
+IrLedLS        PIN     2                     ' Left IR LED connected to P2
+IrSenseLS      PIN     1                     ' Left IR detector to P1
+
+IrLedLF        PIN     4                     ' Left IR LED connected to P4
+IrSenseLF      PIN     11                    ' Left IR detector to P11
+
+IrLedRF        PIN     15                    ' Right IR LED connected to P15
+IrSenseRF      PIN     14                    ' Right IR detector to P14
+
+IrLedRS        PIN     3                     ' Right IR LED connected to P3
+IrSenseRS      PIN     0                     ' Right IR detector to P0
+
+' -----[ Constants ]----------------------------------------------------------
+
+' SumoBot maneuvers
+
+Forward        CON     0                     ' Forward
+Backward       CON     1                     ' Backward
+RotateLeft     CON     2                     ' RotateLeft
+RotateRight    CON     3                     ' RotateRight
+PivotLeft      CON     4                     ' Pivot to the left
+PivotRight     CON     5                     ' Pivot to the right
+CurveLeft      CON     6                     ' Curve to the left
+CurveRight     CON     7                     ' Curve to the right
+
+' Servo pulse width rotations
+
+FS_CCW         CON     850                   ' Full speed counterclockwise
+FS_CW          CON     650                   ' Full speed clockwise
+NO_ROT         CON     750                   ' No rotation
+LS_CCW         CON     770                   ' Low speed counterclockwise
+LS_CW          CON     730                   ' Low speed clockwise
+
+' IR object detectors
+
+IrFreq         CON     38500                 ' IR LED frequency
+
+' -----[ Variables ]----------------------------------------------------------
+
+temp           VAR     Word                  ' Temporary variable
+counter        VAR     Byte                  ' Loop counting variable.
+
+maneuver       VAR     Nib                   ' SumoBot travel maneuver
+
+sensors        VAR     Byte                  ' Sensor flags byte
+
+irLS           VAR     sensors.BIT3          ' State of Left Side IR
+irLF           VAR     sensors.BIT2          ' State of Left Front IR
+irRF           VAR     sensors.BIT1          ' State of Right Front IR
+irRS           VAR     sensors.BIT0          ' State of Right Side IR
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+DO
+
+  IF irLF = 1 AND irRF = 1 THEN              ' Both?
+    maneuver = Forward                       ' State = Lunge forward
+    GOSUB Servos_And_Sensors
+  ELSEIF irLF = 1 THEN                       ' Just left?
+    counter = 0                              ' State = track front left object
+    DO UNTIL (irLF = 1 AND irRF = 1) OR counter > 15
+      maneuver = PivotLeft                   ' Pivot left 15
+      GOSUB Servos_And_Sensors
+      counter = counter + 1
+    LOOP
+  ELSEIF irRF = 1 THEN                       ' Just right?
+    counter = 0                              ' State=track front right object
+    DO UNTIL (irLF = 1 AND irRF = 1) OR counter > 15
+      maneuver = PivotRight                  ' Pivot right 15
+      GOSUB Servos_And_Sensors
+      counter = counter + 1
+    LOOP
+  ELSE                                       ' No objects detected?
+    GOSUB Read_Object_Detectors              ' State = search pattern
+  ENDIF
+
+LOOP
+
+' -----[ Subroutine - Servos_And_Sensors ]------------------------------------
+
+Servos_And_Sensors:
+
+  GOSUB Pulse_Servos                         ' Call Pulse_Servos subroutine
+
+  ' Call sensor subroutine(s).
+
+  sensors = 0                                ' Clear previous sensor values
+
+  GOSUB Read_Object_Detectors                ' Call Read_Object_Detectors
+
+  RETURN
+
+' -----[ Subroutine - Pulse_Servos ]------------------------------------------
+
+Pulse_Servos:
+
+  ' Pulse to left servo
+  LOOKUP maneuver, [ FS_CCW, FS_CW, FS_CW, FS_CCW,
+                     NO_ROT, FS_CCW, LS_CCW, FS_CCW ], temp
+  PULSOUT ServoLeft, temp
+
+  ' Pulse to right servo
+  LOOKUP maneuver, [ FS_CW, FS_CCW, FS_CW, FS_CCW,
+                     FS_CW, NO_ROT, FS_CW, LS_CW ], temp
+  PULSOUT ServoRight, temp
+
+  ' Pause between pulses (remove when using sensorsIR object detectors + QTIs).
+  PAUSE 20
+
+  RETURN
+
+' -----[ Subroutine - Read_Object_Detectors ]---------------------------------
+
+Read_Object_Detectors:
+
+  FREQOUT IrLedRS, 1, IrFreq                 ' Right side IR LED headlight
+  irRS = ~IrSenseRS                          ' Save right side IR receiver
+
+  FREQOUT IrLedRF, 1, IrFreq                 ' Repeat for right-front
+  irRF = ~IrSenseRF
+
+  FREQOUT IrLedLF, 1, IrFreq                 ' Repeat for left-front
+  irLF = ~IrSenseLF
+
+  FREQOUT IrLedLS, 1, IrFreq                 ' Repeat for left side
+  irLS = ~IrSenseLS
+
+  RETURN
+

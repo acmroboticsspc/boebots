@@ -1,0 +1,108 @@
+; APP005.SRC - Generating a sine wave from a 1st quadrant table
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+
+org    $08
+Ix     ds    1
+Flags  ds    1
+Offset ds    1
+
+Q13    equ   Flags.0
+Q34    equ   Flags.1
+
+org    $000
+
+;**** VP to generate a sine wave from a 1st quadrant table ***********
+;
+; Output:    Signal is generated at Port C,
+;            Values: 0...255
+;
+; Uses:      Ix, Flags, Offset
+; 
+Sine1Q
+  snb  Q13                              ; If not 1st or 3rd quadrant, con-
+    jmp :Down                           ; tinue at :Down (2nd/4th quadr.)
+  inc  Ix                               ; Next index
+  sz                                    ; If no overflow, continue and 
+    jmp :Continue                       ; read the table
+  dec  Ix                               ; Adjust Ix
+  setb Q13                              ; Activate 2nd/4th quadrant
+:Down                                   ; Find index for 2nd/4th quadr.
+  dec  Ix                               ; Previous index
+  sz                                    ; If not 0, continue and
+    jmp :Continue                       ; read the table
+  clrb Q13                              ; De-select 2nd/4th quadrant
+  xor  Flags, #%00000010                ; Toggle 1st, 2nd and 3rd, 4th 
+                                        ; quadrant
+:Continue
+  mov  w, Ix                            ; Get table index
+  call WtoSin                           ; Read function value
+  page Sine1Q                           ; Adjust page
+  sb Q34                                ; If not 3rd/4th quadrant,
+    jmp :Quadr1_2                       ; go to 1st/2nd quadrant
+  mov w, Offset-w                       ; Offset - f(Ix)
+  jmp :Output
+
+:Quadr1_2                               ; 1st/2nd quadrant
+  add  w, Offset                        ; Offset + f(Ix)
+
+:Output
+  mov  rc, w                            ; Send the result to rc
+  mov  w, #-200                         ; Call the ISR every 4 µs
+  retiw
+
+;** Subroutine to read the wave table ********************************
+;
+WToSin
+  page SinTable_1Q
+  jmp  w
+
+org  $100
+
+;** Mainline program *************************************************
+;
+Start
+  clr  rc                               ; Initialize Port C
+  clr  Ix
+  clr  Flags
+  mov  Offset, #128
+  mov  !rc, #0                          ; All rc pins are outputs
+  mov  !option,#%10011111               ; Enable RTCC interrupt
+
+Loop                                    ; Just loop...
+  jmp  Loop
+
+org    $200
+
+;*********** Table for sin(x/255) for 0 >= x/255 <= pi/2 **************
+;
+SinTable_1Q
+  retw   0,  1,  2,  2,  3,  4,  5,  5,  6,  7,  8,  9,  9, 10, 11, 12
+  retw  12, 13, 14, 15, 16, 16, 17, 18, 19, 19, 20, 21, 22, 23, 23, 24
+  retw  25, 26, 26, 27, 28, 29, 29, 30, 31, 32, 32, 33, 34, 35, 36, 36
+  retw  37, 38, 39, 39, 40, 41, 41, 42, 43, 44, 44, 45, 46, 47, 47, 48
+  retw  49, 50, 50, 51, 52, 52, 53, 54, 54, 55, 56, 57, 57, 58, 59, 59
+  retw  60, 61, 61, 62, 63, 64, 64, 65, 66, 66, 67, 68, 68, 69, 69, 70
+  retw  71, 71, 72, 73, 73, 74, 75, 75, 76, 77, 77, 78, 78, 79, 80, 80
+  retw  81, 81, 82, 83, 83, 84, 84, 85, 86, 86, 87, 87, 88, 88, 89, 90
+  retw  90, 91, 91, 92, 92, 93, 93, 94, 94, 95, 95, 96, 96, 97, 97, 98
+  retw  98, 99, 99,100,100,101,101,102,102,103,103,104,104,105,105,105
+  retw 106,106,107,107,108,108,108,109,109,110,110,110,111,111,112,112
+  retw 112,113,113,113,114,114,114,115,115,115,116,116,116,117,117,117
+  retw 118,118,118,118,119,119,119,120,120,120,120,121,121,121,121,121
+  retw 122,122,122,122,123,123,123,123,123,124,124,124,124,124,124,125
+  retw 125,125,125,125,125,125,125,126,126,126,126,126,126,126,126,126
+  retw 126,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127

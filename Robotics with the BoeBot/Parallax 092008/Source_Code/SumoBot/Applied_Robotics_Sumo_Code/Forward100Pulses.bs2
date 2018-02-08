@@ -1,0 +1,49 @@
+' -----[ Program Description ]------------------------------------------------
+' Applied Robotics with the SumoBot - Forward100Pulses.bs2
+' SumoBot goes forward 100 pulses after Reset button is pressed and released.
+' To repeat the forward motion, press/release the Reset button twice.
+'
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+ServoLeft      PIN     13                    ' Left servo connected to P13
+ServoRight     PIN     12                    ' Right servo connected to P12
+
+' -----[ EEPROM Data ]--------------------------------------------------------
+
+RunStatus      DATA    0                     ' Start with program not running
+
+' -----[ Variables ]----------------------------------------------------------
+
+temp           VAR     Byte                  ' Temporary variable
+counter        VAR     Byte                  ' FOR...NEXT loop counter
+
+' -----[ Initialization ]-----------------------------------------------------
+
+DEBUG CLS                                    ' Clear the Debug Terminal
+Reset_Button:
+
+  READ RunStatus, temp                       ' read current status
+  temp = ~temp                               ' invert status
+  WRITE RunStatus, temp                      ' save for next reset
+  IF (temp > 0) THEN                         ' 0 -> End, 1 -> Main routine
+    DEBUG "Press/release Reset..."
+    END
+  ENDIF
+
+  DEBUG "Main program running...", CR        ' Display program status
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+FOR counter = 1 TO 100                       ' Deliver 100 forward pulses
+  PULSOUT ServoLeft,  850
+  PULSOUT ServoRight, 650
+  PAUSE 20
+NEXT
+
+DEBUG "Done!", CR,                           ' User instructions
+      "Press/release reset", CR,
+      "twice to restart...", CR
+END

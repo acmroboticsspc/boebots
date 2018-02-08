@@ -1,0 +1,94 @@
+' =========================================================================
+'
+'   File....... PWMPAL_TriColor_LED.BS2
+'   Purpose.... Tri-Color LED control with the PWMPAL
+'   Author..... Parallax
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 18 JUN 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+PpPin           PIN     0                       ' PWMPAL Serial I/O
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+T9600           CON     84
+T19200          CON     32
+T38400          CON     6
+PpBaud          CON     T38400
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+state           VAR     Nib                     ' LED state
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    FOR state = 0 TO 3
+      ON state GOSUB Led_Off, Led_Green, Led_Yellow, Led_Red
+      DEBUG HOME, DEC state, " : "
+      SELECT state
+        CASE 0 : DEBUG "Off", CLREOL
+        CASE 1 : DEBUG "Green", CLREOL
+        CASE 2 : DEBUG "Yellow", CLREOL
+        CASE 3 : DEBUG "Red", CLREOL
+      ENDSELECT
+      PAUSE 1000
+    NEXT
+  LOOP
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Led_Off:
+  SEROUT PpPin, PpBaud, ["!PWMM0"]
+  RETURN
+
+
+Led_Green:
+  SEROUT PpPin, PpBaud, ["!PWMM3", $FF, $FF, $01, $00]
+  SEROUT PpPin, PpBaud, ["!PWMM4", $01, $00, $FF, $FF]
+  SEROUT PpPin, PpBaud, ["!PWMSP", %01000000]
+  SEROUT PpPin, PpBaud, ["!PWMSS", %11000000]
+  RETURN
+
+
+Led_Yellow:
+  SEROUT PpPin, PpBaud, ["!PWMM3", $12, $00, $04, $00]
+  SEROUT PpPin, PpBaud, ["!PWMM4", $04, $00, $12, $00]
+  SEROUT PpPin, PpBaud, ["!PWMSP", %01000000]
+  SEROUT PpPin, PpBaud, ["!PWMSS", %11000000]
+  RETURN
+
+
+Led_Red:
+  SEROUT PpPin, PpBaud, ["!PWMM3", $01, $00, $FF, $FF]
+  SEROUT PpPin, PpBaud, ["!PWMM4", $FF, $FF, $01, $00]
+  SEROUT PpPin, PpBaud, ["!PWMSP", %10000000]
+  SEROUT PpPin, PpBaud, ["!PWMSS", %11000000]
+  RETURN

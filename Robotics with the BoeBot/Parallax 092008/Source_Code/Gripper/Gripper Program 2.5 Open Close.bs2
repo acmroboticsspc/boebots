@@ -1,0 +1,132 @@
+' -----[ Title ]-----------------------------------------------------------
+' Gripper Program 2.5: Open Close Demo
+'{$STAMP BS2}
+'{$PBASIC 2.5}
+
+' -----[ Program Description ]---------------------------------------------
+' Demonstrates opening and closing the gripper
+' This program will move the Boe-Bot forward and right, then
+' close the gripper to pick up an object. The Bot-Bot then moves
+' backward and left, then opens the gripper to set down the object.
+'
+' Revision History
+' Based on Gripper Program 1.5, updates include:
+' - Both new and old gripper servos are supported.
+'   Set #DEFINE NewGripServo = 1 for newer servo, = 0 for older.
+'    Newer are marked "standard", older are marked "STD"
+' - Both new and old wheel servos are supported.
+'   Set #DEFINE NewWheelServo = 1 for newer servo, = 0 for older.
+'   Newer are marked "continuous rotation", older marked "PM" (Pre-Modified)
+' - PBASIC 2.5
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+GripServo      PIN     14                    ' Gripper servo on P14
+LeftServo      PIN     13                    ' Left wheel servo on P13
+RightServo     PIN     12                    ' Right wheel servo on P12
+
+' -----[ Constants ]-------------------------------------------------------
+
+' Choose your type of wheel servo.  1 for newer, 0 for older.
+#DEFINE NewWheelServo = 1                    ' Newer continuous rotation servo
+'#DEFINE NewWheelServo = 0                   ' Older pre-modified servo
+
+' Choose your type of gripper servo.  1 for newer, 0 for older.
+#DEFINE NewGripServo = 1                     ' Newer standard servo
+'#DEFINE NewGripServo = 0                    ' Older STD servo
+
+#IF (NewWheelServo = 1) #THEN                ' Newer continuous rotation servo
+  ClockWise    CON     650                   ' Clockwise wheel rotation
+  CtrClkWise   CON     850                   ' Counter clockwise wheel rotation
+  TravelPulses CON     20                    ' Num pulses for fwd/back travel
+  TurnPulses   CON     12                    ' Num pulses for turning
+#ELSE                                        ' For older pre-modified servo
+  ClockWise    CON     500                   ' Clockwise wheel rotation
+  CtrClkWise   CON     1000                  ' Counter clockwise wheel rotation
+  TravelPulses CON     60                    ' Num pulses for fwd/back trav
+  TurnPulses   CON     30                    ' Num pulses for turning
+#ENDIF
+
+#IF (NewGripServo = 1) #THEN                 ' For newer Standard gripper servo
+  StepSize     CON     20                    ' Step size for gripper servo
+#ELSE                                        ' For older STD gripper servo
+  StepSize     CON     10                    ' Step size for gripper servo
+#ENDIF
+
+CloseGripper   CON     700                   ' Replace with values
+OpenGripper    CON     1200                  ' for your gripper
+
+' -----[ Variables ]-------------------------------------------------------
+
+pulses         VAR     Word                  ' Quantity of pulses to servo
+pulsewidth     VAR     Word                  ' Width of pulse sent to servo
+
+' -----[ Main Routine ]----------------------------------------------------
+
+Main:
+  GOSUB Open
+  PAUSE 500
+
+  GOSUB Forward
+  PAUSE 500
+  GOSUB Right
+  PAUSE 500
+
+  GOSUB Close
+  PAUSE 1000
+
+  GOSUB Backward
+  PAUSE 500
+  GOSUB Left
+  PAUSE 500
+
+  GOSUB Open
+  END
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Forward:                                     ' Move Boe-Bot a set distance
+  FOR pulses = 1 TO TravelPulses
+    PULSOUT RightServo, ClockWise
+    PULSOUT LeftServo,  CtrClkWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Backward:
+  FOR pulses = 1 TO TravelPulses
+    PULSOUT RightServo, CtrClkWise
+    PULSOUT LeftServo,  ClockWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Left:
+  FOR pulses = 1 TO TurnPulses
+    PULSOUT RightServo, ClockWise
+    PULSOUT LeftServo,  ClockWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Right:
+  FOR pulses = 1 TO TurnPulses
+    PULSOUT RightServo, CtrClkWise
+    PULSOUT LeftServo,  CtrClkWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Open:                                        ' Open the gripper
+  FOR pulsewidth = CloseGripper TO OpenGripper STEP StepSize
+    PULSOUT GripServo, pulsewidth
+    PAUSE 20
+  NEXT
+  RETURN
+
+Close:                                       ' Close the gripper
+  FOR pulsewidth = OpenGripper TO CloseGripper STEP StepSize
+    PULSOUT GripServo, pulsewidth
+    PAUSE 20
+  NEXT
+  RETURN

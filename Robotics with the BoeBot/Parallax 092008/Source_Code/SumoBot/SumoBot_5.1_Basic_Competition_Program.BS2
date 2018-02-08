@@ -1,0 +1,238 @@
+' -----[ Title ]----------------------------------------------------------------
+' Mini Sumo 5.1 : Basic Competition Program
+' {$STAMP BS2}
+
+' -----[ I/O Definitions ]------------------------------------------------------
+
+LMotor          CON     13                      ' left servo motor
+RMotor          CON     12                      ' right servo motor
+
+LLineSnsPwr     CON     10                      ' left line sensor power
+LLineSnsIn      CON      9                      ' left line sensor input
+RLineSnsPwr     CON      7                      ' right line sensor power
+RLineSnsIn      CON      8                      ' right line sensor input
+
+LfIrOut         CON      4                      ' left IR LED output
+LfIrIn          VAR     In11                    ' left IR sensor input
+RtIrOut         CON     15                      ' right IR LED output
+RtIrIn          VAR     In14                    ' right IR sensor input
+
+Speaker         CON      1                      ' piezo speaker
+StartLED        CON      0                      ' display start delay
+
+' -----[ Constants ]------------------------------------------------------------
+
+LFwdFast        CON     1000                    ' left motor forward; fast
+LFwdSlow        CON      800                    ' left motor forward; slow
+LStop           CON      750                    ' left motor stop
+LRevSlow        CON      700                    ' left motor reverse; slow
+LRevFast        CON      500                    ' left motor reverse; fast
+
+RFwdFast        CON      500                    ' right motor forward; fast
+RFwdSlow        CON      700                    ' right motor forward; slow
+RStop           CON      750                    ' right motor stop
+RRevSlow        CON      800                    ' right motor reverse; slow
+RRevFast        CON     1000                    ' right motor reverse; fast
+
+' -----[ Variables ]------------------------------------------------------------
+
+leftSense       VAR     Word                    ' left sensor raw reading
+rightSense      VAR     Word                    ' right sensor raw reading
+blackThresh     VAR     Word                    ' QTI black threshold setting
+lineBits        VAR     Nib                     ' decoded sensors value
+lineLeft        VAR     lineBits.Bit1
+lineRight       VAR     lineBits.Bit0
+
+irBits          VAR     Nib                     ' storage for IR target data
+irLeft          VAR     irBits.Bit1
+irRight         VAR     irBits.Bit0
+lastIr          VAR     Nib                     ' info from last reading
+
+pulses          VAR     Byte                    ' counter for motor control
+temp            VAR     Byte
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+
+RunStatus       DATA    $00                     ' run status
+
+' -----[ Initialization ]-------------------------------------------------------
+
+Run_Check:                                      ' user Reset button as On-Off
+  READ RunStatus, temp                          ' read current status
+  temp = ~temp                                  ' invert status
+  WRITE RunStatus, temp                         ' save status for next reset
+  IF (temp = 0) THEN Set_Threshold              ' run now?
+  END                                           '   -- no ... next time
+
+' Sets black threshold to 1/4 the average of the two sensor readings.
+' SumoBot must be placed over black playing surface before this code runs.
+
+Set_Threshold:                                  ' set QTI black threshold
+  GOSUB Read_Line_Sensors
+  blackThresh = (leftSense / 8) + (rightSense / 8)
+
+Start_Delay:                                    ' mandatory five second delay
+  FOR temp = 1 TO 5
+    HIGH StartLED                               ' show active
+    PAUSE 900
+    INPUT StartLED                              ' blink each second
+    FREQOUT Speaker, 100, 2500, 3000            ' beep each second
+  NEXT
+
+  GOTO Lunge                                    ' start aggressive!
+
+' -----[ Main Code ]------------------------------------------------------------
+
+Main:
+  GOSUB Read_Line_Sensors
+
+  ' If not on the Shikiri line (border), continue to look for opponent,
+  ' otherwise, spin back toward center and resume search
+
+  BRANCH lineBits, [Search_For_Opponent, Spin_Left, Spin_Right, About_Face]
+
+' --[ Border Avoidance ]--
+
+Spin_Left:                                      ' right sensor was active
+  FOR pulses = 1 TO 20
+    PULSOUT LMotor, LRevFast
+    PULSOUT RMotor, RFwdFast
+    PAUSE 20
+  NEXT
+  lastIr = %00					' clear scan direction
+  GOTO Lunge
+
+Spin_Right:                                     ' left sensor was active
+  FOR pulses = 1 TO 20
+    PULSOUT LMotor, LFwdFast
+    PULSOUT RMotor, RRevFast
+    PAUSE 20
+  NEXT
+  lastIr = %00
+  GOTO Lunge
+
+About_Face:                                     ' both sensors on Shikiri line
+  FOR pulses = 1 TO 10                          ' back up from edge
+    PULSOUT LMotor, LRevFast
+    PULSOUT RMotor, RRevFast
+    PAUSE 20
+  NEXT
+  FOR pulses = 1 TO 30                          ' turn around
+    PULSOUT LMotor, LFwdFast
+    PULSOUT RMotor, RRevFast
+    PAUSE 20
+  NEXT
+  lastIr = %00
+  GOTO Lunge
+
+' --[ IR Processing ]--
+
+Search_For_Opponent:
+  GOSUB Read_IR_Sensors
+
+  ' If opponent is not in view, scan last known direction.  Turn toward
+  ' opponent if seen by one "eye" -- if both, lunge forward
+
+  BRANCH irBits, [Scan, Follow_Right, Follow_Left, Lunge]
+
+Scan:
+  BRANCH lastIR, [Move_Fwd, Scan_Right, Scan_Left]
+
+Move_Fwd:
+  GOSUB Creep_Forward
+  GOTO Main
+
+Scan_Right:                                     ' spin right, slow
+  FOR pulses = 1 TO 5
+    PULSOUT LMotor, LFwdSlow
+    PULSOUT RMotor, RRevSlow
+    PAUSE 20
+  NEXT
+  GOSUB Creep_Forward                           ' keep moving
+  GOTO Main
+
+Scan_Left:                                      ' spin left, slow
+  FOR pulses = 1 TO 5
+    PULSOUT LMotor, LRevSlow
+    PULSOUT RMotor, RFwdSlow
+    PAUSE 20
+  NEXT
+  GOSUB Creep_Forward
+  GOTO Main
+
+Follow_Right:                                   ' spin right, fast
+  PULSOUT LMotor, LFwdFast
+  PULSOUT RMotor, RRevSlow
+  lastIR = irBits                               ' save last direction found
+  GOTO Main
+
+Follow_Left:                                    ' spin left, fast
+  PULSOUT LMotor, LRevSlow
+  PULSOUT RMotor, RFwdFast
+  lastIR = irBits
+  GOTO Main
+
+Lunge:                                          ' locked on -- go get him!
+  FOR pulses = 1 TO 15
+    PULSOUT LMotor, LFwdFast
+    PULSOUT RMotor, RFwdFast
+    GOSUB Read_Line_Sensors
+    IF (lineBits = %11) THEN Match_Over         ' in sight and we're on the line
+  NEXT
+  GOTO Main
+
+' If SumoBot can see the opponent with both "eyes" and both QTIs are
+' detecting the border, we must have pushed the opponent out.
+
+Match_Over:
+  FOR pulses = 1 TO 10                          ' stop motors
+    PULSOUT LMotor, LStop
+    PULSOUT RMotor, RStop
+    PAUSE 20
+  NEXT
+  INPUT LMotor
+  INPUT RMotor
+
+  FOR temp = 1 TO 10                            ' make some noise
+    HIGH StartLED
+    FREQOUT Speaker, 100, 2500, 3000            ' beep
+    INPUT StartLED                              ' blink LED
+    PAUSE 100
+  NEXT
+
+  Dirs = $0000                                  ' disable all outputs
+  GOTO Run_Check                                ' reset for next round
+
+' -----[ Subroutines ]----------------------------------------------------------
+
+Read_Line_Sensors:
+  HIGH LLineSnsPwr                              ' activate sensors
+  HIGH RLineSnsPwr
+  HIGH LLineSnsIn                               ' discharge QTI caps
+  HIGH RLineSnsIn
+  PAUSE 1
+  RCTIME LLineSnsIn, 1, leftSense               ' read left sensor
+  RCTIME RLineSnsIn, 1, rightSense              ' read right sensor
+  LOW LLineSnsPwr                               ' deactivate sensors
+  LOW RLineSnsPwr
+
+  ' convert readings to bits
+  lineBits = %00
+  LOOKDOWN leftSense, >=[blackThresh, 0], lineLeft
+  LOOKDOWN rightSense, >=[blackThresh, 0], lineRight
+  RETURN
+
+Read_IR_Sensors:
+  FREQOUT LfIrOut, 1, 38500                     ' modulate left IR LED
+  irLeft = ~LfIrIn                              ' read input (1 = target)
+  FREQOUT RtIrOut, 1, 38500                     ' modulate right IR LED
+  irRight = ~RtIrIn                             ' read input (1 = target)
+  RETURN
+
+Creep_Forward:
+  FOR pulses = 1 TO 10
+    PULSOUT LMotor, LFwdSlow
+    PULSOUT RMotor, RFwdSlow
+    PAUSE 20
+  NEXT
+  RETURN

@@ -1,0 +1,75 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - ServoControlWithLookup.bs2
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+ServoLeft      PIN     13                    ' Left servo connected to P13
+ServoRight     PIN     12                    ' Right servo connected to P12
+
+' -----[ Constants ]----------------------------------------------------------
+
+' SumoBot maneuver constants
+
+Forward        CON     0                     ' Forward
+Backward       CON     1                     ' Backward
+RotateLeft     CON     2                     ' Rotate in place turning left
+RotateRight    CON     3                     ' Rotate in place turning right
+
+' Servo pulse width rotation constants
+
+FS_CCW         CON     850                   ' Full speed counterclockwise
+FS_CW          CON     650                   ' Full speed clockwise
+NO_ROT         CON     750                   ' No rotation
+
+' -----[ Variables ]----------------------------------------------------------
+
+temp            VAR     Word                 ' Temporary variable
+counter         VAR     Byte                 ' Loop counting variable.
+
+maneuver        VAR     Nib                  ' SumoBot travel maneuver
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+Test_Search_Pattern:
+
+  DO
+
+    FOR counter = 1 TO 35                    ' Forward 35 pulses
+      maneuver = Forward
+      GOSUB Pulse_Servos
+    NEXT
+
+    FOR counter = 1 TO 12                    ' Rotate left 12 pulses
+      maneuver = RotateLeft
+      GOSUB Pulse_Servos
+    NEXT
+
+    FOR counter = 1 TO 24                    ' Rotate right 24 pulses
+      maneuver = RotateRight
+      GOSUB Pulse_Servos
+    NEXT
+
+    FOR counter = 1 TO 12                    ' Rotate Left 12 pulses
+      maneuver = RotateLeft
+      GOSUB Pulse_Servos
+    NEXT
+
+  LOOP
+
+' -----[ Subroutine - Pulse_Servos ]------------------------------------------
+
+Pulse_Servos:
+  ' Pulse to left servo
+  LOOKUP maneuver, [FS_CCW, FS_CW, FS_CW, FS_CCW], temp
+  PULSOUT ServoLeft, temp
+
+  ' Pulse to right servo
+  LOOKUP maneuver, [FS_CW, FS_CCW, FS_CW, FS_CCW], temp
+  PULSOUT ServoRight, temp
+
+  ' Pause between pulses (remove when using IR object detectors + QTIs).
+  PAUSE 20
+  RETURN

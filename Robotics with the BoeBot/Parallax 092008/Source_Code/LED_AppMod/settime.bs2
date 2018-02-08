@@ -1,0 +1,21 @@
+'********************************************************************************************
+'{$STAMP BS2}										TSTAT.bs2
+'												 05/23/00
+'	This program shows how to use the LED Terminal AppMod with the BS2
+'	to use the InKey funtion and set the real-time clock.
+'********************************************************************************************
+
+N19K2	con	32+$8000
+datain	var	byte(5)
+TimeH	var	byte
+TimeM	var	byte
+
+Init:		pause  2500
+		serout 6,N19K2,["!LT0NKYTime",$0,$0]		'Send the prompt
+Start:	serout 6,N19K2,["!LT0NKR"]				'Request the entered values
+		serin  6,N19K2,2000,Start,[STR datain\4]	'Retrieve the entered values
+		if datain(2) = 0 then Start
+		TimeH	= datain(0)*10+datain(1)
+		TimeM	= datain(2)*10+datain(3)
+		serout 6,N19K2,["!LT0RTI",$0,TimeH,TimeM,$0,$0,$0]
+Done:		goto	Done

@@ -1,0 +1,505 @@
+; APP027.SRC - Morse Code Keyer
+;
+; ---------------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller", 2nd Edition by Guenther Daubach
+; Copyright (c) by Parallax Inc. 2004
+; ---------------------------------------------------------------------
+
+include "Setup28.inc"
+reset     Main
+
+TRIS  equ $0f
+LVL   equ $0d
+PLP   equ $0e
+
+Frequ equ 125                   ; Beep frequency
+
+org      $08                    ; Global registers
+Speed    ds 1                   ; Morse code speed
+State    ds 1                   ; ISR Morse handler state
+Flags    ds 1                   ; Flags to control the mainline
+                                ;  program
+Ix       ds 1                   ; Message table index
+Count    ds 1                   ; Storage for "Morse Bitcount"
+Char     ds 1                   ; Storage for Morse character
+
+SendCq   =  Flags.0             ; State flags for mainline program
+SendAr   =  Flags.1
+SendDot  =  Flags.2
+SendDash =  Flags.3
+Tone     =  State.7             ; When this flag is set, a Dot or Dash
+                                ;  is generated instead of a pause,
+                                ;  and the speaker pin RB7 is toggled
+                                ;  so generate a tone (Frequ deter-
+                                ;  mines the tone frequency)
+
+org        $10                  ; Registers used by the ISR
+IsrVars    =  $
+PortBBuff  ds 1                 ; Buffer for Port B data
+Beep       ds 1                 ; Beep timer for speaker output
+Length     ds 1                 ; Determines the length of the
+                                ;  current signal or pause in
+                                ;  multiples of a dot length
+SpeedTimer ds 1                 ; This timer controls the length
+                                ;  of a dot, i.e. the CPS of the
+                                ;  Morse code
+BaseTimer  ds 1                 ; This is the basic timer used to
+                                ;  divide down the ISR call frequency
+
+org        $30                  ; ADC registers
+ADC        =  $
+AdcCount   ds 1                 ; Overflow counter
+AdcAcc     ds 1                 ; Accumulator
+PortCBuff  ds 1                 ; Buffer for Port C data
+
+org    $000
+
+;--------------------------------------------------------------
+ISR ; The Interrupt Service Routine
+;--------------------------------------------------------------
+       
+  ;-------------------------------------------------------
+  ; ADC VP    rc.1 = ADC in, rc.0 = charge/discharge
+  ;-------------------------------------------------------
+        
+  bank    ADC
+  mov     PortCBuff, rc
+  and     PortCBuff, #%11111100 ; Mask ADC pins
+  mov     w, >>rc
+  not     w
+  and     w, #%00000011
+  or      PortCBuff, w
+  sb      PortCBuff.0
+    incsz AdcAcc
+  inc     AdcAcc
+  dec     AdcAcc
+  mov     w, AdcAcc
+  inc     AdcCount
+  snz
+    call  PotAdjust             ; Transform ADC value (0...255)
+                                ;  into 32...160
+  snz
+    mov   Speed, w              ; Save the transformed value
+  snz
+    clr   AdcAcc
+  mov     rc, PortCBuff         ; Set the ADC pins
+  page    ISR                   ; Reset the page (changed
+                                ;  by PotAdjust)
+  ;-------------------------------------------------------
+  ; Morse code handler
+  ;-------------------------------------------------------
+       
+  bank    IsrVars
+
+  ; If a button is down, set the associated flag for the
+  ; mainline program.
+  ;
+  sb      rb.0                  ; Dot line
+    setb  SendDot
+  sb      rb.1                  ; Dash line
+    setb  SendDash
+  sb      rb.2                  ; CQ button
+    setb  SendCq
+  sb      rb.3                  ; AR button
+    setb  SendAr
+
+; Morse timer states
+;
+Idle      = 0
+Pause1    = 1
+Pause3    = 2
+Pause5    = 3
+Dot       = 4
+Dash      = 5
+Delay     = 6
+DelayS    = Delay | $80
+
+  mov     w, State              ; Get the current state
+  and     w, #%01111111         ;  and ignore bit 7
+  jmp     pc+w
+  jmp     :ExitIsr
+  jmp     :InitPause1
+  jmp     :InitPause3
+  jmp     :InitPause5
+  jmp     :InitDot
+  jmp     :InitDash
+  jmp     :Delay
+
+:InitPause1                     ; Init for 1 dot-length pause
+  mov     Length, #1
+  jmp     :EndInitP
+       
+:InitPause3
+  mov     Length, #2            ; Init for 3 dots-lengths pause.
+                                ;  As a one dot-length pause is
+                                ;  automatically appended  to each
+                                ;  dot and dash, the actual pause
+                                ;  length is 2 dots here.
+  jmp     :EndInitP
+
+:InitPause5
+  mov     Length, #4            ; Init for a 5 dots-lengths pause,
+                                ;  (see above).
+:EndInitP
+  mov     SpeedTimer, Speed     ; Initialize the speed timer
+  mov     State, #Delay         ; Set next state
+  jmp     :ExitIsr
+       
+:InitDot
+  mov     Length, #1            ; Setup for a dot
+  jmp     :EndInitD
+       
+:InitDash
+  mov     Length, #3            ; Setup for a dash (3 dots-lengths)
+       
+:EndInitD
+  mov     SpeedTimer, Speed     ; Initialize the speed timer
+  mov     State, #DelayS        ; Set next state
+  jmp     :ExitIsr
+       
+:Delay  ; Cause a delay
+  decsz   BaseTimer             ; Decrement the base timer
+    jmp   :EndDelay
+  decsz   SpeedTimer            ; Decrement the speed timer
+    jmp   :EndDelay
+  mov     SpeedTimer, Speed     ; Re-initialize the speed timer
+  decsz   Length                ; Decrement the length counter
+    jmp   :EndDelay
+  sb      Tone                  ; If a dot or dash is finished,
+    jmp   :EndPause
+  mov     State, #Pause1        ;  automatically add a 1 dot-length
+  jmp     :EndDelay             ;  pause
+
+:EndPause
+  mov     State, #Idle          ; When a pause has been finished, idle
+
+:EndDelay
+  clrb    PortBBuff.6           ; Prepare the LED bit
+  sb      Tone                  ; When the Tone flag is clear,
+    jmp   :ExitIsr              ;  no LED and no sound, else
+  setb    PortBBuff.6           ;  turn LED on and
+  decsz   Beep                  ;  decrement the Beep timer
+    jmp   :ExitIsr              ; 
+  xor     PortBBuff, #$80       ; Toggle the beeper pin
+  mov     Beep, #Frequ          ; Re-initialize the Beep timer
+
+:ExitIsr
+  mov     rb, PortBBuff         ; Set the port pins
+  mov     w, #-200              ; Call the ISR every 4 us
+  retiw
+
+;--------------------------------------------------------------
+; This routine reads the value indexed by w from Table.
+; The table is used to transform the ADC values from 0 to 255 
+; into a range from 32 to 160, and to provide a better pot
+; resolution for higher speed values.
+;--------------------------------------------------------------
+PotAdjust
+  page    Table
+  jmp     w
+
+org       $100
+
+;--------------------------------------------------------------
+; The mainline program
+;--------------------------------------------------------------
+
+Main
+  ; Initialize the ports
+  ;
+  mode PLP
+  mov  !rb, #%11110000          ; Enable pull-ups on port B inputs
+  mode    LVL                   ; Set cmos input levels
+  mov     !rc,#0                ;  on port C inputs
+  mode    TRIS                  ; Setup inputs/outputs
+  clr     rc
+  mov     !rc,#%11111110        ; rc.1 = ADC in
+                                ; rc.0 = charge/discharge
+  clr     rb
+  mov     !rb, #%00111111       ; rb.7: beeper output,
+                                ; rb.6: LED output
+  
+  clr     PortBBuff             ; Clear some registers
+  clr     Flags
+  clr     State
+
+  mov     !option, #%10011111   ; Enable RTCC interrupt
+
+; The bits in Flags are used to control the states of the main
+; loop.
+
+:MainLoop
+  snb     SendDot               ; When the dot contact is closed, go
+    jmp   :SendDot              ;  and send a dot (highest priority)
+  snb     SendDash              ; When the dash contact is closed,
+    jmp   :SendDash             ;  go and send a dash
+    
+  test    Flags                 ; If no flags are set at all, we are
+  snz                           ;  idle
+    jmp   :MainLoop
+    
+  mov     w, #ArTab             ; Prepare the address to send the
+                                ;  "+ pse k" message
+  sb      SendAr                ; If not SendAr, prepare the address
+  mov     w, #CqTab             ;  to send the "cq cq cq de..."
+                                ;  message
+  mov     Ix, w                 ; Setup the message pointer
+  snb     SendAR                ; If the user has pushed the AR 
+                                ; button, while sending the "cq cq..."
+                                ;  message, stop the CQ message after
+    clrb  SendCQ                ;  it is completed.
+
+:Loop
+  mov     w, Flags              ; Get the flags
+  and     w, #%00001100         ; Mask the SendAr and SendCq flags
+  sz                            ; If no flags are set,
+    jmp   :MainLoop             ;  don't send a message
+  snb     SendCQ                ; While sending the "cq..." message,
+    jmp   :NoDebounce           ;  AR button pushes are accepted.
+  snb     SendAr                ; While sending the "+ pse k" message,
+    clr   Flags                 ;  no more AR button pushes are
+                                ;  accepted.
+:NoDebounce
+  mov     m, #CqTab >> 8        ; Setup m:w for iread
+  mov     w, Ix
+  iread                         ; Read the table item indexed by Ix
+  mov     Char, w               ; Save the dash/dot pattern
+  mov     Count, m              ; Save the dash/dot count
+  test    Count                 ; When Count = 0, we have either a
+  snz                           ;  pause, or an end of table. We    
+    jmp   :TestEnd              ;  go to :TestEnd to find out.
+
+:Next                           ; Output a Morse character
+  rl      Char                  ; Next bit -> c
+  mov     w, #Dash              ; Prepare for a dash
+  sc                            ; If c is set, it is a dash,
+    mov   w, #Dot               ;  else a dot
+  mov     State, w              ; Setup the state
+
+:Send
+  test    State                 ; Wait until the ISR has sent the
+  sz                            ;  dash or dot
+    jmp   :Send
+  dec     Count                 ; Decrement the dash/dot count
+  sz                            ; If there are more dashes/dots to be
+    jmp   :Next                 ;  sent, loop back
+  mov     State, #Pause3        ; Generate a 3 dots-length pause
+
+:Pause
+  test    State                 ; Wait until the ISR has generated
+  sz                            ;  the pause
+    jmp   :Pause
+
+  inc     Ix                    ; Next character in the message table
+  jmp     :Loop
+
+:TestEnd                        ; When a table item has a Count of 0,
+  test    Char                  ;  it is either a Pause5 (Char != 0),
+  snz                           ;  or the end of the table (Char == 0)
+    jmp   :MainLoop
+  mov     State, #Pause5        ; Setup state for Pause5
+  jmp     :Pause                ; Go and wait until the pause is done
+
+:SendDot
+  mov     State, #Dot           ; Send a dot when the user has pressed
+  jmp     :WaitSend             ;  the dot button
+
+:SendDash
+  mov     State, #Dash          ; Send a dash when the use has pressed
+                                ;  the dash button
+:WaitSend                       ; Wait until the ISR has sent the
+  test State                    ;  dash or the dot
+  sz
+    jmp   :WaitSend
+  clr     Flags                 ; Clear the flags in order to stop
+  jmp     :MainLoop             ;  any message being currently sent.
+
+org       $200
+       
+; The message tables
+;
+; The first four bits in each item specify the number of
+; dashes and dots. The next eight bits specify from "left
+; to right" the dashes (1) and dots (0).
+;
+; A value of $001 specifies a 5 dot-lengths pause, and 
+; a value of $000 specifies the end of a message.
+;
+CqTab
+  dw      $001  ; Pause 5
+  dw      $400 + %10100000  ; C
+  dw      $400 + %11010000  ; Q
+  dw      $001  ; Pause 5
+  dw      $400 + %10100000  ; C
+  dw      $400 + %11010000  ; Q
+  dw      $001  ; Pause 5
+  dw      $400 + %10100000  ; C
+  dw      $400 + %11010000  ; Q
+  dw      $001  ; Pause 5
+  dw      $300 + %10000000  ; D
+  dw      $100 + %00000000  ; E
+  dw      $001  ; Pause 5
+  dw      $300 + %10000000  ; D
+  dw      $300 + %10100000  ; K
+  dw      $500 + %00001000  ; 4
+  dw      $100 + %10000000  ; T
+  dw      $100 + %10000000  ; T
+  dw      $001  ; Pause 5
+  dw      $300 + %10000000  ; D
+  dw      $300 + %10100000  ; K
+  dw      $500 + %00001000  ; 4
+  dw      $100 + %10000000  ; T
+  dw      $100 + %10000000  ; T
+  dw      $001  ; Pause 5
+  dw      $300 + %10000000  ; D
+  dw      $300 + %10100000  ; K
+  dw      $500 + %00001000  ; 4
+  dw      $100 + %10000000  ; T
+  dw      $100 + %10000000  ; T
+  dw      $001  ; Pause 5
+  dw      $000  ; End
+ArTab
+  dw      $001  ; Pause 5
+  dw      $500 + %01010000  ; AR
+  dw      $001  ; Pause 5
+  dw      $400 + %01100000  ; P
+  dw      $300 + %00000000  ; S
+  dw      $100 + %00000000  ; E
+  dw      $001  ; Pause 5
+  dw      $300 + %10100000  ; K
+  dw      $000  ; End
+
+org       $400
+Table
+          retw  32, 32, 32, 32
+          retw  33, 33, 33, 33
+          retw  34, 34, 34, 34
+          retw  35, 35, 35, 35
+          retw  36, 36, 36, 36
+          retw  37, 37, 37, 37
+          retw  38, 38, 38
+          retw  39, 39, 39
+          retw  40, 40, 40
+          retw  41, 41, 41
+          retw  42, 42, 42
+          retw  43, 43, 43
+          retw  44, 44, 44
+          retw  45, 45, 45
+          retw  46, 46, 46
+          retw  47, 47, 47
+          retw  48, 48, 48
+          retw  49, 49, 49
+          retw  50, 50
+          retw  51, 51
+          retw  52, 52
+          retw  53, 53
+          retw  54, 54
+          retw  55, 55
+          retw  56, 56
+          retw  57, 57
+          retw  58, 58
+          retw  59, 59
+          retw  60, 60
+          retw  61, 61
+          retw  62, 62
+          retw  63, 63
+          retw  64, 64
+          retw  65, 65
+          retw  66, 66
+          retw  67, 67
+          retw  68, 68
+          retw  69, 69
+          retw  70, 70
+          retw  71, 71
+          retw  72, 72
+          retw  73, 73
+          retw  74, 74
+          retw  75, 75
+          retw  76, 76
+          retw  77, 77
+          retw  78, 78
+          retw  79, 79
+          retw  80, 80
+          retw  81, 81
+          retw  82, 82
+          retw  83, 83
+          retw  84, 84
+          retw  85, 85
+          retw  86, 86
+          retw  87, 87
+          retw  88, 88
+          retw  89, 89
+          retw  90, 90
+          retw  91, 91
+          retw  92, 92
+          retw  93, 93
+          retw  94, 94
+          retw  95, 95
+          retw  96
+          retw  97, 97
+          retw  98, 98
+          retw  99, 99
+          retw 100, 100
+          retw 101, 101
+          retw 102, 102
+          retw 103, 103
+          retw 104, 104
+          retw 105, 105
+          retw 106, 106
+          retw 107, 107
+          retw 108, 108
+          retw 109, 109
+          retw 110, 110
+          retw 111, 111
+          retw 112, 112
+          retw 113, 113
+          retw 114, 114
+          retw 115, 115
+          retw 116, 116
+          retw 117, 117
+          retw 118, 118
+          retw 119, 119
+          retw 120, 120
+          retw 121, 121
+          retw 122, 122
+          retw 123, 123
+          retw 124, 124
+          retw 125, 125
+          retw 126, 126
+          retw 127, 127
+          retw 128, 128
+          retw 129, 129
+          retw 130, 130
+          retw 131, 131
+          retw 132, 132
+          retw 133, 133
+          retw 134, 134
+          retw 135, 135
+          retw 136
+          retw 137
+          retw 138
+          retw 139
+          retw 140
+          retw 141
+          retw 142
+          retw 143
+          retw 144
+          retw 145
+          retw 146
+          retw 147
+          retw 148
+          retw 149
+          retw 150
+          retw 151
+          retw 152
+          retw 153
+          retw 154
+          retw 155
+          retw 156
+          retw 157
+          retw 158
+          retw 159
+          retw 160
+
+END

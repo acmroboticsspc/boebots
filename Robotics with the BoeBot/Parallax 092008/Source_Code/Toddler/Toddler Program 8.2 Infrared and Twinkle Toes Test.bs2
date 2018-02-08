@@ -1,0 +1,97 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 8.2 Infrared and Twinkle Toes Test.bs2
+' This program tests infrared sensors and twinkle toes bumpers together
+' {$STAMP BS2}
+' {$PBASIC 2.5} 
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+TiltServo       PIN     13              ' tilt servo on X7                      
+StrideServo     PIN     12              ' stride servo on X6                    
+                                                                               
+LeftIRLED       PIN     4               ' left IRLED                            
+RightIRLED      PIN     15              ' right IRLED                           
+LeftIR_Sensor   PIN     11              ' left IR sensor input                          
+RightIR_Sensor  PIN     14              ' right IR sensor input
+
+LeftBumper      PIN     2
+RightBumper     PIN     1
+
+Spkr            PIN     8               ' beeper pin                            
+                                                                             
+' -----[ Constants ]-------------------------------------------------------
+
+MoveDelay       CON     17              ' to make up 20 ms servo loop
+CenterTilt      CON     750
+CenterStride    CON     750
+
+prepBumper      CON     %1001
+bothLEDsOff     CON     %1001
+
+' -----[ Variables ]-------------------------------------------------------
+
+Counter         VAR     Nib
+Temp            VAR     Bit
+
+' -----[ Initialize ]------------------------------------------------------
+
+ResetFeet:
+
+  FOR Counter = 1 TO 15                 ' center feet for .3 sec                
+    GOSUB Move_It                       ' currentMove is only a nibble.
+    PAUSE MoveDelay                     ' make up 20 ms servo refresh time
+    NEXT                                
+
+Test_Speaker:
+  FREQOUT Spkr, 2000, 3000              ' program start/restart signal.
+
+
+' -----[ Main Code ]-------------------------------------------------------
+
+Main_Program:
+
+  DO
+
+    FREQOUT LeftIRLED,1,38500           ' pulse left IRLED.
+    IF (LeftIR_Sensor = 0) THEN         ' check for IR hit on left
+      DEBUG "  IR left   "
+    ELSE 
+      DEBUG "            "
+    ENDIF
+
+    FREQOUT RightIRLED,1,38500          ' repeat for the right IR pair.
+
+    IF (RightIR_Sensor = 0) THEN        ' check for IR hit on right
+      DEBUG "  IR Right  "
+    ELSE 
+      DEBUG "            "
+    ENDIF
+
+    FREQOUT RightIRLED,1,38500          ' repeat for the right IR pair.
+
+Do_Bumpers:
+    DIRS = prepBumper
+    OUTS = bothLEDsOff
+
+    IF (LeftBumper = 0) THEN            ' check for bumper hit on left
+      DEBUG " bump left  "
+    ELSE 
+      DEBUG "            "
+    ENDIF
+
+    IF (RightBumper = 0) THEN           ' check for bumper hit on right
+      DEBUG " bump Right ", CR
+    ELSE 
+      DEBUG "            ", CR
+    ENDIF
+
+  LOOP
+
+END
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Move_It:
+  PULSOUT TiltServo,   CenterTilt   
+  PULSOUT StrideServo, CenterStride 
+  RETURN 

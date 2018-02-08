@@ -1,0 +1,120 @@
+' -----[ Title ]----------------------------------------------------------------
+' Mini Sumo 3.3 : Simple Mini Sumo (blind)
+' {$STAMP BS2}
+
+' -----[ I/O Definitions ]------------------------------------------------------
+
+LMotor          CON     13                      ' left servo motor
+RMotor          CON     12                      ' right servo motor
+
+LLineSnsrPwr    CON     10                      ' left line sensor power
+LLineSnsrIn     CON      9                      ' left line sensor input
+RLineSnsrPwr    CON      7                      ' right line sensor power
+RLineSnsrIn     CON      8                      ' right line sensor input
+
+StartLED        CON      0                      ' display start delay
+
+' -----[ Constants ]------------------------------------------------------------
+
+LFwdFast        CON     1000                    ' left motor forward; fast
+LFwdSlow        CON      800                    ' left motor forward; slow
+LStop           CON      750                    ' left motor stop
+LRevSlow        CON      700                    ' left motor reverse; slow
+LRevFast        CON      500                    ' left motor reverse; fast
+
+RFwdFast        CON      500                    ' right motor forward; fast
+RFwdSlow        CON      700                    ' right motor forward; slow
+RStop           CON      750                    ' right motor stop
+RRevSlow        CON      800                    ' right motor reverse; slow
+RRevFast        CON     1000                    ' right motor reverse; fast
+
+ClrEOL          CON     11                      ' clear to end of line (DEBUG)
+
+' -----[ Variables ]------------------------------------------------------------
+
+leftSense       VAR     Word                    ' left sensor raw reading
+rightSense      VAR     Word                    ' right sensor raw reading
+lineBits        VAR     Nib                     ' decoded sensors value
+lineLeft        VAR     lineBits.Bit1
+lineRight       VAR     lineBits.Bit0
+
+pulses          VAR     Byte                    ' counter for motor control
+temp            VAR     Byte
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+
+RunStatus       DATA    $00                     ' run status
+
+' -----[ Initialization ]-------------------------------------------------------
+
+Run_Check:                                      ' user Reset button as On-Off
+  READ RunStatus, temp                          ' read current status
+  temp = ~temp                                  ' invert status
+  WRITE RunStatus, temp                         ' save status for next reset
+  IF (temp = 0) THEN Start_Delay                ' run now?
+  END                                           '   -- no ... next time
+
+Start_Delay:                                    ' mandatory five second delay
+  HIGH StartLED                                 ' show active
+  PAUSE 5000
+  INPUT StartLED                                ' LED off
+
+' -----[ Main Code ]------------------------------------------------------------
+
+Main:
+  GOSUB Read_Line_Sensors
+
+  ' sumo movement
+  BRANCH lineBits, [Go_Fwd, Spin_Left, Spin_Right, About_Face]
+
+Go_Fwd:
+  PULSOUT LMotor, LFwdFast
+  PULSOUT RMotor, RFwdFast
+  GOTO Main
+
+Spin_Left:
+  FOR pulses = 1 TO 20
+    PULSOUT LMotor, LRevFast
+    PULSOUT RMotor, RFwdFast
+    PAUSE 20
+  NEXT
+  GOTO Main
+
+Spin_Right:
+  FOR pulses = 1 TO 20
+    PULSOUT LMotor, LFwdFast
+    PULSOUT RMotor, RRevFast
+    PAUSE 20
+  NEXT
+  GOTO Main
+
+About_Face:
+  FOR pulses = 1 TO 10                          ' back up from edge
+    PULSOUT LMotor, LRevFast
+    PULSOUT RMotor, RRevFast
+    PAUSE 20
+  NEXT
+  FOR pulses = 1 TO 30                          ' turn around
+    PULSOUT LMotor, LFwdFast
+    PULSOUT RMotor, RRevFast
+    PAUSE 20
+  NEXT
+  GOTO Main
+
+' -----[ Subroutines ]----------------------------------------------------------
+
+Read_Line_Sensors:
+  HIGH LLineSnsrPwr                             ' activate sensors
+  HIGH RLineSnsrPwr
+  HIGH LLineSnsrIn                              ' discharge caps
+  HIGH RLineSnsrIn
+  PAUSE 1
+  RCTIME LLineSnsrIn, 1, leftSense              ' read left sensor
+  RCTIME RLineSnsrIn, 1, rightSense             ' read right sensor
+  LOW LLineSnsrPwr                              ' deactivate sensors
+  LOW RLineSnsrPwr
+
+  ' convert readings to bits
+  LOOKDOWN leftSense, >=[1000, 0], lineLeft     ' 0 = on black, 1 = on line
+  LOOKDOWN rightSense, >=[1000, 0], lineRight
+  RETURN

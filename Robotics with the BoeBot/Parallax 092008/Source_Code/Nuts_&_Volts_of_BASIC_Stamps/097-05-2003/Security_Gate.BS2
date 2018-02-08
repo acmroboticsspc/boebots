@@ -1,0 +1,393 @@
+' =========================================================================
+'
+'   File...... Security_Gate.BS2
+'   Purpose... Security gate entry controller and message display
+'   Author.... Jon Williams, Parallax
+'   E-mail.... jwilliams@parallax.com
+'   Started... 
+'   Updated... 22 MAR 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Provides entry control for a security gate or similar security system.
+' The purpose of the program is to demonstrate keyboard input using the
+' 74C922 and the conservation of Stamp IO resources by sharing buss lines
+' with an LCD (hardware design by Scott Edwards).
+'
+' The (Velleman) keyboard used for this program is layed out like this:
+'
+'  --- --- --- ---
+' | 1 | 2 | 3 | A |  R1
+'  --- --- --- ---
+' | 4 | 5 | 6 | B |  R2
+'  --- --- --- ---
+' | 7 | 8 | 9 | C |  R3
+'  --- --- --- ---
+' | * | 0 | # | D |  R4
+'  --- --- --- ---
+'
+'   C   C   C   C
+'   1   2   3   4
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+LcdE            PIN     0                       ' LCD Enable pin
+LcdRs           PIN     3                       ' Register Select
+LcdBuss         VAR     OutB                    ' 4-bit LCD data bus
+
+KeyReady        PIN     3                       ' high when key available
+KeyPad          VAR     InB                     ' keys on pins 4 - 7
+
+GateCtrl	PIN	15			' use LED to indicate
+
+
+' -----[ Conditional Compilation ]-----------------------------------------
+
+#DEFINE __LCD = 1				' use LCD (otherwise DEBUG)
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+Yes             CON     1                       ' input or output high
+No              CON     0                       ' input or output low
+
+KeyCfg          CON     %00000111               ' keyboard port config
+
+KeyDelay        CON     250                     ' auto-repeat delay
+StarKey         CON     14                      ' [*] key
+PoundKey        CON     15                      ' [#] key
+
+ClrLCD          CON     $01                     ' clear the LCD
+CrsrHm          CON     $02                     ' move cursor to home
+DDRam           CON     $80                     ' Display Data RAM control
+CGRam           CON     $40                     ' Custom character RAM
+Line0           CON     DDRam + 0               ' DDRAM address of line 1
+Line1           CON     DDRam + 64              ' DDRAM address of line 2
+Line2           CON     DDRam + 20              ' DDRAM address of line 3
+Line3           CON     DDRam + 84              ' DDRAM address of line 4
+
+LcdCfg          CON     %11111001               ' LCD port config
+
+MsgPause        CON     1500                    ' delay for message display
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+keyIn           VAR     Byte                    ' returned by Get_Key
+showNum         VAR     Bit                     ' show number keys?
+showExt         VAR     Bit                     ' show extended keys?
+release         VAR     Bit                     ' force key release
+
+number          VAR     Word                    ' returned by Get_Number
+hasNum          VAR     Bit                     ' was number accepted?
+inDigits        VAR     Nib                     ' input digits
+maxDigits       VAR     Nib                     ' max digits to enter
+
+char            VAR     Byte                    ' ASCII char to display
+eeAddr		VAR	Word			' address of char in EE
+
+lineNum		VAR	Nib			' display line; 0 to 3
+colNum		VAR	Byte			' column; 0 to 19
+
+records         VAR     Byte                    ' number of user records
+pcode           VAR     Word                    ' passcode from db
+msgNum          VAR     Nib                     ' message to display
+idx             VAR     Byte                    ' general purpose var
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+Menu1           DATA    "JONNY'S STORAGE", 0
+Menu2           DATA    "1. Press *", 0
+Menu3           DATA    "2. Enter passcode", 0
+Menu4           DATA    "3. Press #", 0
+
+EnterPC         DATA    "Passcode: ", 0
+WaitPlease      DATA    "Please wait...      ", 0
+
+Msg0            DATA    "Invalid passcode    ", 0
+Msg1            DATA    "Access granted      ", 0
+Msg2            DATA    "Access denied       ", 0
+Msg3            DATA    "Please see manager  ", 0
+
+' Keep customer database after messages to allow for growth
+' via external serial interface (not included here)
+' 
+' Each record consists of the passcode and display message pointer
+
+Customers       DATA    3                       ' number of customers
+Passcodes       DATA    Word 1234, 1            ' customer passcodes, msgs
+                DATA    Word 0725, 1
+                DATA    Word 0319, 2              
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Initialize:
+#IF __LCD #THEN
+  PAUSE 500                                     ' let the LCD settle
+  DirL = LcdCfg
+  LcdBuss = %0011			        ' 8-bit mode 
+  PULSOUT LcdE, 1 : PAUSE 5
+  PULSOUT LcdE, 1 : PAUSE 0
+  PULSOUT LcdE, 1 : PAUSE 0
+  LcdBuss = %0010                               ' 4-bit mode
+  PULSOUT LcdE, 1
+  char = %00101000                              ' 2-line mode
+  GOSUB LCD_Command
+  char = %00001100                              ' no crsr, no blink
+  GOSUB LCD_Command
+  char = %00000110                              ' inc crsr, no disp shift
+  GOSUB LCD_Command
+#ENDIF
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO 
+    GOSUB Show_Menu
+    DO 
+      GOSUB Get_Key 
+    LOOP UNTIL (keyIn = StarKey)                ' wait for [*]
+    GOSUB Get_Passcode                          ' get code from customer
+    IF (hasNum = Yes) THEN                      ' code entered?
+      GOSUB Check_Passcode                      ' check database
+      GOSUB Print_Customer_Message              ' print message
+      PAUSE MsgPause                            ' time for message
+      IF (msgNum = 1) THEN                      ' valid code?
+        GOSUB Access_Granded
+      ELSE
+        IF (msgNum = 2) THEN                    ' two-part message?
+          msgNum = 3
+          GOSUB Print_Customer_Message          ' print second part
+          PAUSE MsgPause
+        ENDIF
+      ENDIF
+    ENDIF
+  LOOP
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' Display menu strings stored in DATA table
+
+Show_Menu:
+  GOSUB Clear_Display
+  colNum = 0
+  FOR lineNum = 0 TO 3
+    LOOKUP lineNum, [Menu1, Menu2, Menu3, Menu4], eeAddr
+    GOSUB Move_To_XY
+    GOSUB Print_String
+  NEXT
+  RETURN
+
+
+' Get passcode from customer -- user numeric input
+
+Get_Passcode:
+  GOSUB Clear_Display
+  eeAddr = Menu1                                ' reprint company name
+  GOSUB Print_String
+  lineNum = 3 : colNum = 0
+  GOSUB Move_To_XY
+  eeAddr = EnterPC                              ' print entry prompt
+  GOSUB Print_String
+  maxDigits = 4
+  GOSUB Get_Number                              ' enter passcode
+  RETURN
+
+
+' Compare user-entered passcode against database
+
+Check_Passcode:                                 ' check for valid pc
+  lineNum = 3 : colNum = 0                      ' wait msg on line 3
+  GOSUB Move_To_XY
+  eeAddr = WaitPlease
+  GOSUB Print_String
+  msgNum = 0                                    ' default to "Invalid"
+  READ Customers, records                       ' get number of customers
+  FOR idx = 0 TO (records - 1)                  ' loop through all
+    eeAddr = Passcodes + (3 * idx)              ' point to passcode
+    READ eeAddr, Word pCode                     ' read it
+    IF (number = pCode) THEN                    ' same as entry?
+      eeAddr = eeAddr + 2                       ' - point to message num
+      READ eeAddr, msgNum                       ' - read message num
+      EXIT                                      ' - break out of loop
+    ENDIF
+  NEXT
+  RETURN
+
+
+' Print message in msgNum on Line 3
+
+Print_Customer_Message:
+  lineNum = 3 : colNum = 0
+  GOSUB Move_To_XY
+  LOOKUP msgNum, [Msg0, Msg1, Msg2, Msg3], eeAddr
+  GOSUB Print_String
+  RETURN
+
+
+' Allow access to facility
+
+Access_Granded:
+  HIGH GateCtrl                                 ' - raise gate
+  PAUSE 2500
+  LOW GateCtrl
+  RETURN
+
+
+' Wait for key to be pressed, then return its value to caller
+' -- can translate and display ASCII char of key
+' -- can force user to release or use timed debounce
+
+Get_Key:
+  DirL = DirL & KeyCfg   			' configure for kbd inputs
+  DO : LOOP UNTIL (KeyReady = Yes)              ' wait for key
+  keyIn = KeyPad                                ' retrieve key value
+
+  LOOKUP keyIn, [  1,  2,  3, 10,
+                   4,  5,  6, 11,
+                   7,  8,  9, 12,
+                  14,  0, 15, 13  ], keyIn      ' translate kbd matrix
+
+  LOOKUP keyIn, ["0123456789ABCD*#"], char      ' translate key to ASCII
+  IF (showNum AND (keyIn < 10)) THEN            ' show numbers?
+    GOSUB Print_Char
+  ENDIF
+  IF (showExt AND (keyIn > 9)) THEN             ' show extended chars?
+    GOSUB Print_Char
+  ENDIF
+  IF (release = Yes) THEN                       ' force release?
+    DO
+      PAUSE 5                                   ' short debounce
+    LOOP WHILE (KeyReady = Yes)                 ' wait for release
+  ELSE
+    PAUSE KeyDelay                              ' delay between keys
+  ENDIF
+  RETURN
+
+
+' Get a number of 1 to 5 digits 
+' -- character display is handled here
+' -- [*] terminates input without accepting value
+' -- [#] terminates input and accepts value
+'
+' NOTE: No error checking for 5-digit numbers greater than 65535
+
+Get_Number:
+  number = 0                                    ' clear work variable
+  inDigits = 0                                  ' digits entered
+  hasNum = No                                   ' nothing entered yet
+  showNum = No                                  ' control display here
+  showExt = No
+  DO
+    GOSUB Get_Key                               ' wait for new key
+    IF (keyIn < 10) THEN                        ' number key?
+      IF (inDigits < maxDigits) THEN            ' room for entry?
+        GOSUB Print_Char                        ' - show the key  
+        number = number * 10 + keyIn            ' - add key to number
+        inDigits = inDigits + 1                 ' - update digit count
+        hasNum = Yes                            ' - mark entry
+      ENDIF
+    ELSE
+      IF (keyIn = StarKey) THEN                 ' [*] = escape
+        hasNum = No
+        EXIT
+      ENDIF
+    ENDIF
+  LOOP UNTIL (keyIn = PoundKey)                 ' wait for [#]
+  RETURN
+
+
+' Print string on display device at current position
+' -- point to string by placing address in eeAddr
+
+Print_String:
+  DO
+    READ eeAddr, char                           ' get character from EE
+    IF (char = 0) THEN EXIT                     ' check end
+    GOSUB Print_Char                            ' print it
+    eeAddr = eeAddr + 1                         ' point to next
+  LOOP
+  RETURN
+
+
+' Print character in char at current display position
+
+Print_Char:
+  #IF __LCD #THEN
+    GOTO LCD_Write
+  #ELSE
+    DEBUG char
+    RETURN
+  #ENDIF
+  
+
+' Clear the display (moves cursor Home)
+
+Clear_Display:
+  #IF __LCD #THEN
+    char = ClrLCD
+    GOTO LCD_Command 
+  #ELSE
+    DEBUG CLS
+    RETURN
+  #ENDIF
+
+
+' Move display cursor to column 0 on line 0
+
+Home_Cursor:
+  #IF __LCD #THEN
+    char = CrsrHm
+    GOTO LCD_Command
+  #ELSE
+    DEBUG Home
+    RETURN
+  #ENDIF
+
+
+' Move display cursor to lineNum, colNum
+
+Move_To_XY:
+  #IF __LCD #THEN
+    LOOKUP lineNum, [Line0, Line1, Line2, Line3], char
+    char = char + (colNum // 20)
+    GOTO LCD_Command
+  #ELSE
+    DEBUG CrsrXY, colNum, lineNum
+    RETURN
+  #ENDIF
+
+
+' LCD output routines
+
+#IF __LCD #THEN
+
+LCD_Command:
+  LOW LcdRs                                     ' enter command mode
+
+LCD_Write:
+  DirL = DirL | LcdCfg                          ' make LCD buss outputs
+  LcdBuss = char.HighNib                        ' output high nibble
+  PULSOUT LcdE, 1                               ' strobe the Enable line
+  LcdBuss = char.LowNib                         ' output low nibble
+  PULSOUT LcdE, 1
+  HIGH LcdRs                                    ' back to character mode
+  RETURN
+
+#ENDIF 

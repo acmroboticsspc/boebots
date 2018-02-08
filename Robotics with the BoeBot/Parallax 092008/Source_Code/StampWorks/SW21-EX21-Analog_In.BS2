@@ -1,0 +1,73 @@
+' =========================================================================
+'
+'   File....... SW21-EX21-Analog_In.BS2
+'   Purpose.... Analog Input using PULSIN
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program "reads" an analog value by using that component to control
+' the output frequency of a 555-based oscillator.  PULSIN is used to
+' measure the high portion of the signal as it is controlled by the
+' variable resistance.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+PulseInput      PIN     15                      ' pulse in from 555
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+#SELECT $STAMP
+  #CASE BS2, BS2E, BS2PE
+    Scale       CON     $200                    ' 2.0 us per unit
+  #CASE BS2SX, BS2P, BS2PX
+    Scale       CON     $0CC                    ' 0.8 us per unit
+#ENDSELECT
+
+P90             CON     $E666                   ' 0.90
+P75             CON     $C000                   ' 0.75
+P50             CON     $8000                   ' 0.50
+P25             CON     $4000                   ' 0.25
+P10             CON     $1999                   ' 0.10
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+rValue          VAR     Word                    ' raw value
+sValue          VAR     Word                    ' smoothed value
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  DEBUG CLS,
+        "Analog Input ", CR,
+        "------------ ", CR,
+        "Raw value... ", CR,
+        "Filtered.... "
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    PULSIN PulseInput, 1, rValue                ' get high portion of input
+    rValue = rValue */ Scale                    ' convert to microseconds
+    sValue = (rValue ** P50) + (sValue ** P50)  ' apply digital filter
+
+    DEBUG CRSRXY, 13, 2, DEC rValue, CLREOL,    ' print results
+          CRSRXY, 13, 3, DEC sValue, CLREOL
+
+    PAUSE 50
+  LOOP

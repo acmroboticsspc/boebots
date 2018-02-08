@@ -1,0 +1,12 @@
+'{$STAMP BS2p}
+
+serstring VAR byte(3)
+
+loop: DEBUG CLS,"D: Waiting for 3 chars from Debug Window..."
+	' SERIN 16, 84,[STR serstring\3] ' for BS2
+	SERIN 16, 240,[STR serstring\3] ' for BS2p
+      DEBUG CR,"D: String = ",STR  serstring, CR, CR
+      ' SEROUT 16, 84,["Reflected characters: ",STR serstring\3] ' for BS2
+      SEROUT 16, 240,["Reflected characters: ",STR serstring\3] ' for BS2p
+L1:	IF IN11 <> 0 THEN L1 ' press red key on activity board to proceed
+	GOTO loop

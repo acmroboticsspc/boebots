@@ -1,0 +1,188 @@
+' ==============================================================================
+'
+'   File...... StampToPC.BS2
+'   Purpose... Serial Comm with PC using Flow Control
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallaxinc.com
+'   Started... 01 AUG 2002
+'   Updated... 02 AUG 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+
+' This program (and its companion VB program) demonstrate serial communications
+' with a PC using a MAX232 level shifter and flow control.
+'
+' Using flow control allows the Stamp to complete a task without missing data
+' from the PC.
+'
+' Note: If you have two serial connections on your computer, you can use
+'       DEBUG to view the Stamp side of the communications process
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+
+RX              CON     0                       ' receive (from PC)
+TX              CON     1                       ' transmit (to PC)
+RTS             CON     2                       ' Request To Send (from PC)
+CTS             CON     3                       ' Clear To Send (to PC)
+
+LEDs            VAR     OutD                    ' task indicator
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+Baud            CON     84                      ' 9600-N-8-1 
+
+RxNum           CON     $C0                     ' rx number from PC
+TxNum           CON     $C1                     ' tx number to PC
+RxStr           CON     $C2                     ' rx string from PC
+TxStr           CON     $C3                     ' tx string to PC
+
+NumTasks        CON     4
+Off             CON     %1111                   ' all LEDs off
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+task            VAR     Nib                     ' current Stamp task
+
+cmd             VAR     Byte                    ' command from PC
+aNumber         VAR     Word                    ' numeric value from PC
+
+idx             VAR     Byte                    ' EEPROM address pointer
+dByte           VAR     Byte                    ' data byte from PC
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+StrLen          DATA    21
+Msg             DATA    "Nuts & Volts Magazine", 0
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Initialize:
+  LEDs = Off                                    ' all LEDs off
+  DirD = %1111                                  ' make port D outputs
+
+  HIGH CTS                                      ' not ready to receive yet
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  SERIN RX\CTS, Baud, 5, Do_Task, [cmd]
+  ' DEBUG HEX ?cmd
+  LOOKDOWN cmd, [RxNum, TxNum, RxStr, TxStr], cmd
+  BRANCH cmd, [RX_Number, TX_Number, RX_String, TX_String]
+
+
+Do_Task:
+  BRANCH task, [Task_0, Task_1, Task_2, Task_3]
+  task = 0                                      ' fix bad task spec
+  GOTO Main
+  
+
+Task_0:
+  LEDs = %1110                                  ' show current task
+  PAUSE 250                                     ' take some time doing it
+  LEDs = Off
+  task = task + 1 // NumTasks                   ' point to next task
+  GOTO Main
+
+
+Task_1:
+  LEDs = %1101
+  PAUSE 250
+  LEDs = Off
+  task = task + 1 // NumTasks
+  GOTO Main
+
+
+Task_2:
+  LEDs = %1011
+  PAUSE 250
+  LEDs = Off
+  task = task + 1 // NumTasks
+  GOTO Main
+
+
+Task_3:
+  LEDs = %0111
+  PAUSE 250
+  LEDs = Off
+  task = task + 1 // NumTasks
+  GOTO Main
+
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+RX_Number:
+  SERIN RX\CTS, Baud, [aNumber.LowByte, aNumber.HighByte] 
+  ' DEBUG DEC ?aNumber
+  GOTO Do_Task
+
+
+TX_Number:
+  ' DEBUG "Sending: ", DEC aNumber, CR
+  SEROUT TX\RTS, Baud, [aNumber.LowByte, aNumber.HighByte]
+  GOTO Do_Task
+
+
+RX_String:
+  idx = 0                                       ' reset address pointer
+
+RX_Char:
+  SERIN RX\CTS, Baud, [dByte]                   ' receive char from PC
+  WRITE (Msg + idx), dByte                      ' save it to EEPROM
+  IF (dByte = 0) THEN RX_Str_Done               ' wait for another if not 0
+  idx = idx + 1                                 ' update address pointer
+  GOTO RX_Char  
+
+RX_Str_Done
+  WRITE StrLen, idx                             ' save string length
+  GOTO Do_Task
+
+
+TX_String:
+  READ StrLen, idx                              ' get string length
+  SEROUT TX\RTS, Baud, [idx]                    ' send string length
+  SERIN RX\CTS, Baud, 100, Do_Task, [cmd]       ' wait for restart
+  IF (cmd <> TxStr) THEN Do_Task                ' abort if bad command
+  idx = Msg
+
+TX_Char:
+  READ idx, dByte                               ' get char from EEPROM
+  IF (dByte = 0) THEN TX_Str_Done               ' check for end
+  SEROUT TX\RTS, Baud, [dByte]                  ' send char
+  idx = idx + 1                                 ' point to next
+  GOTO TX_Char
+
+TX_Str_Done:
+  GOTO Do_Task

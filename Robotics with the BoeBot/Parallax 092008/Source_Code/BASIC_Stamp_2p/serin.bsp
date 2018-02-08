@@ -1,0 +1,15 @@
+'{$STAMP BS2p}
+
+RxD 	con 16	'RxD via SIN
+baud 	con 16624	'N9600 for BS2p
+N	con 16	'
+
+char 	var byte(N)
+addr	var byte
+
+loop:	serin RxD, baud, [wait("ABC"),spstr N]
+	for addr = 0 to 15
+		get addr,char(addr)
+	next
+	debug str char\16, cr
+	goto loop

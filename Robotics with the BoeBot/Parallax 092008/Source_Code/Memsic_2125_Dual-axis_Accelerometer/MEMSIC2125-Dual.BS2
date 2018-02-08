@@ -1,0 +1,154 @@
+' =========================================================================
+'
+'   File...... MEMSIC2125-Dual.BS2
+'   Purpose... Memsic 2125 Accelerometer Dual-Axis Demo
+'   Author.... Parallax
+'   E-mail.... support@parallax.com
+'   Started... 
+'   Updated... 15 JAN 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -------------------------------------------------------------------------
+' Program Description
+' -------------------------------------------------------------------------
+'
+' Read the pulse outputs from a Memsic 2125 accelerometer and converts to
+' G-force and tilt angle.
+'
+' g = ((t1 / 10 ms) - 0.5) / 12.5%
+'
+' Tilt = ARCSIN(g)
+'
+' Refer to Memsic documentation (AN-00MX-007.PDF) for details on g-to-tilt
+' conversion and considerations.
+'
+' www.memsic.com
+
+
+' -------------------------------------------------------------------------
+' I/O Definitions
+' -------------------------------------------------------------------------
+
+Xin             PIN     8                       ' X input from Memsic 2125
+Yin             PIN     9                       ' Y input from Memsic 2125
+
+
+' -------------------------------------------------------------------------
+' Constants
+' -------------------------------------------------------------------------
+
+HiPulse         CON     1                       ' measure high-going pulse
+LoPulse         CON     0
+
+DegSym          CON     176                     ' degrees symbol
+
+
+' -------------------------------------------------------------------------
+' Variables
+' -------------------------------------------------------------------------
+
+xRaw            VAR     Word                    ' pulse from Memsic 2125
+xmG             VAR     Word                    ' g force (1000ths)
+xTilt           VAR     Word                    ' tilt angle
+
+yRaw            VAR     Word
+ymG             VAR     Word
+yTilt           VAR     Word
+
+disp            VAR     Byte                    ' displacement (0.0 - 0.99)
+angle           VAR     Byte                    ' tilt angle
+
+
+' -------------------------------------------------------------------------
+' Initialization
+' -------------------------------------------------------------------------
+
+Setup:
+  PAUSE 250                                     ' let DEBUG window open
+  DEBUG "Memsic 2125 Accelerometer", CR
+  DEBUG "-------------------------"
+
+
+' -------------------------------------------------------------------------
+' Program Code
+' -------------------------------------------------------------------------
+
+Main:
+  DO
+    GOSUB Read_Tilt                             ' reads G-force and Tilt
+
+    ' display results
+
+    DEBUG CRSRXY, 0, 3
+    DEBUG "X Input...  ",
+          DEC (xRaw / 500), ".", DEC3 xRaw, " ms",
+          CLREOL, CR,
+          "G Force... ", (xmG.Bit15 * 13 + " "),
+          DEC (ABS xmG / 1000), ".", DEC3 (ABS xmG), " g", 
+          CLREOL, CR,
+          "X Tilt.... ", (xTilt.Bit15 * 13 + " "),
+          DEC ABS xTilt, DegSym, CLREOL
+
+    DEBUG CRSRXY, 0, 7
+    DEBUG "Y Input...  ",
+          DEC (yRaw / 500), ".", DEC3 yRaw, " ms",
+          CLREOL, CR,
+          "G Force... ", (ymG.Bit15 * 13 + " "),
+          DEC (ABS ymG / 1000), ".", DEC3 (ABS ymG), " g", 
+          CLREOL, CR,
+          "Y Tilt.... ", (yTilt.Bit15 * 13 + " "),
+          DEC ABS yTilt, DegSym, CLREOL
+
+    PAUSE 200                                   ' update about 5x/second
+  LOOP
+  END
+ 
+
+' -------------------------------------------------------------------------
+' Subroutines
+' -------------------------------------------------------------------------
+
+Read_G_Force:
+  PULSIN Xin, HiPulse, xRaw                     ' read pulse output
+  xmG = ((xRaw / 5) - 500) * 8                  ' convert to 1/1000 g
+  PULSIN Yin, HiPulse, yRaw
+  ymG = ((yRaw / 5) - 500) * 8
+  RETURN
+
+
+Read_Tilt:
+  GOSUB Read_G_Force
+
+  ' restrict displacement to unit circle (0.0 - 1.0)
+
+  disp = ABS xmG / 10 MAX 100                   ' x displacement
+  GOSUB Arcsine
+  xTilt = angle * (-2 * xmG.bit15 + 1)          ' fix sign
+  disp = ABS ymG / 10 MAX 100                   ' y displacement
+  GOSUB Arcsine
+  yTilt = angle * (-2 * ymG.bit15 + 1)          ' fix sign
+  RETURN
+
+
+' Trig routines courtesy Tracy Allen, PhD. (www.emesystems.com)
+
+Arccosine:
+  disp = disp */ 983 / 3                        ' normalize input to 127
+  angle = 63 - (disp / 2)                       ' approximate angle
+  DO                                            ' find angle
+    IF (COS angle <= disp) THEN EXIT
+    angle = angle + 1
+  LOOP
+  angle = angle */ 360                          ' convert brads to degrees
+  RETURN
+
+
+Arcsine:
+  GOSUB Arccosine
+  angle = 90 - angle
+  RETURN

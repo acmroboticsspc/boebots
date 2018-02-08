@@ -1,0 +1,66 @@
+' Program Listing 24.1. BS2 Program to Demonstrate Modem Interface
+' Program: ANSW_MDM.BS2 (Answer modem and exchange data)
+' This program demonstrates how the BS2 can be used with
+' an AT/Hayes-compatible modem to link up with incoming
+' modem calls and exchange data. It uses the programming/
+' downloading serial port plus one I/O line for the modem
+' hookup. Before this program can be used, the modem must
+' be configured to work with the BS2's serial port by
+' disabling echo-back of commands. (Failure to do this
+' will cause the modem's RD and SD lights to stay lit
+' continuously and the modem to become locked up.) Prepare
+' the modem by connecting it to a PC running terminal
+' software at 2400 baud, N81, full duplex. Send the modem
+' configuration commands, as follows.
+' Type this command 	Modem Responds 	Purpose/Effect
+' ----------------- 	-------------- 	---------------------
+' ATS0=0 <Enter> 	"OK" or "0" 		Disable auto-answer
+' ATS12=50 <Enter> 	"OK" or "0" 		Set "+++" response to 1s
+' ATV0 <Enter> 	"0" 			Set number responses
+' ATE0 <Enter> 	"0" 			Disable command echo
+' AT&W <Enter> 	"0" 			Memorize configuration
+' After the ATE0, your typing won't be visible on the screen
+' unless you reconfigure the terminal for half-duplex.
+' These settings are stored in nonvolatile memory, so the modem
+' does _not_ have to be reprogrammed if power is turned off.
+' Connect the BS2 to the modem as follows:
+' 	BS2 		Modem 	DB25
+' 	----		---------------
+' 	DB9, pin 2 	pin 2
+' 	DB9, pin 3 	pin 3
+' 	DB9, pin 5 	pin 7
+' I/O pin P0 (thru 22k resistor) pin 21
+' Turn the modem on first, then the BS2. When the phone rings,
+' the BS2 will instruct the modem to answer and try to establish
+' a connection. If connection is successful, the remote computer
+' will see a sign-on message and be prompted for a password ("USER").
+' The BS2 will then transmit a simulated batch of data. When the
+' BS2 hangs up, the remote computer's modem will hang up too, ending
+' the exchange.
+
+lf 	con 10 			' Linefeed character to format data.
+tLink 	con 10000 		' # of milliseconds to wait for link up.
+N2400 	con 16780 		' Baudmode for 2400 bps inverted.
+TxD 	con 16 			' Pin to output serial data.
+RxD 	con 16 			' Pin to input serial data.
+RI 	var IN0 		' Ring-indication output of modem.
+
+waitForRing: 			' When phone rings, RI goes high.
+  if RI = 0 then waitForRing 	' Wait here while RI is low.
+
+pickUpPhone:
+  serout TxD,N2400,["ATA",cr] ' Tell modem to pick up.
+  serin RxD,N2400,tLink,Disconnect,[wait ("10")] ' Wait for link.
+  pause 10000 			' 10-second pause for modem stuff.
+  serout TxD,N2400,["WELCOME TO BS2 BBS!",cr,lf,"logon: "]
+  serin RxD,N2400,[wait ("USER")] ' Wait for password.
+  serout TxD,N2400,100,[cr,lf,"Simulated data here...",cr,lf]
+  pause 1000
+  serout TxD,N2400,100,["Hanging up now.",cr,lf]
+
+Disconnect:
+  pause 2000
+  serout TxD,N2400,["+++"]
+  pause 2000
+  serout TxD,N2400,["ATH0",cr]
+goto waitForRing

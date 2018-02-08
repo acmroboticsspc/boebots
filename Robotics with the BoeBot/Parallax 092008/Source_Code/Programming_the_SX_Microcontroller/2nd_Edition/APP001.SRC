@@ -1,0 +1,21 @@
+; APP001.SRC - Ramp Generator
+;
+; ---------------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller", 2nd Edition by Guenther Daubach
+; Copyright (c) by Parallax Inc. 2004
+; ---------------------------------------------------------------------
+
+include "Setup28.inc"
+
+RESET   Main
+
+org     $000
+
+Main
+  clr rc
+  mov !rc, #0
+
+Loop
+  inc rc          ; 1
+  jmp Loop        ; 3

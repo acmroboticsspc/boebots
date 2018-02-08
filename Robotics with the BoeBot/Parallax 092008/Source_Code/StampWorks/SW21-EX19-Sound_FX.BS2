@@ -1,0 +1,255 @@
+' =========================================================================
+'
+'   File....... SW21-EX19-Sound_FX.BS2
+'   Purpose.... Stamp-generated sounds
+'   Author..... (C) 2000 - 2006, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 14 AUG 2006
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Demonstrates sound FX and simple music using FREQOUT and DTMFOUT.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Speaker         PIN     0                       ' speaker on pin 0
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+R               CON      0                      ' rest
+C               CON     33                      ' ideal is 32.703
+Cs              CON     35                      ' ideal is 34.648
+D               CON     37                      ' ideal is 36.708
+Ds              CON     39                      ' ideal is 38.891
+E               CON     41                      ' ideal is 41.203
+F               CON     44                      ' ideal is 43.654
+Fs              CON     46                      ' ideal is 46.249
+G               CON     49                      ' ideal is 48.999
+Gs              CON     52                      ' ideal is 51.913
+A               CON     55                      ' ideal is 55.000
+As              CON     58                      ' ideal is 58.270
+B               CON     62                      ' ideal is 61.735
+
+N1              CON     500                     ' whole note duration
+N2              CON     N1/2                    ' half note
+N3              CON     N1/3                    ' third note
+N4              CON     N1/4                    ' quarter note
+N8              CON     N1/8                    ' eighth note
+
+
+#SELECT $STAMP
+  #CASE BS2, BS2E
+    TAdj        CON     $100                    ' x 1.0 (time adjust)
+    FAdj        CON     $100                    ' x 1.0 (freq adjust)
+  #CASE BS2SX
+    TAdj        CON     $280                    ' x 2.5
+    FAdj        CON     $066                    ' x 0.4
+  #CASE BS2P
+    TAdj        CON     $3C5                    ' x 3.77
+    FAdj        CON     $044                    ' x 0.265
+  #CASE BS2PE
+    TAdj        CON     $100                    ' x 1.0
+    FAdj        CON     $0A9                    ' x 0.66
+  #CASE BS2PX
+    TAdj        CON     $607                    ' x 6.02
+    FAdj        CON     $02A                    ' x 0.166
+#ENDSELECT
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+idx             VAR     Word                    ' loop counter
+note1           VAR     Word                    ' first tone for FREQOUT
+note2           VAR     Word                    ' second tone for FREQOUT
+onTime          VAR     Word                    ' duration for FREQOUT
+offTime         VAR     Word
+oct1            VAR     Nib                     ' octave for freq1 (1 - 8)
+oct2            VAR     Nib                     ' octave for freq2 (1 - 8)
+eePntr          VAR     Byte                    ' EEPROM pointer
+digit           VAR     Byte                    ' DTMF digit
+clickDly        VAR     Word                    ' delay betweens "clicks"
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+Phone1          DATA    "123-555-1212", 0       ' stored telephone numbers
+Phone2          DATA    "916-624-8333", 0
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DEBUG CLS,
+        "BASIC Stamp Sound FX Demo", CR, CR
+
+Dial_Tone:
+  DEBUG "Dial tone", CR
+  onTime = 35 */ TAdj
+  note1 = 35 */ FAdj
+  FREQOUT Speaker, onTime, note1                ' "click"
+  PAUSE 100
+  onTime = 2000 */ TAdj
+  note1 = 350 */ FAdj
+  note2 = 440 */ FAdj
+  FREQOUT Speaker, onTime, note1, note2         ' combine 350 Hz & 440 Hz
+
+Dial_Phone1:                                    ' dial phone from EE
+  DEBUG "Dialing number: "
+  eePntr = Phone1                               ' initialize eePntr pointer
+  GOSUB Dial_Phone
+
+Phone_Busy:
+  PAUSE 1000
+  DEBUG CR, " - busy...", CR
+  onTime = 400 */ TAdj
+  note1 = 480 */ FAdj
+  note2 = 620 */ FAdj
+  FOR idx = 1 TO 8
+    FREQOUT Speaker, onTime, note1, note2       ' combine 480 Hz and 620 Hz
+    PAUSE 620
+  NEXT
+  onTime = 35 */ TAdj
+  note1 = 35 */ FAdj
+  FREQOUT Speaker, onTime, note1                ' "click"
+
+Dial_Phone2:
+  DEBUG "Calling Parallax: "
+  eePntr = Phone2
+  GOSUB Dial_Phone
+
+Phone_Rings:
+  PAUSE 1000
+  DEBUG CR, " - ringing"
+  onTime = 2000 */ TAdj
+  note1 = 440 */ FAdj
+  note2 = 480 */ FAdj
+  FREQOUT Speaker, onTime, note1, note2         ' combine 440 Hz and 480 Hz
+  PAUSE 4000
+  FREQOUT Speaker, onTime, note1, note2         ' combine 440 Hz and 480 Hz
+  PAUSE 2000
+
+Camptown_Song:
+  DEBUG CR, "Play a Camptown song", CR
+  FOR idx = 0 TO 13
+    LOOKUP idx, [ G,  G,  E,  G,  A,  G,  E,
+                  R,  E,  D,  R,  E,  D,  R], note1
+    LOOKUP idx, [ 4,  4,  4,  4,  4,  4,  4,
+                  4,  4,  4,  4,  4,  4,  4], oct1
+    LOOKUP idx, [N2, N2, N2, N2, N2, N2, N2,
+                 N2, N2, N1, N2, N2, N1, N8], onTime
+    GOSUB Play_1_Note
+  NEXT
+
+Howler:
+  DEBUG "Howler -- watch out!!!", CR
+  FOR idx = 1 TO 4
+    onTime = 1000 */ TAdj
+    note1 = 1400 */ FAdj
+    note2 = 2060 */ FAdj
+    FREQOUT Speaker, onTime, note1, note2       ' combine 1400 Hz and 2060 Hz
+    onTime = 1000 */ TAdj
+    note1 = 2450 */ FAdj
+    note2 = 2600 */ FAdj
+    FREQOUT Speaker, onTime, note1, note2       ' combine 2450 Hz and 2600 Hz
+  NEXT
+
+Roulette_Wheel:
+  DEBUG "Roulette Wheel", CR
+  onTime = 5 */ TAdj                            ' onTime for "click"
+  note1 = 35 */ FAdj                            ' frequency for "click"
+  clickDly = 250                                ' starting delay between clicks
+  FOR idx = 1 TO 8                              ' spin up wheel
+    FREQOUT Speaker, onTime, note1              ' click
+    PAUSE clickDly
+    clickDly = clickDly */ $00BF                ' accelerate (speed * 0.75)
+  NEXT
+  FOR idx = 1 TO 10                             ' spin stable
+    FREQOUT Speaker, onTime, note1
+    PAUSE clickDly
+  NEXT
+  FOR idx = 1 TO 20                             ' slow down
+    FREQOUT Speaker, onTime, note1
+    PAUSE clickDly
+    clickDly = clickDly */ $010C                ' decelerate (speed * 1.05)
+  NEXT
+  FOR idx = 1 TO 30                             ' slow down and stop
+    FREQOUT Speaker, onTime, note1
+    PAUSE clickDly
+    clickDly = clickDly */ $0119                ' decelerate (speed * 1.10)
+  NEXT
+
+Computer_Beeps:                                 ' looks great with randmom LEDs
+  DEBUG "1950's Sci-Fi Computer", CR
+  FOR idx = 1 TO 50                             ' run about 5 seconds
+    onTime = 50 */ TAdj
+    RANDOM note1                                ' create random note
+    note1 = (note1 // 2500) */ FAdj             ' don't let note go to high
+    FREQOUT Speaker, onTime, note1              ' play it
+    PAUSE 100                                   ' short pause between notes
+  NEXT
+
+Space_Transporter:
+  DEBUG "Space Transporter", CR
+  onTime = 10 */ TAdj
+  FOR idx = 5 TO 5000 STEP 5                    ' frequency sweep up
+    note1 = idx */ FAdj
+    FREQOUT Speaker, onTime, note1, note1 */ 323
+  NEXT
+  FOR idx = 5000 TO 5 STEP 50                   ' frequency sweep down
+    note1 = idx */ FAdj
+    FREQOUT Speaker, onTime, note1, note1 */ 323
+  NEXT
+
+  DEBUG CR, "Sound demo complete."
+  INPUT Speaker
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Dial_Phone:
+  DO
+    READ eePntr, digit                          ' read a digit
+    IF (digit = 0) THEN EXIT                    ' when 0, number is done
+    DEBUG digit                                 ' display digit
+    IF (digit >= "0" AND digit <- "9") THEN     ' don't digits
+      onTime = 150 */ TAdj
+      offTime = 75 */ TAdj
+      DTMFOUT Speaker, onTime, offTime, [digit - 48]
+    ENDIF
+    eePntr = eePntr + 1                         ' update eePntr pointer
+  LOOP
+  RETURN
+
+
+Play_1_Note:
+  note1 = note1 << (oct1 - 1)                   ' get frequency for note + octave
+  onTime = onTime */ TAdj
+  note1 = note1 */ FAdj
+  FREQOUT Speaker, onTime, note1                ' play it
+  RETURN
+
+
+Play_2_Notes:
+  note1 = note1 << (oct1 - 1)                   ' get frequency for note + octave
+  note2 = note2 << (oct2 - 1)                   ' get frequency for note + octave
+  onTime = onTime */ TAdj
+  note1 = note1 */ FAdj
+  note2 = note2 */ FAdj
+  FREQOUT Speaker, onTime, note1, note2         ' play both
+  RETURN

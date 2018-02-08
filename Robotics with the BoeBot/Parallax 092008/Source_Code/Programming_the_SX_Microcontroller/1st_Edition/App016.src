@@ -1,0 +1,572 @@
+; APP016.SRC - A digital SX alarm clock
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+
+TRIS    = $0f
+PLP     = $0e
+
+Buzzer  = rc.7
+
+;** Macro Definitions ************************************************
+;
+DotOn MACRO                     ; Decimal point LED on
+  clrb rb.2
+ENDM
+
+SkipIfModeIsUp MACRO            ; Skip if "Mode" button released
+  snb ra.0
+ENDM
+
+SkipIfModeIsNotDown MACRO       ; Skip if "Mode" button not pressed
+  sb ra.1
+ENDM
+
+SkipIfSetIsNotDown MACRO        ; Skip if "Set" button pressed
+  sb ra.3
+ENDM
+
+SkipIfSetIsUp MACRO             ; Skip if "Set" button released
+  snb ra.2
+ENDM
+
+SkipIfSetIsDown MACRO           ; Skip if "Set" button pressed
+  snb ra.3
+ENDM
+TickOn MACRO                    ; Turn ticker on
+  setb Flags.0
+ENDM
+TickOff MACRO                   ; Turn Ticker off
+  clrb Flags.0
+ENDM
+
+SkipIfTick MACRO                ; Skip if ticker is on
+  sb Flags.0  
+ENDM
+
+BlinkOn MACRO                   ; Turn blink on
+  setb Flags.1
+ENDM
+
+BlinkOff MACRO                  ; Turn blink off
+  clrb Flags.1
+ENDM
+
+SkipIfBlink MACRO               ; Skip if blink is on
+  sb Flags.1
+ENDM
+
+ArmAlarm MACRO                  ; Enable the alarm function
+  setb Flags.2
+ENDM
+
+ClrAlarm MACRO                  ; Disable the alarm function
+  clrb Flags.2
+  clrb Flags.3
+ENDM
+
+SkipIfAlarmSet MACRO            ; Skip if alarm is enabled
+  sb Flags.2
+ENDM    
+
+SkipIfAlarm MACRO               ; Skip if alarm is triggered
+  sb Flags.3
+ENDM
+
+SetAlarm MACRO                  ; Trigger the alarm
+  setb Flags.1
+  setb Flags.3
+ENDM
+
+SettingClock MACRO              ; Set mode flag "Set Clock"
+  setb Flags.4
+ENDM
+
+SettingAlarm MACRO              ; Set mode flag "Set alarm"
+  clrb Flags.4
+ENDM
+
+SkipIfSettingClock MACRO        ; Skip if mode "Set Clock" is
+  sb Flags.4                    ; active
+ENDM
+
+org      $08
+Std      = $                    ; Global memory bank
+Temp     ds 1                   ; Temporary storage
+Ix       ds 1                   ; Index variable
+State    ds 1                   ; Current mode of state engine
+SubState ds 1                   ; Current sub-mode of state engine
+Flags    ds 1                   ; Various flags
+
+org     $30
+Leds    = $                     ; LED bank
+Column  ds 1                    ; Column mask
+Digit   ds 1                    ; Current display digit
+Digits  ds 6                    ; Digits buffer
+Alarm   ds 6                    ; Storage for alarm time
+
+org     $50
+Timers  = $                     ; Timer bank
+us4     ds 1                    ; 4us counter
+Msec    ds 1                    ; 1/1000 sec counter
+HSec    ds 1                    ; 1/100 sec counter
+TSec    ds 1                    ; 1/10 sec counter
+Sec     ds 1                    ; 1 sec counter
+Sec10   ds 1                    ; 10 sec counter
+Min     ds 1                    ; 1 min counter
+Min10   ds 1                    ; 10 min counter
+Hour    ds 1                    ; 1 hour counter
+Hour10  ds 1                    ; 10 hour counter
+
+org     $000
+
+;** Clock VP *********************************************************
+;
+:Timers
+
+  Bank Timers
+  mov   w, #250                 ; 4ms * 250 = 1 ms
+  dec   us4
+  snz
+    mov us4, w
+  snz
+    TickOn
+  snz
+    inc Msec                    ; every millisecond
+  mov w, #10
+  mov w, MSec-w                 ; Z if MSec = 10 
+  snz
+    clr Msec
+  snz
+    inc Hsec                    ; every 1/100 sec
+  mov w, #10
+  mov w, HSec-w                 ; Z if HSec = 10
+  snz
+    clr Hsec
+  snz 
+    inc Tsec                    ; every 1/10 sec
+  mov w, #10
+  mov w, TSec-w                 ; Z if TSec = 10
+  snz
+    clr Tsec
+  snz
+    inc Sec                     ; every second
+  mov w, #10 
+  mov w, Sec-w                  ; Z if sec = 10
+  snz
+    clr Sec
+  snz
+    inc Sec10                   ; every 10 seconds
+  mov w, #6
+  mov w, Sec10-w                ; Z if Sec10 = 6 
+  snz
+    clr Sec10
+snz
+    inc Min                     ; every minute
+  mov w, #10
+  mov w, Min-w                  ; Z if  Min = 10
+  snz
+    clr Min
+  snz
+    inc Min10                   ; every 10 minutes
+  mov w, #6
+  mov w, Min10-w
+  snz
+    clr Min10
+  snz
+    inc Hour                    ; every hour
+  mov w, #10
+  mov w, Hour-w
+  snz
+    clr Hour
+  snz
+    inc Hour10                  ; every 10 hours
+  mov w, #3
+  mov w, Hour10-w
+  snz
+    clr Hour10                  ; every day
+
+;** VP to control a 7-segment, 6-digits LED display ******************
+;
+:Display
+  SkipIfTick                    ; Action only if the timer has 
+    jmp :ISRExit                ; set the 1ms tick       
+  TickOff                       ; Clear the tick flag
+  bank Leds                     ; Get value for current digit
+  mov  w, #Digits               ; from Digits
+  add  w, Digit                 ;
+  mov  fsr, w                   ;
+  mov  w, ind                   ; indirect
+  and  w, #%01111111            ; Mask bit 7 (the blink id)     
+  call Decode                   ; 7-seg pattern to W           
+  clr  rc                       ; Turn off the current display
+  mov  rb, w                    ; Output line data          
+  SkipIfBlink                   ; If dots shall blink,       
+    jmp :DotOn                  ;
+  bank Timers                   ; "borrow" from TSec, and     
+  movb c, TSec.0                ; save bit 0 in C
+  bank Leds
+  sc                            ; If TSec.0 is set, "On Phase",
+    jmp :NoBlink                ; else "Off Phase" for blinking
+    
+:DotOn     
+  bank Leds                     ; Turn on if bit 7 is set in
+  snb  ind.7                    ; the digit's data storage 
+    DotOn
+    
+:NoBlink
+  mov  rc, Column               ; Output column data
+  SkipIfAlarm                   ; If alarm is triggered,   
+    jmp :NoBeep                 ;
+  bank Timers                   ;
+  snb Sec.0                     ; send a 500 Hz signal to the
+    jmp :NoBeep                 ; buzzer every other second
+  movb Buzzer, MSec.0
+  
+:NoBeep    
+  bank Leds
+  clc
+  rl   Column                   ; Select next column
+  inc  Digit                    ; Select next digit
+  mov  w, #6                    ; If we are past digit 5,
+  mov  w, Digit-w               ;
+  snz                           ;
+    clr Digit                   ; activate digit 0,
+  mov  w, #1    ;
+  snz   ;
+    mov Column, w               ; and select column 0   
+
+:ISRExit
+  mov   w, #-200                ; Call the ISR every 4us
+  retiw
+
+;** Subroutine returns the 7-seg pattern for a decimal digit in w
+;
+Decode
+  jmp pc+w
+  retw %00100100                ; 0
+  retw %10101111                ; 1
+  retw %01000110                ; 2
+  retw %00001110                ; 3
+  retw %10001101                ; 4
+  retw %00011100                ; 5
+  retw %00010100                ; 6
+  retw %10101110                ; 7
+  retw %00000100                ; 8
+  retw %00001100                ; 9
+  
+org     $100
+
+;** Mainline program *************************************************
+;
+Start
+
+; Clear the data memory
+;
+  clr    fsr
+ClearRam
+  sb     fsr.4
+    Setb fsr.3
+  clr    ind
+  ijnz   fsr, ClearRam
+
+  mode PLP
+  mov  !ra, #%11110000          ; Pull up for buttons
+  mode TRIS
+  mov rb, #$ff                  ; Set all RB outputs to high
+  mov !rb, #0                   ; Enable segment outputs
+  clr rc
+  mov !rc, #%01000000           ; Outputs for anodes and buzzer
+
+  bank Leds
+  mov Column, #1                ; Initialize column mask     
+  mov   !option, #%10011111     ; Enable RTCC interrupt
+  jmp @Main                     ; Continue with main program loop
+
+  org $200
+
+;** Subroutine waits until the "Mode" button is released
+;
+WaitReleaseM
+  SkipIfModeIsUp
+    jmp WaitReleaseM
+  ret
+
+;** Subroutine waits until the "Set" button is released
+;
+WaitReleaseS
+  SkipIfSetIsUp
+    jmp WaitReleaseS
+  ret
+
+;** Subroutine waits until both buttons are released
+;
+WaitReleaseBoth
+  SkipIfSetIsUp
+    jmp WaitReleaseBoth
+  SkipIfModeIsUp
+    jmp WaitReleaseBoth
+ret
+
+;** Main program loop
+;
+Main
+  mov  w, State                 ; Jump table for state engine
+  jmp  pc+w
+  jmp  Clock
+  jmp  SetClock
+  jmp  SetAlarmTime
+
+;** Handle state "Clock is running"
+;
+Clock
+  mov  Ix, #5                   ; Copy the current time information
+:Copy                           ; to the display buffer
+  mov  w, #Sec                  ; Base is the Hour10 timer register,
+  add  w, Ix                    ; add the index,
+  mov  fsr, w                   ; address the timer register and
+  mov  Temp, ind                ; read it indirect
+  mov  w, #Digits               ; Base is Digits+5
+  add  w, Ix                    ; add the index,
+  mov  fsr, w                   ; and 
+  mov  ind, Temp                ; write data indirect
+  dec  Ix                       ; Next lower position
+  sb   Ix.7                     ; If Ix <> -1,
+    jmp  :Copy                  ; copy more digits
+    
+  SkipIfAlarmSet                ; If the alarm is enabled,
+    jmp :NoAlarm
+  setb Digits.7                 ; turn on the decimal points in
+  setb Digits+1.7               ; the seconds digits
+  
+  ;** Check if it is time to trigger the alarm
+  ;
+  mov Ix, #5                    ; For this test, the current con-
+:CheckAlarm                     ; tents of all 6 digits is com-
+  mov w, #Digits                ; pared with the contents of
+  add w, Ix                     ; the alarm time buffer.
+  mov fsr, w
+  mov Temp, ind
+  clrb Temp.7
+  mov w, #Alarm
+  add w, Ix
+  mov fsr, w
+  mov w, ind
+  mov w, Temp-w
+  sz
+    jmp :NoAlarm                ; If any digit is different, cancel
+  dec Ix                        ; the compare
+  sb  Ix.7
+    jmp :CheckAlarm  
+  SetAlarm                      ; Trigger the alarm if all digits
+                                ; are equal
+:NoAlarm    
+  SkipIfAlarm                   ; If the alarm is not triggered,
+    jmp :CheckButtons           ; check the buttons
+  SkipIfModeIsNotDown           ; If the alarm is triggered, 
+    jmp :StopAlarm              ; it can be turned off with
+  SkipIfSetIsNotDown            ; any of the buttons
+    jmp :StopAlarm
+  jmp Main
+  
+:StopAlarm                      ; Turn off the alarm
+  ClrAlarm                      ; Clear the flag, and wait
+  call WaitReleaseBoth          ; until both buttons are released
+  jmp Main
+          
+:CheckButtons                   ; Read the buttons  
+  SkipIfModeIsNotDown           ; If the "Mode" button is pressed,
+    inc State                   ; set state to "Set Clock"
+  mov  w, #2
+  SkipIfSetIsNotDown            ; If the "Set" button is pressed,
+    mov State, w                ; set state to "Set Alarm" 
+  jmp  Main
+
+;** Handle state "Set Clock"
+;
+SetClock
+  mov  w, SubState              ; Jump table for sub-states
+  jmp  pc+w
+  jmp  InitSetClock             ; Do the initializations
+  jmp  MarkDigit                ; Display the decimal point
+  jmp  CheckButtons             ; Read the buttons
+  jmp  NextDigit                ; Select next digit
+
+;** Handle state "Set Alarm"
+;
+SetAlarmTime
+  mov  w, SubState              ; Jump table for sub-states
+  jmp  pc+w
+  jmp  InitSetAlarm             ; Do the initializations
+  jmp  MarkDigit                ; Display the decimal point
+  jmp  CheckButtons             ; Read the buttons
+  jmp  NextDigit                ; Select next digit
+
+;** Initializations for "Set Clock"
+;
+InitSetClock 
+  SettingClock                  ; Set the mode flag
+  bank Timers
+  BlinkOn                       ; Enable blink in the display VP
+  bank Leds
+  clrb Digits+1.7               ; Clear the decimal point in the
+                                ; 10 seconds buffer as it might
+InitCommon                      ; be set when alarm is enabled
+  clr  Ix                       ; Index = 0
+  inc  SubState                 ; Next sub-state: "MarkDigit"
+  jmp  Main
+
+;** Initializations for "Set Alarm"
+;
+InitSetAlarm
+  SettingAlarm                  ; Set the mode flag
+  ClrAlarm                      ; Disable the alarm
+  mov  Ix, #5                   ; Copy the saved alarm time to
+:Copy                           ; the display buffer
+  mov  w, #Alarm
+  add  w, Ix
+  mov  fsr, w
+  mov  Temp, ind
+  mov  w, #Digits
+  add  w, Ix
+  mov  fsr, w
+  mov  ind, Temp
+  dec  Ix
+  sb   Ix.7
+    jmp  :Copy
+  call WaitReleaseS             ; Wait until the "Set" button is
+        ;  released
+  jmp  InitCommon               ; Continue with common instructions
+
+;** Turn the decimal point on
+;
+MarkDigit
+  mov  w, #Digits               ; Indirectly address the current
+  add  w, Ix                    ; digit, and set the decimal
+  mov  fsr, w                   ; point flag
+  setb ind.7
+  call WaitReleaseM             ; Wait until the "Mode" key is
+                                ; released
+  inc  SubState                 ; Next sub-state: CheckButtons
+  jmp  Main
+
+;** Read the buttons, and increment the current digit
+;
+CheckButtons
+  SkipIfModeIsNotDown           ; If "Mode" button pressed,
+    inc SubState                ; next sub-state: NextDigit
+  SkipIfSetIsDown               ; If "Set" button pressed,
+    jmp Main
+  mov  w, #Digits               ; increment current digit, so
+  add  w, Ix                    ; indirectly address that digit,
+  mov  fsr, w                   ;  
+  mov  Temp, ind                ; copy it to Temp,
+  clrb Temp.7                   ; clear the decimal point flag,
+  inc  Temp                     ; and increment it
+
+  mov  w, Ix                    ; Depending on the current digit,
+  jmp  pc+w                     ; check for the maximum value:
+  jmp  :Max9                    ; 0...9 (1 seconds)
+  jmp  :Max5                    ; 0...5 (10 seconds)
+  jmp  :Max9                    ; 0...9 (1 minutes)
+  jmp  :Max5                    ; 0...5 (10 minutes)
+  jmp  :Max9                    ; 0...9 (1 hours)
+  jmp  :Max2_1                  ; 0...1 or 0...2 (10 hours)
+:Max9
+  mov w, #10                    ; If digit > 9,
+  mov w, Temp-w
+  snz
+    clr Temp                    ; digit = 0
+  jmp :Continue
+:Max5
+  mov w, #6                     ; If digit > 5,
+  mov w, Temp-w
+  snz
+    clr Temp                    ; digit = 0
+  jmp :Continue
+:Max2_1
+  dec fsr                       ; If 1 hours <= 4,
+  mov w, #4
+  mov w, ind-w
+  mov w, #3                     ; 10 hours < 3 are valid,
+  snc                           ; else 10 hours < 2
+    mov w, #2                   ; are valid only
+  inc fsr
+  mov w, Temp-w                 ; If digit > 2 or 1
+  snz
+    clr Temp                    ; digit = 0
+    
+:Continue
+  setb Temp.7                   ; Set the decimal point flag
+  mov  ind, Temp                ; Copy the new value to the display
+                                ; buffer, and
+  call WaitReleaseS             ; wait for "Set" button released
+  jmp  Main
+
+;** Select next digit, and terminate the "Set???" mode if necessary
+;
+NextDigit
+  mov  w, #Digits               ; Indirectly address the current
+  add  w, Ix                    ; digit, and
+  mov  fsr, w                   ;
+  clrb ind.7                    ; clear the decimal point flag
+  mov  SubState, #1             ; Next sub-state is: MarkDigit
+  mov  w, #6
+  inc  Ix                       ; Set index to next digit
+  mov  w, Ix-w                  ; If Ix < 6,
+  sz
+    jmp Main                    ; enter MarkDigit, else
+                                ; terminate the "Set???" mode
+
+;** When the "Set" button is pressed while the "Mode" button is held
+;   down, copy the display digits to the clock registers, or to the
+;   alarm time buffer (depending on the "Set???" mode).
+;
+  clr  Ix                       ; Ix is used as the "copy" flag
+                                ; here, if Ix = 0, don't copy
+  mov  w, #5                    ; "Prepare" w for "mov Ix, w"
+
+:WaitRelease                    ; Wait for button release(s)
+  SkipIfSetIsNotDown            ; If "Set" is pressed, set
+    mov Ix, w                   ; Ix = 5
+  SkipIfModeIsUp                ; If "Mode" is still held,
+    jmp :WaitRelease            ; continue waiting for release,
+  call WaitReleaseBoth          ; else wait until all buttons
+                                ; are released
+  sb Ix.0                       ; If Ix = 0, don't copy
+    jmp :ExitSet
+
+:Copy                           ; Copy the display buffer to the
+  mov  w, #Digits               ;
+  add  w, Ix                    ;
+  mov  fsr, w                   ;
+  mov  Temp, ind                ;
+  mov  w, #Sec                  ; Timer registers
+  SkipIfSettingClock            ; or the
+    mov  w, #Alarm              ; alarm time buffer
+  add  w, Ix
+  mov  fsr, w
+  mov  ind, Temp
+  dec  Ix
+  sb   Ix.7
+    jmp  :Copy
+  SkipIfSettingClock            ; If an alarm time was set, 
+    ArmAlarm                    ; enable the alarm
+  
+:ExitSet
+  BlinkOff                      ; Turn off blinking
+  clr State                     ; Reset state and
+  clr SubState                  ; sub-state
+  jmp Main                      ; Repeat the main loop forever...

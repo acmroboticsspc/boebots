@@ -1,0 +1,4 @@
+' POLLRUN Activity
+
+loop:	debug "+"
+	goto loop

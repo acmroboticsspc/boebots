@@ -1,0 +1,177 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 3.1: Turning
+' Demonstrates basic turning process which requires four movements
+' {$STAMP BS2}
+' {$PBASIC 2.5}  
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+TiltServo       CON     13                      ' Tilt servo on P12
+StrideServo     CON     12                      ' Stride servo on P13
+
+' -----[ Constants ]-------------------------------------------------------
+
+MoveDelay       CON     15                      ' in micrcoseconds
+TiltStep        CON     5                       ' TiltServo step size
+StrideStep      CON     5                       ' StrideServo step size
+
+RightTilt       CON     620                     ' Tilt limits
+CenterTilt      CON     750             
+LeftTilt        CON     880             
+
+RightStride     CON     650                     ' Stride limits
+CenterStride    CON     750             
+LeftStride      CON     850             
+
+' -----[ Variables ]-------------------------------------------------------
+
+MoveLoop        VAR     Nib                     ' Loop for repeat movements
+Pulses          VAR     Word                    ' Pulse variable
+
+CurrentTilt     VAR     Word
+CurrentStride   VAR     Word
+NewValue        VAR     Word
+
+Dx              VAR     Pulses
+Mx              VAR     Word
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+' The following state tables are lists of movement state numbers.
+' A xx indicates the end of a list.
+' These are used with the Movement routine.
+
+TL              CON     0
+TC              CON     1
+TR              CON     2
+
+SL              CON     3
+SC              CON     4
+SR              CON     5
+
+xx              CON     255
+
+WalkForward     DATA    TR, SL, TL, SR, xx
+WalkBackward    DATA    TR, SR, TL, SL, xx
+
+TurnLeft        DATA    TL, SR, TC, SL, xx
+WideTurnLeft    DATA    TL, SR, TC, SL, TR, SL, TL, SR, xx
+
+TurnRight       DATA    TR, SL, TC, SR, xx
+PivotRight      DATA    TR, SL, TC, SR, TL, SL, TC, SR, xx
+
+FinishForward   DATA    TR, SC, TC, xx
+
+' -----[ Main Routine ]----------------------------------------------------
+
+Main_Program:   
+  GOSUB ResetCC
+
+    FOR MoveLoop = 1 to 5
+      Mx = TurnRight
+      GOSUB Movement
+    NEXT  
+
+    FOR MoveLoop = 1 to 5
+      Mx = TurnLeft
+      GOSUB Movement
+    NEXT  
+
+    FOR MoveLoop = 1 to 5
+      Mx = PivotRight
+      GOSUB Movement
+    NEXT  
+
+    FOR MoveLoop = 1 to 5
+      Mx = WideTurnLeft
+      GOSUB Movement
+    NEXT  
+
+  Mx = FinishForward
+  GOSUB Movement
+END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' ----- Movement: Move feet using DATA table referenced by Mx -----
+'
+' Input: Mx = table index, table ends in xx
+
+Movement:
+  READ Mx, Dx                                   ' read next action
+  Mx = Mx + 1
+
+  IF Dx = xx THEN MovementDone                  ' skip if end of list
+
+  GOSUB DoMovement                              ' execute movement
+  GOTO Movement                                 ' loop until done
+
+DoMovement:
+  BRANCH Dx,[TiltLeft,TiltCenter,TiltRight,StrideLeft,
+                StrideCenter,StrideRight]
+                                                ' will fall through if 
+                                                ' invalid index
+MovementDone:
+  RETURN
+
+
+' ----  Movement routines can be called directly ----
+
+TiltLeft:
+  NewValue = LeftTilt
+  GOTO MovementTilt
+
+TiltCenter:
+  NewValue = CenterTilt
+  GOTO MovementTilt
+
+TiltRight:
+  NewValue = RightTilt
+
+MovementTilt:
+  FOR Pulses = CurrentTilt TO NewValue STEP TiltStep
+    PULSOUT TiltServo,   Pulses         
+    PULSOUT StrideServo, CurrentStride
+    PAUSE MoveDelay                                     
+  NEXT
+
+  CurrentTilt = NewValue
+  RETURN
+
+StrideLeft:
+  NewValue = LeftStride
+  GOTO MovementStride
+
+StrideCenter:
+  NewValue = CenterStride
+  GOTO MovementStride
+
+StrideRight:
+  NewValue = RightStride
+
+MovementStride:
+  FOR Pulses = CurrentStride TO NewValue STEP StrideStep                        
+    PULSOUT TiltServo,   CurrentTilt
+    PULSOUT StrideServo, Pulses
+    PAUSE MoveDelay                                     
+  NEXT
+
+  CurrentStride = NewValue
+  RETURN
+
+
+' ----- Move feet to initial center position -----
+
+ResetCC:
+  CurrentTilt   = CenterTilt
+  CurrentStride = CenterStride
+
+  FOR Pulses = 1 TO 100 STEP StrideStep                         
+    PULSOUT TiltServo, CenterTilt               
+    PULSOUT StrideServo, CenterStride
+    PAUSE MoveDelay                                     
+  NEXT
+
+DoReturn:
+  RETURN

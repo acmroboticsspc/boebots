@@ -1,0 +1,119 @@
+; APP008.SRC -  Reading a potentiometer setting
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+
+IsrPer  equ 200                         ; The number of clock cycles 
+                                        ; defines how often the ISR will
+                                        ; be called. Adjust this value
+        ;  if necessary.
+
+TRIS    equ  $0f
+LVL     equ  $0d
+
+org     $08
+ADCVal  ds 1                            ; ADC Result
+ADCStat ds 1                            ; Status bits for ADC control
+Timer   ds 1                            ; Time counter for the ADC
+raMask  ds 1                            ; Current data for TRIS_A
+PWMAcc  ds 1                            ; Counter for PWM
+
+Charge  equ ADCStat.0                   ; Mode Flag for ADC (0 = discharge,
+                                        ;                    1 = charge)
+Trigger equ ADCStat.1                   ; Flag gets set during charge
+                                        ; when threshold is reached
+ADCPin  equ ra.0                        ; Port pin for ADC
+PWMPin  equ rb.0                        ; Port pin for PWM output
+
+org     $000
+
+;** VP to read a potentiometer setting *************************
+;
+ADC
+
+snb   Charge                            ; Jump to handle the current ADC
+  jmp :Charge                           ; mode
+
+:Discharge                              ; Discharge C during 256 ISR calls
+  incsz Timer                           ; Still discharging, so 
+    jmp :ADCExit                        ; continue
+  setb Charge                           ; Change mode, and set
+  xor raMask, #%00000001                ; port pin to
+  mov !ra, raMask                       ; input
+
+:Charge                                 ; Conversion - charge C
+  sb ADCPin                             ; When the voltage across C is
+                                        ; less than the threshold,
+    jmp :Continue                       ; keep charging
+
+  snb Trigger                           ; If threshold flag already set, 
+                                        ; continue
+    jmp :Continue
+  setb Trigger                          ; Set the threshold flag, and 
+  mov ADCVal, Timer                     ; save the contents of counter
+                                        ; as result
+:Continue
+  incsz Timer                           ; Increment the counter and
+    jmp :ADCExit                        ; continue if no overflow
+
+  mov w, #$ff                           ; Initialize w to $FF
+  sb Trigger                            ; If threshold flag was set during
+                                        ; conversion, we have a good value
+                                        ; otherwise, we set the result 
+    mov ADCVal, w                       ; to the maximum
+
+  clr ADCStat                           ; Set mode to discharge, and clear
+                                        ; the threshold flag
+  xor raMask, #%00000001                ; Set RA.0 as output
+  mov ra, raMask                        ; with low level to discharge
+  mov !ra, raMask                       ; C
+
+:ADCExit
+
+;** PWM VP, pulse width is controlled by the ADC result ********
+;
+PWM
+
+  setb  PwmPin                          ; Set PWM bit in advance
+  csb   PwmAcc, ADCVal
+    clrb  PwmPin
+  inc   PwmAcc
+  mov   w, ++PwmAcc
+  snz
+    clr PwmAcc
+
+  mov   w, #-IsrPer
+  retiw
+
+org     $100
+
+;** Mainline program *******************************************
+;
+Start
+  clr  ADCStat                          ; Initialize variables
+  clr  Timer
+  mode LVL                              ; Set RA.0 to
+  mov  !ra, #%11111110                  ; CMOS
+  mode TRIS
+  mov  !rb, #%11111110                  ; rb.0 is PWM output
+  mov  raMask, #%11111110               ; Initialize Port A mask and
+  clrb ra.0                             ; set RA.0 to low to 
+                                        ; discharge C and
+  mov  !ra, raMask                      ; set RA.0 as output
+
+  mov  !option,#%10011111               ; Enable RTCC interrupt
+
+Loop                                    ; Nothing to do here for now...
+  jmp Loop

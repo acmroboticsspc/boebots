@@ -1,0 +1,57 @@
+' -----[ Title ]------------------------------------------------------
+'
+' File...... gps.bsp
+' Purpose... Reading of GPS information 
+' Author.... Claus Kuehnel  
+' Started... 2001-07-27 
+' Updated... 
+
+' -----[ Program Description ]----------------------------------------
+'
+' 
+
+' -----[ Revision History ]-------------------------------------------
+'
+
+' -----[ Directives ]-------------------------------------------------
+'
+'{$STAMP BS2p} 			'specifies a BS2p
+
+' -----[ Constants ]--------------------------------------------------
+'
+Baud4800 con 240
+RxD	con 16
+     
+' -----[ Variables ]--------------------------------------------------
+'
+time 	var byte(6)
+date 	var byte(6)
+speed	var byte
+    
+
+' -----[ Initialization ]---------------------------------------------
+'
+date = 123
+
+' -----[ Main Code ]--------------------------------------------------
+'
+loop:
+	'Read the RMC sentence from GPS
+	'$GPRMC,162724,A,0000.730,N,00000.730,W,040.0,315.0,270701,000.0,E*60
+	serin RxD, Baud4800, [wait("GPRMC,"), STR time\6, wait(","),wait(","),wait(","),wait(","),wait(","),wait(","),wait(","), STR date\6] 'puts serin data in RAM, it is the current true heading
+
+	'Read the VTG sentence from GPS
+	'$GPVTG,315.0,T,315.0,M,040.0,N,074.1,K*48
+	serin RxD, Baud4800, [wait("GPVTG,"),wait(","),wait(","),wait(","),wait(","),wait(","),wait(","),dec speed] 'puts serin data in RAM, it is the current true heading
+' 	debug STR date\6, " ", STR time\6, " Speed = ", dec speed,cr
+	if speed > 50 then beep
+	goto loop
+
+
+' -----[ Subroutines ]------------------------------------------------
+'
+beep:	freqout 8,100,500
+	goto loop
+	
+
+' -----[ Data ]-------------------------------------------------------

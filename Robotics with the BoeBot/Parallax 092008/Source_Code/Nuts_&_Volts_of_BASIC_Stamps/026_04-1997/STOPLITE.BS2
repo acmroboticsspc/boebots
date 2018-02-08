@@ -1,0 +1,64 @@
+' Program Listing 26.2. Stoplight control for BS2
+' Program: STOPLITE.BS2 (Sequence a stoplight from a lookup table.)
+' This program generates proper green-yellow-red sequencing for a
+' pair of traffic signals controlling an intersection. I refer
+' to one street as "EW" (east-west) and the other as "NS" (north-
+' south). Pins are connected to LEDs as follows:
+' 	P5 	EW/red 		P2 	NS/red
+' 	P4 	EW/yellow 	P1 	NS/yellow
+' 	P3 	EW/green 	P0 	NS/green
+' ====Constants===
+' The program uses six 16-bit constants to represent the states
+' of the lights (lower 6 bits) and the length of time to leave
+' the lights in those states (upper 10 bits). Here's how the
+' constants are organized:
+' 		Duration (ms) Pattern of lights
+' 			    \    	/
+' 			|=========|====|
+' The BS2 host software permits compile-time math (math done on
+' the PC before downloading to the Stamp), which we'll use to
+' combine two sets of constants--one representing light patterns
+' and another times. This allows you to change the timing of
+' the lights (or the bit patterns, if you wired the lights
+' differently) without worrying about how the bits are packed
+' into their 16-bit packages.
+
+NSgrn 		con %00100001 	' Make NS green, EW red.
+NSyel 		con %00100010 	' Make NS yellow, EW red.
+allRed 		con %00100100 	' Make both lights red.
+EWgrn 		con %00001100 	' Make EW green, NS red.
+EWyel 		con %00010100 	' Make EW yellow, NS red.
+NsgoTime 	con 8192 	' Set NS green duration (in milliseconds).
+YelTime		con 2048 	' Set duration of any yellow.
+EWgoTime 	con 8192 	' Set EW green duration.
+redOverlap 	con 512 	' Set red/red overlap time.
+
+' The bit-pattern and timing constants are combined as follows:
+' The time is logically ANDed with %1111111111000000, which
+' clears the lower 6 bits to 0s while leaving the upper 10
+' bits intact. The result is logically ORed with the 6-bit
+' light pattern, which copies the 1s of the pattern into the
+' lower 6 bits. If this ANDing and ORing is unfamiliar, check
+' out Stamp Applications #14, April 1996 for a quick lesson
+' in Boolean logic. (See the N&V web site or contact the
+' magazine for back issues.)
+
+top10 		con %1111111111000000 	' Mask off lower 6 bits.
+btm6 		con %0000000000111111 	' Mask off upper 10 bits.
+NSgo 		con NSgoTime & top10 | NSgrn ' 16-bit time/bit pat.
+NSwarn 		con yelTime & top10 | NSyel 		' "
+allStop 	con RedOverlap & top10 | allRed 	' "
+EWgo 		con EWgoTime & top10 | EWgrn 		' "
+EWwarn 		con yelTime & top10 | EWyel 		' "
+' ===Variables===
+seq 	var 	nib 	' Current state (0-5) of stoplight sequence.
+lkup 	var 	word 	' Number from lookup table.
+' ===Program===
+DIRS = %00111111 	' Set lower six pins to output.
+again: 			' Endless loop.
+for seq = 0 to 5 	' For each of six stored patterns/times..
+  lookup seq,[NSgo,NSwarn,allStop,EWgo,EWwarn,allStop],lkup ' Get bits.
+  OUTS = lkup & btm6 	' Copy lower 6 bits to pins.
+  pause lkup & top10 	' Set delay to upper 10 bits.
+next 			' ..and get the next entry from the table.
+goto again ' Repeat endlessly.

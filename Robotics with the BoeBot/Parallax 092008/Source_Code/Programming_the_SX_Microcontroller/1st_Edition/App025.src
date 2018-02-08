@@ -1,0 +1,575 @@
+; APP025.SRC - Controlling 7-segment displays - more variations
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+
+;-- Modify these definitions as needed -----------------------------
+;
+;SELF_TEST   equ 1                      ; Activate this line for self-test!
+;SCOPE       equ 1                      ; Activate this line for a scope
+                                        ; trigger pulse at rc.0!
+DEV_TYPE     equ 1                      ; Device type 
+DEV_ID       equ 3                      ; Device address
+BIT_COUNT    equ 16                     ; Number of bits/I2C packet
+WAIT_IDLE    equ 4                      ; Number of I2C clock periods that   
+                                        ; must elapse while SCL/SDA are
+                                        ; both high until an idle state is
+                                        ; assumed
+REPEAT_SEND  equ 5                      ; Number of re-tries in case of a
+                                        ; missing acknowledge
+I2C_PORT     equ ra                     ; Port that controls SDA and SCL
+SCL_BIT      equ 0                      ; Port bit for SCL
+SDA_BIT      equ 1                      ; Port bit for SDA
+I2C_BIT_MASK equ %11111100              ; In this mask, the bits must be
+                                        ; clear that correspond to the
+                                        ; port's SDA and SCL bits. 
+INT_PERIOD   equ 125                    ; At 50 MHz system clock, the ISR
+                                        ; is called every 2,5 µs. Per I2C
+                                        ; clock, four ISR calls are
+                                        ; required, resulting in an SCL
+                                        ; period of 10 µs, or a SCL
+                                        ; frequency of 100 kHz
+;---------------------------------------------------------------------
+
+
+;-- Internal definitions ---------------------------------------------
+;
+ifdef SELF_TEST                         ; Internal device address
+  DEV_ADDR   equ ((DEV_TYPE * 8) + DEV_ID) * 16
+else
+  DEV_ADDR   equ (((1-DEV_TYPE) * 8) + DEV_ID) * 16
+endif
+
+TRIS         equ 00fh
+LVL          equ 00dh
+INT_ON       equ %10011110              ; Enable RTCC  interrupt
+SCL          equ I2C_PORT.SCL_BIT       ; Definition for SCL port bit
+SDA          equ I2C_PORT.SDA_BIT       ; Definition for SDA port bit
+
+;-- Macro definitions ------------------------------------------------
+
+SDA_LOW macro                           ; Pull SDA low
+  clrb TrisMask.SDA_BIT
+endm
+
+SDA_HIGH macro                          ; Release SDA to high
+  setb TrisMask.SDA_BIT
+endm
+SCL_LOW macro                           ; Pull SCL low
+  clrb TrisMask.SCL_BIT
+endm
+
+SCL_HIGH macro                          ; Release SCL to high
+  setb TrisMask.SCL_BIT
+endm
+
+SkipIfNotSda macro                      ; Skip if SDA is low
+  snb SDA
+endm
+
+SkipIfScl macro                         ; Skip if SCL is high
+  sb SCL
+endm
+
+SkipIfNotScl macro                      ; Skip if SCL is low
+  snb SCL
+endm
+
+StartTx macro                           ; Start the I2C master
+  setb Flags.0
+endm
+
+StopTx macro                            ; Stop the I2C master
+  clrb Flags.0
+endm
+
+SkipIfTxNotBusy macro                   ; Skip if I2C master is not active
+  snb Flags.0
+endm
+
+SetTxError macro                        ; Set the I2C master error flag
+  setb Flags.1
+endm
+
+ClrTxError macro                        ; Clear the I2C master error flag
+  clrb Flags.1
+endm
+
+SkipIfNoTxError macro                   ; Skip if no I2C master error
+  snb Flags.1
+endm
+
+SetRxData macro                         ; Set "received data" flag
+  setb Flags.2
+endm
+
+ClrRxData macro                         ; Clear "received data" flag
+  clrb Flags.2
+endm
+
+SkipIfNoRxData macro                    ; Skip if no new data have been
+                                        ;  received
+  snb Flags.2
+endm
+
+;-- Global variables ------------------------------------------------- 
+;
+org        $08
+;---------------------------------------------------------------------      
+Flags      ds 1                         ; Various flags (see the macros)
+DevAddr    ds 1                         ; Internal device address
+Timer      ds 3                         ; For testing purposes only
+
+;-- Variables for the I2C master -------------------------------------
+org        $50
+I2C_Tx     equ $
+;---------------------------------------------------------------------
+TxData     ds 2                         ; Transmit data
+TxBuffer   ds 2                         ; Transmit buffer
+TxState    ds 1                         ; Main state  
+TxSubState ds 1                         ; Sub-state   
+TxRepeat   ds 1                         ; Repeat counter
+TxBitCount ds 1                         ; Bit counter
+TxTimer    ds 1                         ; Time counter
+TrisMask   ds 1                         ; Port mask
+TxTimeout  ds 1  
+
+;-- Variables for the I2C slave -------------------------------------
+;
+org        $70
+I2C_Rx     equ $
+;--------------------------------------------------------------------
+RxData     ds 2                         ; Receive data
+RxBitCount ds 1                         ; Bit counter
+RxState    ds 1                         ; Main state
+RxSubState ds 1                         ; Sub-state
+RxTimeout  ds 1                         ; Counter for timeout
+
+;--------------------------------------------------------------------
+; ISR
+;--------------------------------------------------------------------
+     org   $00
+     call  @I2CTX                       ; Call the I2C master
+     call  @I2CRX                       ; Call the I2C slave
+        
+     bank  I2C_Tx
+     and   I2C_PORT, #I2C_BIT_MASK      ; Clear bits in r?
+     mov   !I2C_PORT, TrisMask          ; Output bit mask for !r?
+        
+     mov   w, #-INT_PERIOD
+     retiw
+
+;---------------------------------------------------------------------
+InitPorts                               ; Initialize the ports
+;---------------------------------------------------------------------
+     mode  LVL
+     mov   w, #%11111100
+     mov   !I2C_PORT, w                 ; Set I2C lines to CMOS
+     mode  TRIS
+        
+     ifdef SCOPE                        ; Configure trigger output for
+       mov !rc, #%11111110              ; an oscilloscope
+     endif  
+     ret
+
+     org   $100
+
+;---------------------------------------------------------------------
+Start   ; Mainline program
+;---------------------------------------------------------------------      
+
+;-- Clear the data memory
+;
+     clr    fsr
+ClearData
+     sb     fsr.4
+       Setb fsr.3
+     clr    ind
+     ijnz   fsr, ClearData
+
+     call   InitPorts                   ; Configure the ports
+     mov    DevAddr, #DEV_ADDR
+     bank   I2C_Tx
+     mov    TxData, DevAddr             ; The upper four bits of the trans-
+                                        ; mit data contain the device ID
+     mov    TrisMask, #I2C_BIT_MASK     ; Initialize the port mask
+     setb   TrisMask.SCL_BIT
+     setb   TrisMask.SDA_BIT
+     mov    !I2C_PORT, TrisMask         ; Set SDA and SCL high
+     mov    !option, #INT_ON            ; Enable the RTCC interrupt
+     mov    Timer+1, #5                 ; For testing purposes only
+
+;---------------------------------------------------------------------
+Main    ; Main program loop
+;---------------------------------------------------------------------
+     SkipIfNoRxData                     ; If received data, re-start the
+       ClrRxData                        ; slave
+     SkipIfTxNotBusy                    ; Wait when Master is busy
+       jmp  Main
+:Delay    
+     decsz  Timer                       ; Generate a delay
+       jmp  :Delay
+     StartTx                            ; Start the master
+     decsz  Timer+1                     ; Generate a delay
+       jmp  Main
+     add    TxData+1, #1                ; Increment send data
+     addb   TxData, c
+     and    TxData, #$0f                ; Set the upper 4 bits to the 
+     or     TxData, DevAddr             ; device ID
+     jmp    Main                        ; Repeat sending data
+     
+org  $200
+;-- I2C master -------------------------------------------------------
+
+     bank   I2C_Tx
+
+;---------------------------------------------------------------------
+; Routines called from various sub-states       
+;---------------------------------------------------------------------
+
+ClockHigh                               ; Set SCL high and select next
+                                        ; sub-state
+     SCL_HIGH
+     inc    TxSubState
+     retp
+                
+ClockLow                                ; SCL low
+     ifdef  SCOPE
+       clrb rc.0                        ; Trigger pulse for oscilloscope
+     endif
+     SCL_LOW
+     inc    TxSubState
+     retp
+
+DataHigh                                ; SDA high and next sub-state
+     SDA_HIGH
+     inc    TxSubState
+     retp
+
+WaitClockHigh                           ; Wait until SCL is high
+  SkipIfNotScl
+    inc     RxSubState                  ; and next sub-state
+  retp
+        
+;---------------------------------------------------------------------
+I2CTX   ; I2C-Master
+;
+; Data to be sent must be stored in TxData (HOB) und TxData+1 (LOB)
+; before starting the master.
+;
+; The StartTx macro starts the master
+; The SkipIfTxNotBusy macro tests if the master is busy
+; The SkipIfNoTxError macro tests if there was an error during the 
+;  last send (no acknowledge from slave or timeout).
+;---------------------------------------------------------------------
+     mov    w, TxState                  ; Jump table for main states
+     jmp    pc+w
+:TxIdle 
+     jmp    :Idle                       ; Nothing to send
+:TxInit 
+     jmp    :InitSend                   ; Initialize the master
+     jmp    :SetStart                   ; Set the start condition
+     jmp    :SendData                   ; Send data
+     jmp    :GetAck                     ; Read the acknowledge
+     jmp    :SetStop                    ; Set stop condition
+:TxError        
+     jmp    :HandleError                ; Handle errors
+;-- Nothing to send ---------------
+;       
+:Idle
+     mov    TxRepeat, #REPEAT_SEND+1    ; Initialize the repeat counter 
+     SDA_HIGH                           ; Release SDA and SCL for safety
+     SCL_HIGH                           ; reasons
+     SkipIfTxNotBusy                    ; If the mainline has turned on the
+       inc  TxState                     ; master, next state is InitSend
+     retp       
+  
+;-- Initialize the master --------      
+;
+:InitSend
+     mov    TxBuffer, TxData            ; Copy send data to the send
+     mov    TxBuffer+1, TxData+1        ; buffer
+     ifdef  SCOPE                       ; Generate trigger pulse for an
+       setb rc.0                        ; oscilloscope
+     endif
+     mov    TxBitCount, #BIT_COUNT      ; Initialize the bit counter
+     ClrTxError                         ; Clear the error flag
+     clr    TxTimeout                   ; Clear the timeout counter
+     clr    TxSubState                  ; Clear the sub-state
+     inc    TxState                     ; Next state is SetStart
+     retp
+
+;-- Set the start condition -----       
+;
+:SetStart
+     mov    w, TxSubState               ; Jump table for sub-states
+     jmp    pc+w
+     jmp    :StartInit                  ; Initialization
+     jmp    :WaitIdle                   ; Wait for the stop condition
+                
+:StartInit
+     SCL_HIGH                           ; Release SCL and
+     SDA_HIGH                           ; SDA to high
+     mov    TxTimer, #WAIT_IDLE         ; Initialize the time counter
+     inc    TxSubState                  ; Next sub-state is WaitIdle
+     retp
+        
+:WaitIdle
+     dec    TxTimeout
+     snz
+       jmp  :HandleError
+     sb     SCL 
+       jmp  :NotIdle                    ; If SCL is low, no stop state
+     sb     SDA
+       jmp  :NotIdle                    ; If SDA is low, no stop either
+     dec    TxTimer                     ; Maybe, we have a stop now:  
+                                        ; decrement the counter, and stay
+     sz                                 ; in this sub-state if TxTimer
+       retp                             ; > 0
+     clr    TxTimeout                   ; We have a stop, clear timeout
+     SDA_LOW                            ; Set the start condition
+     clr    TxSubState                  ; Clear the sub-state
+     inc    TxState                     ; Next state is SendData
+     retp
+:NotIdle
+     mov    TxTimer, #4                 ; If no stop state, re-init the    
+     retp                               ; timer, and stay in this sub- 
+                                        ; state
+;-- Send data -------------------
+;
+:SendData
+     mov    w, TxSubState               ; Jump table for sub-states
+     jmp    pc+w
+     jmp    ClockLow
+     jmp    :SetDataBit
+     jmp    ClockHigh
+     jmp    :CheckClockHigh
+
+:SetDataBit
+     SDA_HIGH                           ; Prepare SDA mask to be high
+     sb     TxBuffer.7                  ; If transmit bit is low,
+       SDA_LOW                          ; clear the SDA mask
+
+     inc    TxSubState                  ; Next sub-state is ClockHigh
+     retp
+        
+:CheckClockHigh                         ; Check if SCL is high in order
+                                        ; to allow for clock-stretching
+     dec    TxTimeout
+     snz
+       jmp  :HandleError
+     sb     SCL 
+       retp                             ; If SCL is low, stay in this
+                                        ; sub-state
+     sb     TxBuffer.7                  ; If the send bit is high, we need
+                                        ; to test for arbitration, else
+     jmp    :PrepareNext                ; prepare next bit
+     SkipIfNotSda                       ; If SDA is low we have lost 
+                                        ; arbitration, else
+       jmp  :PrepareNext                ; prepare next bit
+     mov    TxState, #(:TxError-:TxIdle) ; State is HandleError
+     retp
+
+:PrepareNext
+     clr    TxTimeout                   ; Reset timeout
+     rl     TxBuffer+1                  ; Next bit to TxBuffer.7
+     rl     TxBuffer     
+     clr    TxSubState                  ; Clear the sub-state
+     dec    TxBitCount                  ; Decrement the bit counter, if
+     sz                                 ; 0, we're all done
+       retp 
+     inc    TxState                     ; Next state is GetAck  
+     retp
+
+ 
+;-- Read acknowledge ------------
+;
+:GetAck
+     mov    w, TxSubState               ; Jump table for sub-states
+     jmp    pc+w
+     jmp    ClockLow
+     jmp    DataHigh
+     jmp    ClockHigh
+     jmp    :CheckClockHighAck
+
+:CheckClockHighAck
+     dec    TxTimeout
+     snz
+       jmp  :HandleError
+     sb     SCL 
+       retp                             ; If SCL is low, stay in that state. else
+     inc    TxState                     ; next state is SetStop
+     clr    TxSubState
+     SkipIfNotSda                       ; If SDA is low, we have an Ack,
+       SetTxError                       ; else set the error flag
+     retp
+
+;-- Set stop condition ----------
+;
+:SetStop
+     mov    w, TxSubState               ; Jump table for sub-states
+     jmp    pc+w
+     jmp    ClockLow
+     jmp    :DataLow
+     jmp    ClockHigh
+     jmp    DataHigh
+     jmp    DataHigh
+     jmp    :TxFinish
+                
+:DataLow
+     SDA_LOW
+     inc    TxSubState  
+     retp
+        
+:TxFinish               
+     inc    TxState                     ; Prepare state for HandleError
+     SkipIfNoTxError                    ; If there is an error, keep that 
+       retp                             ; state, else clear the state
+     clr    TxState                     ; next state is Idle
+     StopTx                             ; Clear the "Master Busy" flag
+     retp
+
+;-- Error handling --------------
+;
+:HandleError
+     SCL_HIGH                           ; Release the bus
+     SDA_HIGH
+     clr    TxSubState                  ; Clear the states
+     clr    TxState
+     dec    TxRepeat                    ; If repeats are allowed, set
+     sz                                 ;
+                                        ; state to TxInit, else
+     mov    TxState, #(:TxInit - :TxIdle) ;     
+     StopTx                             ; clear the "Master Busy" flag,
+     SetTxError                         ; and set the error flag
+     retp
+        
+     org    $400
+;---------------------------------------------------------------------
+I2CRX   ; I2C-Slave
+;
+; Received data is stored in RxData (HOB) and RxData+1 (LOB)
+;
+; The SkipIfNoRxData macro tests if new data is available
+; The ClrRxData macro enables the slave to receive more data. Call
+;  this macro after processing the recently received data.
+;---------------------------------------------------------------------
+     bank   I2C_Rx
+
+     SkipIfNoRxData                     ; No action if the mainline pro-
+       retp                             ; gram has not enabled the slave
+
+     dec    RxTimeout                   ; If timeout, 
+     snz
+       jmp  :RxError                    ; try to receive again
+
+     mov    w, RxState                  ; Jump table for mains states
+     jmp    pc+w
+     jmp    :RxDetectStart
+     jmp    :RxGetBits
+     jmp    :RxSendAck
+  
+;-- Wait for start condition
+;
+:RxDetectStart
+     mov    w, RxSubState               ; Jump table for sub-states
+     jmp    pc+w
+     jmp    :WaitSdaHigh
+     jmp    :WaitSdaLow
+        
+:WaitSdaHigh    
+     SkipIfNotSda                       ; If SDA is high, next sub-state
+       inc  RxSubState                  ; is WaitSdaLow
+     retp        
+  
+:WaitSdaLow
+     SkipIfNotSda                       ; Wait until SDA is low 
+       retp                             ; (possibly a start condition)
+     SkipIfScl                          ; If SCL is not low, this is not
+       jmp  :RxError                    ; a start condition
+     mov    RxBitCount, #BIT_COUNT      ; Init the bit counter
+     clr    RxSubState                  ; Clear the sub-state
+     inc    RxState                     ; Next state is RxGetBits
+     retp  
+;-- Receive data ----------------
+;
+:RxGetBits
+     mov    w, RxSubState               ; Jump table for sub-states
+     jmp    pc+w
+     jmp    :WaitClockHigh
+     jmp    :GetDataBit
+        
+:GetDataBit                             ; Receive a bit
+     clc                                ; Clear C, and if
+     SkipIfNotSda                       ; SDA is high,
+       stc                              ; set C
+     rl     RxData+1                    ; Shift C into the received data
+     rl     RxData                       
+     decsz  RxBitCount                  ; If there are more bit to receive,
+       jmp  :SetupNext                  ; prepare next bit, else
+     clr    RxSubState                  ; clear the sub-state, and 
+     inc    RxState                     ; next state is SendAck
+     retp
+
+:SetupNext
+     dec    RxSubState                  ; Set sub-state to WaitClockHigh
+     retp
+
+;-- Send an acknowledge ---------
+;
+:RxSendAck
+     mov    w, RxSubState
+     jmp    pc+w
+     jmp    :WaitClockLowAck
+     jmp    :WaitClockHigh
+     jmp    :WaitClockLow
+        
+:WaitClockLowAck                        ; Wait for SCL low before sending
+     SkipIfNotScl                       ; the acknowledge
+       retp
+     mov    w, RxData                   ; Test the received device ID and
+     ifndef SELF_TEST                   ;
+       xor  w, #%10000000               ; invert the device type bit
+     endif
+     bank I2C_Tx  
+     and    w, #$f0                     ; Mask Id bits, and compare against
+     mov    w, DevAddr-w                ; DevAddr
+     snz                                ; If equal, pull
+       SDA_LOW                          ;  SDA to low for acknowledge
+     bank   I2C_Rx
+     inc    RxSubState                  ; Next sub-state is WaitClockHigh
+     retp
+        
+:WaitClockHigh                          ; Wait until SCL is high
+     SkipIfNotScl
+     inc     RxSubState                 ; Next sub-state is WaitClockLow
+     retp
+
+:WaitClockLow
+     SkipIfNotScl                       ; Wait until SCL is low
+       retp
+    ifndef SELF_TEST
+      bank I2C_Tx  
+      SDA_HIGH                          ; Release SDA to high
+      bank I2C_Rx  
+    endif
+    SetRxData                           ; Set the "Data received" flag
+
+:RxError
+    clr RxState                         ; Clear the states, and
+    clr RxSubState
+    clr RxTimeout                       ; the timeout counter
+
+    retp

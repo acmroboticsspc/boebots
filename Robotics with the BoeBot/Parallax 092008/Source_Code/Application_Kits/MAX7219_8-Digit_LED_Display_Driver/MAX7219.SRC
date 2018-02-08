@@ -1,0 +1,110 @@
+; Program: MAX7219.SRC
+; This program controls the MAX7219 LED display driver. It demonstrates
+; the basics of communicating with the 7219, and shows a convenient
+; method for storing setup data in tables.
+
+; Hardware interface with the 7219:
+DATA    =       rb.7    ; Bits are shifted out this pin to 7219.
+CLK	=	rb.5	; Data valid on rising edge of this clock pin.
+Load    =       rb.6    ; Tells 7219 to transfer data to LEDs.
+
+; The 7219 accepts 16-bit packets of data sent most-significant bit (msb)
+; first. The upper byte of the packet is the address of a register within
+; the 7219. These registers hold data to be displayed on the LEDs, or
+; setup bits that define the 7219's operating mode.
+
+; High-order byte opcodes for the MAX7219:
+dig_0	=	1	; addresses digit 0.
+dig_1	=	2	; "             " 1.
+dig_2	=	3	; "             " 2.
+dig_3	=	4	; "             " 3.
+dig_4   =       5       ; "             " 4.
+dig_5   =       6       ; "             " 5.
+dig_6   =       7       ; "             " 6.
+dig_7   =       8       ; "             " 7.
+dcd     =       9       ; addresses the decode register.
+brite	=	10	; "       "   " intensity register.
+scan	=	11	; "       "   " scan-limit register.
+switch  =       12      ; "       "   " on/off register.
+test    =       15      ; activates test mode (all digits on, 100% bright)
+
+        org     8
+shifts  ds      1       ; Shift counter used for output to MAX7219.
+max_reg ds      1       ; Register address of MAX7219
+max_arg ds      1       ; Argument (data) for MAX7219.
+temp    ds      1       ; Temporary counter used to index setup table.
+
+; Device data and reset vector
+        device  pic16c54,xt_osc,wdt_off,protect_off
+	reset	start
+	org	0
+
+; This table contains pairs of instructions and data to be sent to
+; the 7219. The first three pairs set the scan-limit register for
+; all digits, 0-7; the brightness to 10 (out of a possible 15);
+; and enable BCD decoding of all digits. The next eight pairs
+; write the digits "3.1415926" to the display. Note that setting
+; bit 7 of a BCD digit (by adding or ORing with 128) turns on
+; the decimal point for that digit.
+; == In an actual application, you would probably want to fill the
+; numeric entries of this table with some appropriate starting
+; value for the display, such as blanks (15 decimal) or dashes
+; (10 decimal) in all digits.
+
+LED_setup
+        jmp     pc+w            ; Jump into table based on index # in w.
+        retw    scan,7          ; Scan digits 0 - 7.
+        retw    brite,10        ; Max brightness is 15. (Very bright!)
+        retw    dcd,11111111b   ; BCD decode all digits.
+        retw    dig_7,3+128     ; "3."
+        retw    dig_6,1         ; "1"
+        retw    dig_5,4         ; "4"
+        retw    dig_4,1         ; "1"
+        retw    dig_3,5         ; "5"
+        retw    dig_2,9         ; "9"
+        retw    dig_1,2         ; "2"
+        retw    dig_0,6         ; "6"
+        retw    switch,1        ; Turn display on.
+
+; This subroutine reads the parameters from LED_setup and uses them to
+; initialize the LED driver when the hardware first wakes up.
+LED_init
+        clr     temp            ; Start with temp (the index #) = 0.
+:loop   mov     w,temp          ; Move temp into w.
+        call    LED_setup       ; And use w to retrieve value from table.
+        mov     max_reg,w       ; Put table value into max_reg.
+        inc     temp            ; Let temp=temp+1 to get next table entry.
+        mov     w,temp          ; Move temp into w.
+        call    LED_setup       ; Retrieve value from table.
+        mov     max_arg,w       ; Put table value into max_arg.
+        call    MAX_out         ; Send max_reg and max_arg to MAX7219.
+        inc     temp            ; Point to next location in table.
+        cjb     temp,#23,:loop  ; Have we reached the end of table?
+        ret                     ; If so, return; else loop.
+
+; Transmits the 16-bit data packet stored in max_reg and max_arg
+; to the MAX7219. After the routine executes, max_reg and max_arg
+; are unchanged.
+
+MAX_out
+        mov     shifts,#16      ; Set up to send 16 bits.
+:loop   clrb    CLK             ; End previous clock cycle.
+        rl      max_arg         ; Rotate lower byte's msb into carry.
+        rl      max_reg         ; Rotate carry into upper byte; msb to carry.
+        movb    DATA,c          ; Move carry to data output.
+        setb    CLK             ; Raise the clock.
+        djnz    shifts,:loop    ; All 16 bits sent? If not, loop.
+        setb    load            ; Bits sent. Pulse load pin on MAX7219.
+        rl      max_arg         ; Rotate bytes one more time to return..
+        rl      max_reg         ; ..them to their original states.
+        clrb    load            ; Finish load pulse.
+        ret                     ; Return.
+
+start   clr     rb              ; Start with rb bits low.
+        mov     !ra,#0          ; Set data direction to output.
+        mov     !rb,#0          ; "                     "
+        call    LED_init        ; Send the data from the table.
+        jmp     $               ; Done: endless loop.
+
+
+

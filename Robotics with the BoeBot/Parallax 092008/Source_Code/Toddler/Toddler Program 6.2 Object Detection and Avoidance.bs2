@@ -1,0 +1,275 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 6.2: Object Detection and Avoidance
+' Uses the infrared emitters and detectors 
+' {$STAMP BS2}
+' {$PBASIC 2.5} 
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+lEmitter        CON     4
+rEmitter        CON     15
+
+lInput          VAR     in11
+rInput          VAR     in14
+
+StrideServo     CON     12              ' Stride servo on P12
+TiltServo       CON     13              ' Tilt servo on P13
+
+' -----[ Constants ]-------------------------------------------------------
+
+MoveDelay       CON     18              ' in micrcoseconds
+TiltStep        CON     10              ' TiltServo step size
+StrideStep      CON     10              ' StrideServo step size
+
+RightTilt       CON     620             ' Tilt limits
+CenterTilt      CON     750             
+LeftTilt        CON     880             
+
+RightStride     CON     650             ' Stride limits
+CenterStride    CON     750             
+LeftStride      CON     850             
+
+' -----[ Variables ]-------------------------------------------------------
+
+Sensors         VAR     Nib             ' variable is used to store
+                                        ' lower two bits of detector values
+FigureLoop      VAR     Nib
+MoveLoop        VAR     Byte            ' Loop for repeat movements
+MoveLoopLimit   VAR     Byte
+
+SubMoveLoop     VAR     Byte            ' Loop for repeat submovements
+SubMoveLoopLmt  VAR     Byte
+
+Pulses          VAR     Word            ' Pulse variable
+
+CurrentTilt     VAR     Word
+CurrentStride   VAR     Word
+NewValue        VAR     Word
+
+Dx              VAR     Pulses
+Mx              VAR     Word
+MxCurrent       VAR     Word
+
+Sx              VAR     Word
+SxCurrent       VAR     Word
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+' ------ Movement Support Codes ------
+' The following state tables are lists of movement state numbers.
+' A xx indicates the end of a list.
+' These are used with the Movement routine.
+
+TL              CON     0
+TC              CON     1
+TR              CON     2
+
+SL              CON     3
+SC              CON     4
+SR              CON     5
+
+xx              CON     255
+
+
+' ------ Movement Value Tables ------
+'
+' These can be used with the Movement routine.
+' The tables can contain Basic Movement Codes.
+'
+' Note: ALL movement tables must be in this section
+
+LeftSemicircle  DATA    7, bLeftTurn,  bLeftTurn,  bForward, xx
+RightSemicircle DATA    7, bRightTurn, bRightTurn, bForward, xx
+
+WalkForward3    DATA    3, bForward, xx
+WalkForward8    DATA    8, bForward, xx
+
+
+' ------ Basic Movement Codes ------
+'
+' Used in Movement tables.
+' Referenced below using LOOKUP statement.
+
+bFinish         CON     0
+bForward        CON     1
+bBackward       CON     2
+bLeftTurn       CON     3
+bRightTurn      CON     4
+bPivotLeft      CON     5
+bPivotRight     CON     6
+
+
+' ------ Basic Movement Tables ------
+'
+' These tables can contain Movement Support Codes.
+
+BasicMovements  CON     Forward
+
+Forward         DATA    1, TR, SL, TL, SR, xx
+Backward        DATA    1, TR, SR, TL, SL, xx
+
+LeftTurn        DATA    1, TL, SR, TC, SL, TL, SR, TR, SL, xx
+RightTurn       DATA    1, TR, SL, TC, SR, TR, SL, TL, SR, xx
+
+PivotLeft       DATA    3, TL, SR, TC, SL, TR, SR, TC, SL, xx
+PivotRight      DATA    3, TR, SL, TC, SR, TL, SL, TC, SR, xx
+
+Finish          DATA    1, TR, SC, TC, xx
+
+' -----[ Initialization ]--------------------------------------------------
+
+OUTPUT lEmitter                         ' signals to function as outputs
+OUTPUT rEmitter
+
+GOSUB ResetCC                           ' Initialize feet
+
+' -----[ Main Code ]-------------------------------------------------------
+
+DO
+  FREQOUT lEmitter,1,38500              ' Send freqout signal - left IRLED.
+  sensors.bit0 = lInput                 ' Store IR detector output in RAM.
+                                        ' Detect object on the right.
+  FREQOUT rEmitter,1,38500              ' Repeat for the right IR pair.
+  sensors.bit1 = rInput
+
+  PAUSE 18                              ' 18 ms pause(2 ms lost on freqout)
+
+  ' Loads the IR detector output values into the lower 2 bits of the 
+  ' sensors variable, a number btwn 0 and 3 that the LOOKUP command can use
+
+  LOOKUP sensors,[Backward,PivotLeft,PivotRight,Forward],Mx
+
+  GOSUB Movement
+LOOP
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+' ----- Movement: Move feet using DATA table referenced by Mx -----
+'
+' Input: Mx = movement table index, table ends in xx
+'    or
+'        Mx = submovement table index, table ends in xx
+'
+' Note: All submovment tables come after the movment tables in this file.
+
+Movement:
+  IF Mx < BasicMovements THEN SetupMovement
+
+  MxCurrent = Mx                        ' setup to use submovement table
+  MoveLoopLimit = 1
+  GOTO StartMovement
+
+SetupMovement:
+  READ Mx, MoveLoopLimit                ' read movement table repeat count
+  MxCurrent = Mx + 1
+
+StartMovement:
+  FOR MoveLoop = 1 to MoveLoopLimit
+    Mx = MxCurrent                      ' Mx = start of movement table
+
+'debug DEC Mx, " Movement ", DEC MoveLoop, " of ", DEC MoveLoopLimit,cr
+
+    IF Mx < BasicMovements THEN MovementLoop
+                                        ' skip if movement table
+    SxCurrent = Mx                      ' SxCurrent = submovement table index
+    GOTO StartSubMovement               ' enter middle of loop
+
+      MovementLoop:
+        READ Mx, SxCurrent              ' read next submovment byte
+        Mx = Mx + 1
+        IF SxCurrent = xx THEN MovementDone
+                                        ' skip if end of list
+ debug "  ", DEC SxCurrent, " movement",cr
+        LOOKUP SxCurrent,[Finish,Forward,Backward,LeftTurn,RightTurn,
+        PivotLeft,PivotRight],SxCurrent
+                                        ' lookup submovement table index
+        StartSubMovement:               ' start executing submovement table
+          READ SxCurrent, SubMoveLoopLmt
+                                        ' read submovement table repeat count
+          SxCurrent = SxCurrent + 1
+          FOR SubMoveLoop = 1 to SubMoveLoopLmt
+            Sx = SxCurrent
+
+ debug "   ", DEC Sx, " submovement ", DEC SubMoveLoop, " of ", DEC SubMoveLoopLmt,cr
+
+            SubMovementLoop:
+              READ Sx, Dx               ' read next submovent action
+              Sx = Sx + 1
+              IF Dx = xx THEN SubMovementDone
+                                        ' skip if end of list
+              GOSUB DoMovement          ' execute movement
+              GOTO SubMovementLoop
+
+            SubMovementDone:
+           NEXT
+           IF Mx < BasicMovements THEN MovementLoop
+                                        ' exit if submovement table
+           MovementDone:
+         NEXT
+       RETURN
+
+       DoMovement:
+debug "    ", DEC Dx, " action",cr
+         BRANCH Dx,[TiltLeft,TiltCenter,TiltRight,StrideLeft,
+         StrideCenter,StrideRight]
+                                        ' will fall through if invalid index
+       RETURN
+
+' ----  Movement routines can be called directly ----
+
+TiltLeft:
+  NewValue = LeftTilt
+  GOTO MovementTilt
+
+TiltCenter:
+  NewValue = CenterTilt
+  GOTO MovementTilt
+
+TiltRight:
+  NewValue = RightTilt
+
+MovementTilt:
+  FOR Pulses = CurrentTilt TO NewValue STEP TiltStep
+    PULSOUT TiltServo,   Pulses         
+    PULSOUT StrideServo, CurrentStride
+    PAUSE MoveDelay                                     
+  NEXT
+
+  CurrentTilt = NewValue
+  RETURN
+
+StrideLeft:
+  NewValue = LeftStride
+  GOTO MovementStride
+
+StrideCenter:
+  NewValue = CenterStride
+  GOTO MovementStride
+
+StrideRight:
+  NewValue = RightStride
+
+MovementStride:
+  FOR Pulses = CurrentStride TO NewValue STEP StrideStep                        
+    PULSOUT TiltServo,   CurrentTilt
+    PULSOUT StrideServo, Pulses
+    PAUSE MoveDelay                                     
+  NEXT
+
+  CurrentStride = NewValue
+  RETURN
+
+
+' ----- Move feet to initial center position -----
+
+ResetCC:
+  CurrentTilt   = CenterTilt
+  CurrentStride = CenterStride
+
+  FOR Pulses = 1 TO 100 STEP StrideStep                         
+    PULSOUT TiltServo, CenterTilt               
+    PULSOUT StrideServo, CenterStride
+    PAUSE MoveDelay                                     
+  NEXT
+
+DoReturn:
+RETURN

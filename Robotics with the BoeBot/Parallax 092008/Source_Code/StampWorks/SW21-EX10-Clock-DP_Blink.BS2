@@ -1,0 +1,103 @@
+' =========================================================================
+'
+'   File....... SW21-EX10-Clock-DP_Blink.BS2
+'   Purpose.... Simple digital clock with software multiplexing
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program takes an external 10 Hz signal from the pulse generator and
+' synthesizes a simple clock/timer. This code will run, unmodified, on and
+' BS2-family module.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Segs            VAR     OUTL                    ' Segments on P0 - P7
+Digs            VAR     OUTC                    ' Digit control pins
+
+Tic             PIN     15                      ' 1 Hz input
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+Blank           CON     %00000000               ' all segments off
+DecPnt          CON     %10000000               ' decimal point on
+
+IsHigh          CON     1
+IsLow           CON     0
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+nTic            VAR     Bit                     ' new tic input
+oTic            VAR     Bit                     ' old tic value
+xTic            VAR     Bit                     ' change (1 when 0 -> 1)
+tenths          VAR     Word                    ' 0.1 seconds
+time            VAR     Word                    ' formatted time
+theDig          VAR     Nib                     ' current display digit
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+'                        .GFEDCBA
+'                        --------
+Digit0          DATA    %00111111               ' digit patterns
+Digit1          DATA    %00000110
+Digit2          DATA    %01011011
+Digit3          DATA    %01001111
+Digit4          DATA    %01100110
+Digit5          DATA    %01101101
+Digit6          DATA    %01111101
+Digit7          DATA    %00000111
+Digit8          DATA    %01111111
+Digit9          DATA    %01100111
+
+DigSel          DATA    %1110                   ' digit 0 active
+                DATA    %1101                   ' digit 1 active
+                DATA    %1011                   ' digit 2 active
+                DATA    %0111                   ' digit 3 active
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  Digs = %1111                                  ' all off
+  DIRS = $0FFF                                  ' make segs & digs outputs
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO WHILE (Tic = IsHigh)                       ' wait during high cycle
+    GOSUB Show_Clock
+  LOOP
+  DO WHILE (Tic = IsLow)                        ' wait during low cycle
+    GOSUB Show_Clock
+  LOOP
+  tenths = tenths + 1 // 36000                  ' update time @ 10 Hz
+  GOTO Main
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Show_Clock:
+  time = (tenths / 600) * 100                   ' get mins, move to 100s
+  time = time + (tenths // 600 / 10)            ' add seconds in 1s/10s
+  Segs = Blank                                  ' clear display
+  READ (DigSel + theDig), Digs                  ' select digit
+  READ (Digit0 + (time DIG theDig)), Segs       ' move digit pattern to segs
+  IF (theDig = 2) THEN
+    Segs.BIT7 = tenths.BIT0                     ' blink decimal point
+  ENDIF
+  theDig = theDig + 1 // 4                      ' update digit pointer
+  RETURN

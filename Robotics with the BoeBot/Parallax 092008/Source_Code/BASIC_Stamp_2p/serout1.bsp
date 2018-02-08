@@ -1,0 +1,8 @@
+'{$STAMP BS2p}
+
+TxD  	con 16   		'TxD at SOUT
+baud 	con 16624 		'N9600 for BS2p
+
+loop:	serout TxD,baud,["Hello world", cr]
+	pause 1000
+	goto loop

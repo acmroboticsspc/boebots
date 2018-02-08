@@ -1,0 +1,61 @@
+; APP006.SRC - A Simple PWM VP
+;
+; ---------------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller", 2nd Edition by Guenther Daubach
+; Copyright (c) by Parallax Inc. 2004
+; ---------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET   Main
+
+org     $08
+PwmAcc  ds 1                ; Current value for PWM
+PwmVal  ds 1                ; Contents determines pulse width
+rbBuff  ds 1                ; Buffer for Port B output data
+Timer   ds 2                ; Delay counter (for demonstration
+                            ;  purposes)
+
+org     $000
+
+;** PWM Virtual Peripheral *************************************
+
+; This part of the ISR defines the current pulse width.
+;
+  clr   rbBuff              ; Clear port data in advance
+  add   PwmAcc, PwmVal      ; Set current PWM value
+  snc                       ; Time to toggle the output ?
+    setb rbBuff.0
+
+; This part of the ISR is for demonstration purposes only, it con-
+; tinuously modifies the contents of PwmVal, i.e. the pulse width.
+;
+:Change_PW
+  decsz Timer               ; Decrement 1st timer
+    jmp :Exit               ; No underflow, so exit
+  decsz Timer+1             ; Decrement 2nd timer
+    jmp :Exit               ; No underflow, so exit
+
+  mov Timer+1, #10          ; Re-initialize the 2nd timer
+  dec PwmVal                ; Decrease pulse width
+;
+; End of demo part
+
+:Exit    
+  mov   rb, rbBuff          ; Output port data
+  mov   w, #-200
+  retiw
+
+org     $100
+
+;** Mainline program *******************************************
+;
+Main
+  mov   PwmVal, #$80
+  mov   !rb, #%11111110
+  mov   !option,#%10011111  ; Enable RTCC interrupt
+
+Loop                        ; Keep looping...
+  jmp Loop
+
+END

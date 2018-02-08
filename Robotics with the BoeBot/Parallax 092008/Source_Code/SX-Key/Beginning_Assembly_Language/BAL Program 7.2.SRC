@@ -1,0 +1,42 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 7.2
+;=======================================================================
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	start_point
+		freq	50000000   	; 50 MHz
+		org	8
+rtcc1		ds	1
+
+		org	0
+isr		inc	rtcc1
+		cjne	rtcc1,#$4D,iout	; blink every $4D00 periods
+		xor 	rb,#$FF
+; reset time
+		clr	rtcc 
+		clr	rtcc1
+iout
+		reti
+
+start_point
+		mov   	!rb,#$80    	; 7 outputs
+
+; set RTCC to internal clock 1:256 ratio
+		mov	!option,#$87
+loop
+		jmp	loop
+
+
+
+
+
+
+
+
+	
+
+
+
+

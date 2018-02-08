@@ -1,0 +1,40 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 5.1: Photoresistor RCTime Display
+' Displays the R/C discharge time for two photoresistor circuits 
+' {$STAMP BS2}
+' {$PBASIC 2.5}  
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+LPhotoCircuit   CON     10
+RPhotoCircuit   CON     14
+
+' -----[ Variables ]-------------------------------------------------------
+
+LPhotoVal       VAR     Word                    ' Stores measured RC times 
+RPhotoVal       VAR     Word                    ' of photoresistors. 
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+DEBUG CLS                                       ' Open, clear Debug window
+
+' -----[ Main Code ]-------------------------------------------------------
+
+DO
+
+' Measure RC time for left photoresistor.
+  HIGH LPhotoCircuit                            ' Set to output-high.
+  PAUSE 3                                       ' Pause for 3 ms.
+  RCTIME LPhotoCircuit,1,LPhotoVal              ' Measure R/C time on left
+
+' Measure RC time for right photoresistor.
+  HIGH RPhotoCircuit                            ' Set to output-high.
+  PAUSE 3                                       ' Pause for 3 ms
+  RCTIME RPhotoCircuit,1,RPhotoVal              ' Measure R/C time on right
+
+' Display RC time measurements using Debug Terminal.
+
+  DEBUG HOME, "Left =  ", DEC5 LPhotoVal, "  Right =  ", DEC5 RPhotoVal, cr
+
+LOOP

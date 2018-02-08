@@ -1,0 +1,80 @@
+' Program Listing 15.1. BASIC-Style Strings for the BS2
+' Program: BSTRING.BS2 (Demo of BASIC-style counted strings in EEPROM)
+' This program shows how to use the DATA statement to store counted
+' strings in EEPROM, and how to retrieve these strings for serial
+' transmission.
+' Define constants for serial communication with the PC through
+' the built-in serial connector at 9600 baud. Note that this is
+' compatible with the debug window--if the window is on the
+' screen, sending data to the built-in connector at 9600 baud
+' will display it. The debug window doesn't even care whether the
+' serial data is inverted or not! This provides a handy check of
+' serial comms without leaving the STAMP2.EXE host software.
+
+builtIn	con 	16 	' Pin number for built-in serial connector.
+baud 	con 	84 	' Baudmode constant for 9600, non-inverted.
+
+' BASIC strings begin with a byte value (0 to 255) that specifies the
+' number of characters in the string, followed by the characters
+' themselves. In PBASIC-2, this translates to DATA statements that
+' look like this:
+' ADDRESS LENGTH STRING DATA
+' CONSTANT (BYTES) (ASCII CHARACTERS)
+' -----------------------------------------------------------
+
+  title 	DATA 	19, ">>> HELLO DOLLY <<<"
+  phrase1 	DATA 12, "Hello, Dolly"
+  phrase2 	DATA 17, "Well hello, Dolly"
+  phrase3 	DATA 29, "It's so nice to have you back"
+  phrase4 	DATA 16, "where you belong"
+
+' The subroutine that gets BASIC-style strings requires a variable to
+' count out the bytes of the string as it fetches them. Since we're
+' using a single byte to specify length, strings can't be longer than
+' 256 characters. We're using a word variable for strCnt, since it
+' will also be used to specify the ending address of the string,
+' which can range from 0 to 2047.
+
+strCnt 	var 	word 	' Counter for stringOut.
+char 	var 	byte 	' Character (byte) to send via Serout.
+StrAddr	var 	word 	' Base address of the string.
+i 	var 	nib 	' Small (0-15) counter for part 2 of demo.
+
+' Our demonstration program will retrieve the strings one at a time
+' and print them to the debug screen on the PC. A subroutine handles the
+' details of getting the bytes and feeding them to serout.
+
+ 
+demo:
+  debug cls 			' Open a clear debug window.
+  strAddr = title 		' Specify which string
+  gosub stringOut 		' and display it in debug window.
+  pause 2000 			' Take a 2-second intermission.
+
+' Now we'll run through the strings in order, courtesy of a lookup
+' table containing their addresses.
+
+  for i = 0 to 3 		' For each of 4 phrases.
+  serout builtIn,baud,[cls] 	' Clear the screen.
+  lookup i,[phrase1,phrase2,phrase3,phrase4],strAddr ' Get a phrase.
+  gosub stringOut 		' Send to screen.
+  pause 1000 			' Time to read phrase.
+  next 				' Next phrase until done.
+STOP 				' End of program.
+
+' =================================================================
+' Here's the subroutine that reads strings. To use it, place the
+' address of the string, assigned by its DATA statement, into
+' the variable strAddr. Note that the first line of this routine,
+' "read strAddr,strCnt", is equivalent to the BASIC LEN function,
+' which returns the length of a string. This is the primary advantage
+' of BASIC strings--the ease with which you can retrieve length info.
+
+stringOut:
+  read strAddr,strCnt 		' Get the number of bytes in the string.
+  strCnt = strCnt + strAddr 	' Set the endpoint of the string.
+  for strAddr=strAddr to strCnt ' For each byte of the string:
+  read strAddr,char 		' put the byte into char
+  serout builtIn,baud,[char] 	' and send it out the port.
+  next 				' Until all bytes are sent.
+Return

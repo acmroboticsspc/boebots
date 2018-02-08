@@ -1,0 +1,108 @@
+' Listing 41.3
+' Nuts & Volts: Stamp Applications, July 1998
+
+
+' -----[ Title ]----------------------------------------------------------
+'
+' File...... PCTOBS2.BS2
+' Purpose... PC To BSAB/BS2 Demo
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' WWW....... http://members.aol.com/jonwms
+' Started... 31 MAY 1998
+' Updated... 31 MAY 1998
+
+
+' -----[ Program Description ]--------------------------------------------
+'
+' This program receives a command+data message from a corresponding PC
+' program. The PC message is structured thusly:
+'
+'   $55, address, message, data
+'
+' The Stamp will respond with:
+'
+'   $55, address, high_byte, low_byte, CR
+'
+' Note: Not all messages will return data, but the Stamp will always send
+' four elements to the PC. All bytes are returned in hex format, followed
+' by a carriage return that serves as an end-of-packet marker.
+'
+' BASIC Stamp Activity Board jumper settings:
+'
+'   X2: Pos 2
+'   X6: In
+
+
+' -----[ Revision History ]-----------------------------------------------
+'
+' 31 MAY 98 : Rev 1
+
+
+' -----[ Constants ]------------------------------------------------------
+'
+Baud96	CON	84			' serial baud rate (to PC)
+SIOPin	CON	16			' use programming port
+					'  - couple ATN with capacitor
+PotPin	CON	 7			' pot input on BSAB
+AnPin	CON	12			' analog (PWM) pin on BSAB
+
+
+' -----[ Variables ]------------------------------------------------------
+'
+addr	VAR	Byte			' node address
+msg	VAR	Byte			' message
+pcData	VAR	Byte			' data byte
+sData	VAR	Word			' return data
+sDHigh	VAR	sData.HighByte
+sDLow	VAR	sData.LowByte
+
+
+' -----[ EEPROM Data ]----------------------------------------------------
+'
+
+
+' -----[ Initialization ]-------------------------------------------------
+'
+Init:	OUTC = %1111			' clear LEDs
+	DIRC = %1111			' make LED pins outputs
+
+
+' -----[ Main Code ]------------------------------------------------------
+'
+Main:	' wait for message from PC
+	SERIN SIOPin, Baud96, [WAIT ($55), addr, msg, pcData]
+
+	' ignore message not addressed to this node
+	IF addr <> 1 THEN Main
+
+	' jump to process called by msg
+	' 0 is not a valid message
+	BRANCH msg, [Main, DoLEDs, GetPot, AnOut]
+
+	GOTO Main
+	
+
+' -----[ Subroutines ]----------------------------------------------------
+'
+DoLEDs:	' invert bits for active low outputs on BSAB
+	OutC = pcData ^ $0F
+	' clear response data
+	sData = $00
+	GOTO Rspnd
+	
+GetPot:	' read pot and return value to PC
+	HIGH PotPin
+	PAUSE 5
+	RCTIME PotPin, 1, sData
+	GOTO Rspnd
+
+AnOut:	' output the analog value
+	PWM AnPin, pcData, 500
+	' clear response data
+	sData = $00
+	GOTO Rspnd
+
+Rspnd:	' output to PC
+	SEROUT SIOPin, Baud96, [hex2 $55, hex2 addr, hex4 sData, 13]
+	GOTO Main

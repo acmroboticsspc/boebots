@@ -1,0 +1,130 @@
+' ==============================================================================
+'
+'   File...... IRB RC-5 Monitor.BS2
+'   Purpose... RC-5 Receive Test and Display 
+'   Author.... Parallax
+'   E-mail.... stamptech@parallaxinc.com
+'   Started...
+'   Updated... 25 NOV 2002
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+
+' This program uses the Parallax IR Buddy to receive and decode RC-5 commands
+' from a multi-function remote control (for TV, VCR, etc.).  Results are
+' displayed on the DEBUG window.
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+
+IRbSIO          PIN     15                      ' IR Buddy serial I/O
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+IRbRc5Rx        CON     $72                     ' RC-5 protocol RX
+
+IRb96           CON      84 + $8000             ' 9600 baud, open
+IRb48           CON     188 + $8000             ' 4800 baud, open
+IRb24           CON     396 + $8000             ' 2400 baud, open
+IRbBaud         CON     IRb96
+
+KeyRpt          CON     253                     ' repeated key
+BufEnd          CON     254                     ' end of buffer
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+buffer          VAR     Byte(8)                 ' RC-5 RX buffer
+idx             VAR     Nib                     ' loop counter
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Setup:
+  GOSUB IR_Buddy_Reset
+
+  PAUSE 250                                     ' let DEBUG window open
+  DEBUG CLS
+  DEBUG "IR Buddy RC-5 RX Monitor", CR
+  DEBUG "------------------------", CR
+  DEBUG CR
+  FOR idx = 0 TO 3
+    DEBUG "System.... ", CR
+    DEBUG "Command... ", CR
+  NEXT
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  SEROUT IRbSIO, IRbBaud, [IRbRc5Rx, 10]        ' start RC-5 RX
+  SERIN  IRbSIO, IRbBaud, [STR buffer\8\255]    ' get data
+
+Show_Buffer:
+  FOR idx = 0 TO 7
+    DEBUG CrsrXY, 11, (idx + 3)                 ' move to display line
+    DEBUG DEC buffer(idx)                       ' display buffer value
+    IF (buffer(idx) = BufEnd) THEN
+      DEBUG " (End of Buffer)", ClrEOL
+      EXIT                                      ' terminate loop
+    ENDIF
+    IF (buffer(idx) = KeyRpt) THEN
+      DEBUG " (Repeated Key)", ClrEOL
+      EXIT                                      ' terminate loop
+    ENDIF
+    DEBUG ClrEOL                                ' clear old message from line
+  NEXT
+
+Clear_Old_Data:
+  DO WHILE (idx < 7)
+    idx = idx + 1                               ' point to next line
+    DEBUG CrsrXY, 11, (idx + 3), ClrEOL         ' move to line & clear it
+  LOOP
+
+Loop_Pad:
+  PAUSE 1000                                    ' buffer key codes
+  GOTO Main
+
+  END
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+' Reset the IR Buddy.  This code is useful for clearing data from the RX
+' buffer and prepping to switch modes.  Timing specific; do not change.
+
+IR_Buddy_Reset:
+  LOW IRbSIO                                    ' signal reset
+  PAUSE 5
+  INPUT IRbSIO                                  ' release reset signal
+  PAUSE 50                                      ' allow time for reset actions
+  RETURN

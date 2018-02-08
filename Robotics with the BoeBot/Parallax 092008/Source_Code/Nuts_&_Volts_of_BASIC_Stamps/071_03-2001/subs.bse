@@ -1,0 +1,51 @@
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... SUBS.BSE
+' Purpose... External subroutines for BASIC Stamp program
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+
+' {$STAMP BS2e}					' or BS2sx or BS2p
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Subroutines for TASKER.BSE
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+SubNum		CON	0			' RAM location of subroutine
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+' (shared)
+task		VAR	Byte			' current task
+count1		VAR	Byte			' byte counter
+count2		VAR	Word			' word counter
+
+' (local)
+sub		VAR	Byte			' subroutine to run
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Main:
+  GET SubNum,sub				' read sub to run from RAM
+  BRANCH sub,[Sub0,Sub1]			' run the subroutine
+  RUN 0						' return if bad sub number
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+Sub0:
+  DEBUG "(SUBS [0])",TAB,DEC count1,CR		' show count1
+  count1 = count1 + 1				' external update of variable
+  PAUSE 100
+  RUN 0						' return to main program
+
+Sub1:
+  DEBUG "(SUBS [1])",TAB,DEC count2,CR	' show count2
+  PAUSE 100
+  RUN 0						' return to main program

@@ -1,0 +1,91 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 9.1: Memsic Accelerometer Test Program
+' Incline feedback determines tilt limitations of Toddler
+' {$STAMP BS2}
+' {$PBASIC 2.5} 
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Yout            PIN	10              ' Yout from Memsic 2125 
+TiltServo       PIN     13              ' Toddler tilt servo
+StrideServo     PIN     12              ' Toddler stride servo
+
+' -----[ Constants ]-------------------------------------------------------
+
+TiltCenter      CON     750             ' TiltServo center position
+StrideCenter    CON     750             ' StrideServo center position
+StepVal         CON     2               ' Servo step value = 1 or 2 
+                                        ' Set StepVal = 3 if using 'DEBUGs
+escVal          CON     4               ' Indicator for excessive tilt
+Delay           CON     8               ' Pause between servo pulses -
+                                        '  add 8 ms to get 20 total
+RightLimit      CON     500             ' Limit does not occur on flat
+LeftLimit       CON     1000            ' Limit does not occur on flat
+                                        ' Right and left depend on 
+                                        '  how you mounted the Memsic
+                                        '  sensor. Below assume pins 1 & 6
+                                        '  are toward front of Toddler.
+YAxisRtLimit    CON     2600            ' Yout right limit *2us = 5.34 ms
+YAxisLfLimit    CON     2400            ' Yout left limit *2us = 4.500 ms
+
+' -----[ Variables ]-------------------------------------------------------
+
+Incline         VAR     Word            ' Pulses from Memsic 2125
+ServoLoop       VAR     Word            ' General purpose loop var
+Counter         VAR     Nib             ' Counter filters acceleration
+tiltCount       VAR     Nib             ' Temporary counter
+
+' -----[ Initialize ]------------------------------------------------------
+
+ServoLoop = 750
+
+' -----[ Main Code ]-------------------------------------------------------
+
+RightFromCenter:
+  Counter = 0
+  FOR ServoLoop = ServoLoop to RightLimit STEP StepVal
+    PULSOUT TiltServo, ServoLoop
+    PULSOUT StrideServo, StrideCenter
+    PAUSE Delay
+    PULSIN Yout,1,Incline
+    'DEBUG "Right from Center - ServoLoop = ", DEC ServoLoop
+    'DEBUG ":  Incline = ", DEC Incline, CR
+    IF (Incline > YAxisRtLimit) THEN Counter = Counter + 1
+    'DEBUG "Counter = ", DEC Counter
+    'DEBUG ": tiltCount = ", DEC tiltCount, CR
+    IF Counter > escVal THEN LeftFromRight
+  NEXT
+    'DEBUG "ServoLoop = ", DEC ServoLoop,":  Incline = ", DEC Incline, cr 
+
+LeftFromRight:
+  Counter = 0
+  FOR ServoLoop = ServoLoop to LeftLimit STEP StepVal
+    PULSOUT TiltServo, ServoLoop
+    PULSOUT StrideServo, StrideCenter
+    PAUSE Delay
+    PULSIN Yout,1,Incline
+    'DEBUG "Left from Right - ServoLoop = ", DEC ServoLoop
+    'DEBUG ":  Incline = ", DEC Incline, CR 
+    IF (Incline < YAxisLfLimit) THEN Counter = Counter + 1
+    'DEBUG "Counter = ", DEC Counter,": tiltCounter = ", DEC tiltCount, cr
+    IF Counter > escVal THEN RightFromLeft
+  NEXT
+    'DEBUG "ServoLoop = ", DEC ServoLoop,":  Incline = ", DEC Incline, cr 
+
+RightFromLeft:
+  Counter = 0
+  FOR ServoLoop = ServoLoop to RightLimit STEP StepVal
+    PULSOUT TiltServo, ServoLoop
+    PULSOUT StrideServo, StrideCenter
+    PAUSE Delay
+    PULSIN Yout,1,Incline
+    'DEBUG "Right from Left - ServoLoop = ", DEC ServoLoop
+    'DEBIG ":  Incline = ", DEC Incline, CR 
+    IF (Incline > YAxisRtLimit) THEN Counter = Counter + 1
+    'DEBUG "Counter = ", DEC Counter,": tiltCount = ", DEC tiltCount, cr
+    IF Counter > escVal THEN LeftFromRight
+  NEXT
+    'DEBUG "ServoLoop = ", DEC ServoLoop,":  Incline = ", DEC Incline, CR 
+
+  GOTO LeftFromRight
+END

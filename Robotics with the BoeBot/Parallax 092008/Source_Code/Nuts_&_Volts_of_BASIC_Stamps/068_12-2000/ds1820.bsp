@@ -1,0 +1,148 @@
+' Listing 1
+' Nuts & Volts - December 2000
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... DS1820.BSP
+' Purpose... BASIC Stamp SX Plus <--> DS1820 Demo
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 04 NOV 2000
+' Updated... 04 NOV 2000 
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program reads and displays the ROM code and temperature data from a
+' DS1820 (1-wire) sensor.
+'
+' Program requires 2x16 LCD
+'   - LCD.E 	--> Pin0 (pulled down [to ground] through 4.7K)
+'   - LCD.R/W	--> Pin2 (or grounded for write-only operation)
+'   - LCD.RS 	--> Pin3
+'   - LCD.D4	--> Pin4
+'   - LCD.D5	--> Pin5
+'   - LCD.D6	--> Pin6
+'   - LCD.D7	--> Pin7
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+LCDpin		CON	0			' data on pins 4 - 7
+DS1820pin	CON	11
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+' LCD control characters
+'
+NoCmd		CON	$00			' just print 
+ClrLCD  	CON     $01             	' clear the LCD
+CrsrHm  	CON     $02             	' cursor home
+CrsrLf  	CON     $10             	' cursor left
+CrsrRt  	CON     $14			' move cursor right
+DispLf  	CON     $18			' shift display left
+DispRt  	CON     $1C			' shift displayright
+DDRam   	CON     $80			' Display Data RAM control
+Line1		CON	$80			' address of line 1
+Line2		CON	$C0			' address of line 2
+
+DegSym		CON	223			' degrees symbol
+
+' DS1820 control
+'
+ReadROM		CON	$33			' read ID, serial num, CRC
+MatchROM	CON	$55			' look for specific device
+SkipROM		CON	$CC			' skip rom (one device)
+ConvertTemp	CON	$44			' do temperature conversion
+ReadScratch	CON	$BE			' read DS1820 scratchpad
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+idx		VAR	Byte			' loop counter
+romData		VAR	Byte(8)			' ROM data from DS1820
+tempIn		VAR	Word			' raw temperature
+sign		VAR	tempIn.Bit8		' 1 = negative temperature
+tInLow		VAR	tempIn.LowByte
+tInHigh		VAR	tempIn.HighByte
+tSign		VAR	Bit
+tempC		VAR	Word			' Celsius
+tempF		VAR	Word			' Fahrenheit
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+LCD_Setup:
+  LCDCMD LCDpin,%00110000 : PAUSE 5		' 8-bit mode
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00100000 : PAUSE 0		' 4-bit mode
+  LCDCMD LCDpin,%00101000 : PAUSE 0		' 2-line mode
+  LCDCMD LCDpin,%00001100 : PAUSE 0		' no crsr, no blink 
+  LCDCMD LCDpin,%00000110			' inc crsr, no disp shift
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Main:
+  LCDOUT LCDpin,ClrLCD,["BSP <---> DS1820"]	' splash screen
+  PAUSE 2000
+
+
+DisplayROM:
+  LCDOUT LCDpin,ClrLCD,["DS1820 ROM:"]
+  OWOUT DS1820pin,1,[ReadROM]			' send Read ROM command
+  OWIN  DS1820pin,2,[STR romData\8]		' read serial number & CRC
+  LCDCMD LCDpin,Line2
+  FOR idx = 0 TO 7
+    LCDOUT LCDpin,NoCmd,[HEX2 romData(idx)]	' show ID, serial num, CRC
+  NEXT
+  
+  PAUSE 5000
+
+
+TempDemo:
+  LCDOUT LCDpin,ClrLCD,["CURRENT TEMP:"]
+
+ShowTemp:
+
+  ' * send conversion command
+  ' * allow time for conversion
+  ' * send read scratch ram command
+  ' * grab the data
+
+  OWOUT DS1820pin,1,[SkipROM,ConvertTemp]	' start conversion
+  PAUSE 500					' give time for conversion
+  OWOUT DS1820pin,1,[SkipROM,ReadScratch]
+  OWIN  DS1820pin,2,[tInLow,tInHigh]		' read temperature
+
+  tSign = sign					' save sign bit
+  tempIn = tempIn/2				' round to whole degrees
+  IF tSign = 0 THEN NoNeg1
+  tempIn = tempIn | $FF00			' extend sign bits for negs
+
+NoNeg1:
+  tempC = tempIn				' save Celsius value
+  tempIn = tempIn */ $01CC			' multiply by 1.8
+  IF tSign = 0 THEN NoNeg2			' if neg, extend sign bits
+  tempIn = tempIn | $FF00
+  
+NoNeg2:
+  tempF = tempIn+32				' finish C -> F conversion
+
+  ' display temps
+  '
+  LCDOUT LCDpin,Line2,[SDEC tempC, DegSym, " C"]
+  LCDOUT LCDpin,NoCmd,[" / ", SDEC tempF, DegSym, " F"]  
+  LCDOUT LCDpin,NoCmd,[REP " "\6]
+
+  PAUSE 1500
+  GOTO ShowTemp					' update temp display

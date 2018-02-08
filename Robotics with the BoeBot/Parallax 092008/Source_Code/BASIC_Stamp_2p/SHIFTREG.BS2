@@ -1,0 +1,54 @@
+'{$STAMP BS2}
+
+' -----[ Title ]------------------------------------------------------
+'
+' File......  SHIFTREG.BS2
+' Purpose...  Port Enhancement with serial connected shiftregister
+
+' Author....  Klaus Zahnert
+' Started...  06.06.01
+' Updated... 
+
+' -----[ Program Description ]----------------------------------------
+' Two output lines for clock and data to drive a connected shiftregister
+' are used for port enhancing up to 6 output-lines. For demonstration 
+' these outputs are inputs of BS2-IC. So the serial transmitted states 
+' of that 6 lines are shown on debug-window to see the same contents.
+
+' -----[ Revision History ]-------------------------------------------
+'
+' 
+
+' -----[ Constants ]--------------------------------------------------
+'
+ clkpin  con 1
+ datapin con 0
+
+     
+' -----[ Variables ]--------------------------------------------------
+'
+ outbyt var byte
+    
+
+' -----[ Initialization ]---------------------------------------------
+'
+DIRH=$00           'I/O Port.highbyte for input
+low clkpin
+low datapin
+
+
+' -----[ Main Code ]--------------------------------------------------
+'
+
+
+ start:  
+ For outbyt = 0 to 31  
+	shiftout datapin, clkpin, msbfirst, [outbyt\6]
+     	debug dec2 outbyt,tab,tab, bin8 outbyt,tab, bin8 INH ,cr
+	pause 500
+ next
+ end
+    
+' -----[ Subroutines ]------------------------------------------------
+'
+' no

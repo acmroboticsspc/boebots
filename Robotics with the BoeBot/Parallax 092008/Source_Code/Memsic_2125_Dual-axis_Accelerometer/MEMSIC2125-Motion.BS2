@@ -1,0 +1,109 @@
+' =========================================================================
+'
+'   File...... MEMSIC2125-Motion.BS2
+'   Purpose... Detects continuous motion for given period
+'   Author.... Parallax (based on code by A. Chaturvedi of Memsic)
+'   E-mail.... support@parallax.com 
+'   Started...
+'   Updated... 15 JAN 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Monitors X and Y inputs from Memsic 2125 and will trigger alarm if 
+' continuous motion is detected beyond the threshold period.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Xin             PIN     8                       ' X pulse input
+Yin             PIN     9                       ' Y pulse input
+ResetLED        PIN     10                      ' reset LED
+AlarmLED        PIN     11                      ' alarm LED
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+HiPulse         CON     1                       ' measure high-going pulse
+LoPulse         CON     0
+
+SampleDelay     CON     500                     ' 0.5 sec
+AlarmLevel      CON     5                       ' 5 x SampleDelay
+
+XLimit          CON     5                       ' x motion max
+YLimit          CON     5                       ' y motion max
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+xCal            VAR     Word                    ' x calibration value
+yCal            VAR     Word                    ' y calibration value
+xMove           VAR     Word                    ' x sample
+yMove           VAR     Word                    ' y sample
+xDiff           VAR     Word                    ' x axis difference
+yDiff           VAR     Word                    ' y axis difference
+
+moTimer         VAR     Word                    ' motion timer
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Initialize:
+  LOW AlarmLED                                  ' alarm off
+  moTimer = 0                                   ' clear motion timer
+
+Read_Cal_Values:
+  PULSIN Xin, HiPulse, xCal                     ' read calibration values
+  PULSIN Yin, HiPulse, yCal
+  xCal = xCal / 10                              ' filter for noise & temp
+  yCal = yCal / 10
+
+  HIGH ResetLED                                 ' show reset complete
+  PAUSE 1000
+  LOW ResetLED
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Get_Data                              ' read inputs
+    xDiff = ABS (xMove - xCal)                  ' check for motion
+    yDiff = ABS (yMove - yCal)
+
+    IF (xDiff > XLimit) OR (yDiff > YLimit) THEN
+      moTimer = moTimer + 1                     ' update motion timer
+      IF (moTimer > AlarmLevel) THEN Alarm_On
+    ELSE
+      moTimer = 0                               ' clear motion timer
+    ENDIF
+  LOOP
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' Sample and filter inputs
+
+Get_Data:
+  PULSIN Xin, HiPulse, xMove                    ' take first reading
+  PULSIN Yin, HiPulse, yMove
+  xMove = xMove / 10                            ' filter for noise & temp
+  yMove = yMove / 10
+  PAUSE SampleDelay
+  RETURN
+
+
+' Blink Alarm LED
+' -- will run until BASIC Stamp is reset
+
+Alarm_On:
+  DO
+    TOGGLE AlarmLED                             ' blink alarm LED
+    PAUSE 250
+  LOOP                                          ' loop until reset

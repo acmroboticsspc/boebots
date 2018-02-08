@@ -1,0 +1,64 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 5.5
+;=======================================================================
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	start_point
+		freq	50000000   	; 50 MHz
+		org	8
+second		ds	2		; counter for 1 second tone
+delay		ds	1
+delay1		ds	1
+tone		ds	1   		; tone constant
+		org	0
+start_point	mov     !rb,#$7F	; make speaker output
+; wait for input button
+bwait		jnb	rb.0,bp0
+		jnb	rb.1,bp1
+		jnb	rb.2,bp2
+		jb	rb.3,bwait
+; tone 3
+		mov 	tone,#48
+		mov	second,#$01
+		mov	second+1,#$01
+
+bp		call	beep
+		jmp	bwait
+
+bp2		mov	tone,#24
+		mov	second,#$FD		
+		mov	second+1,#$01
+		jmp	bp
+
+bp1		mov	tone,#12
+		mov	second,#$FA
+		mov	second+1,#$03
+		jmp	bp
+
+bp0		mov	tone,#6
+		mov	second,#$F4
+		mov	second+1,#$07
+		jmp 	bp
+
+; subroutine
+beep		
+loop		not	rb	    	; toggle bits
+		mov	delay1,tone
+oloop		clr	delay
+wloop		djnz	delay,wloop
+		djnz	delay1,oloop
+		djnz	second,loop
+		djnz	second+1,loop
+		ret			; go back to wherever
+
+
+
+
+
+	
+
+
+
+

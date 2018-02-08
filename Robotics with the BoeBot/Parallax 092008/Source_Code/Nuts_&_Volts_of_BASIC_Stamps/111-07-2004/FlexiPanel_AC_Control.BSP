@@ -1,0 +1,249 @@
+' =========================================================================
+'
+'   File...... FlexiPanel_AC_Control.BSP
+'   Purpose... AC Controller Using FlexiPanel irGUI Module
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallax.com
+'   Started...
+'   Updated... 07 MAY 2004
+'
+'   {$STAMP BS2p}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+SDA		PIN	8      			' I2C data IO
+SCL             PIN     9                       ' I2C clock
+Ready           PIN     10                      ' <-- FlexiPanel
+Attn            PIN     11                      ' --> FlexiPanel
+
+Fan		PIN	0			' control outputs
+Cool		PIN	1
+Heat		PIN	2
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+Wr1621          CON     $90       		' write to DS1621
+Rd1621          CON     $91              	' read from DS1621
+
+RdTemp          CON     $AA                     ' read temperature
+RdCntr          CON     $A8                     ' read counter
+RdSlope         CON     $A9                     ' read slope
+StartC          CON     $EE                     ' start conversion
+StopC           CON     $22                     ' stop conversion
+AccTH           CON     $A1                     ' access high temp limit
+AccTL           CON     $A2                     ' access low temp limit
+AccCfg          CON     $AC                     ' access config register
+
+WrFlxPnl	CON	$68			' write to FP module
+RdFlxPnl	CON	$69			' read from FP module
+
+CTmp		CON	0			' FP control index
+Stat		CON	1
+StPt		CON	2
+Mode		CON	3
+FCtl		CON	4
+
+SysOff		CON	0
+SysCool		CON	1
+SysHeat		CON	2
+
+StatOff		CON	0			' System Off
+StatIdle	CON	1			' temp is okay
+StatCool	CON	2 			' cooling in progress
+StatHeat	CON	3			' heating in progress
+StatFan		CON	4  			' fan only
+
+FanAuto		CON	0			' fan mode control
+FanOn		CON	1
+
+IsHigh		CON	1
+IsLow		CON	0
+
+IsOn		CON	1			' active high controls
+IsOff		CON	0
+
+
+#DEFINE DebugMode = 1				' show internal values
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+tempIn          VAR     Word                    ' raw temp from DS1621
+sign            VAR     tempIn.BIT8             ' - sign (after alignment)
+halfC           VAR     tempIn.BIT0             ' half-degree C bit
+tempC           VAR     Word                    ' temp in Celsius
+tempF           VAR     Word                    ' temp in Fahrenheit
+
+setPoint	VAR	Byte 			' thermostat setting
+status		VAR	Byte			' current status
+sysMode		VAR	Byte			' Off, Cool, Heat
+fanCtrl		VAR	Byte                  	' Auto, On
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  I2COUT SDA, Wr1621, [AccCfg, %10]             ' continuous conversion
+  I2COUT SDA, Wr1621, [AccTH, 0, 0]           	' set high threshold
+  I2COUT SDA, Wr1621, [AccTL, 0, 0]           	' set low threshold
+  PAUSE 10                                      ' allow EE write
+  I2COUT SDA, Wr1621, [StartC]                  ' start continuous
+
+  LOW Fan 					' initialize control outs
+  LOW Cool
+  LOW Heat
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Get_Temperature			' read from DS1621
+    GOSUB Process_FlexiPanel			' update FP module
+    GOSUB Process_Temp				' handle temp/controls
+
+    #IF DebugMode #THEN 			' show internal values
+      DEBUG HOME,
+            SDEC ? tempF, CLREOL,
+            DEC ? status, CLREOL,
+            DEC ? setPoint, CLREOL,
+            DEC ? sysMode, CLREOL,
+            DEC ? fanCtrl, CLREOL
+    #ENDIF
+
+    PAUSE 500
+  LOOP
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' Read temperature from DS1621
+
+Get_Temperature:
+  I2COUT SDA, Wr1621, [RdTemp]
+  I2CIN  SDA, Rd1621, [tempIn.BYTE1, tempIn.BYTE0]
+  tempIn = tempIn >> 7                          ' correct bit alignment
+  ' Celsius
+  tempC = (tempIn / 2) | ($FF00 * sign)
+  ' Fahrenheit
+  tempF = (tempIn | ($FF00 * sign)) + 110       ' convert to absolute T
+  tempF = tempF * 9 / 10 - 67                   ' convert to F
+  RETURN
+
+
+' Send current temperature and status to FlexiPanel
+' Accept new setpoint and mode settings
+
+Process_FlexiPanel:
+  HIGH Attn					' get FP module attention
+  DO : LOOP UNTIL (Ready = IsHigh)		' wait for FP module
+
+  ' send temp to FlexiPanel module
+  I2COUT SDA, WrFlxPnl, CTmp, [tempF.BYTE0, tempF.BYTE1]
+  INPUT SCL
+  DO : LOOP UNTIL (SCL = IsHigh)
+
+  ' send status to irGUI
+  SELECT status
+    CASE StatOff
+      I2COUT SDA, WrFlxPnl, Stat, ["OFF    ", 0]
+
+    CASE StatIdle
+      I2COUT SDA, WrFlxPnl, Stat, ["Idle   ", 0]
+
+    CASE StatCool
+      I2COUT SDA, WrFlxPnl, Stat, ["Cooling", 0]
+
+    CASE StatHeat
+      I2COUT SDA, WrFlxPnl, Stat, ["Heating", 0]
+
+    CASE StatFan
+      I2COUT SDA, WrFlxPnl, Stat, ["Fan    ", 0]
+  ENDSELECT
+  INPUT SCL
+  DO : LOOP UNTIL (SCL = IsHigh)
+
+  ' get temperature setpoint
+  I2CIN SDA, RdFlxPnl, StPt, [setPoint]
+
+  ' get system mode
+  I2CIN SDA, RdFlxPnl, Mode, [sysMode]
+
+  ' get fan control mode
+  I2CIN SDA, RdFlxPnl, FCtl, [fanCtrl]
+
+  INPUT Attn 					' release FP module
+  RETURN
+
+
+
+' Process current temperature with control settings from
+' FlexiPanel module
+
+Process_Temp:
+  BRANCH sysMode, [System_Off, Cool_On, Heat_On]
+
+
+System_Off:
+  IF (fanCtrl = FanAuto) THEN
+    status = StatOff
+    Fan = IsOff
+  ELSE
+    status = StatFan
+    Fan = IsOn
+  ENDIF
+  Cool = IsOff
+  Heat = IsOff
+  RETURN
+
+
+Cool_On:
+  IF (tempF > setPoint) THEN
+    status = StatCool
+    Fan = IsOn
+    Cool = IsOn
+    Heat = IsOff
+  ELSE
+    GOTO Manual_Fan
+  ENDIF
+  RETURN
+
+
+Heat_On:
+  IF (tempF < setPoint) THEN
+    status = StatHeat
+    Fan = IsOn
+    Cool = IsOff
+    Heat = IsOn
+  ELSE
+    GOTO Manual_Fan
+  ENDIF
+  RETURN
+
+
+Manual_Fan:
+  Cool = IsOff
+  Heat = IsOff
+  IF (fanCtrl = FanOn) THEN
+    status = StatFan
+    Fan = IsOn
+  ELSE
+    status = StatIdle				' not currently active
+    Fan = IsOff
+  ENDIF
+  RETURN

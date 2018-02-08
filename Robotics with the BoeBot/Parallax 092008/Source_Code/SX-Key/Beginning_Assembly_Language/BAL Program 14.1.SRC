@@ -1,0 +1,87 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 14.1
+;=======================================================================
+
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	reset_entry
+		freq	50_000_000
+
+
+pwm_pin		=	rb.0
+
+		org	8
+
+temp		ds	1
+pwm		ds	1			;pwm0
+pwm_acc		ds	1
+dly		ds	1
+dly1		ds	1
+
+
+		org	0
+;
+;
+
+;
+interrupt	
+		inc	dly
+		snz
+		inc	dly1
+
+		add	pwm_acc,pwm
+		movb	pwm_pin,c
+
+		mov     w,#-100
+		retiw	
+;***********************************************************************
+;* Main *
+;***********************************************************************
+;
+;
+; Reset entry
+;
+reset_entry	
+
+		mov	rb,#%00000000		;init rb
+		mov	!rb,#%11111110
+		clr	fsr			;reset all ram banks
+:loop		setb	fsr.4
+		clr	ind
+		ijnz	fsr,:loop
+
+		mov	!option,#%10011111	;enable rtcc interrupt
+;
+;
+;  - main loop
+;
+
+mainloop
+
+
+
+		inc 	pwm
+		call 	pause
+		jmp 	mainloop
+
+
+pause
+:p0		mov 	temp,#250
+:p1		call 	pausems
+		djnz 	temp,:p1
+		ret
+
+; pause about 1ms
+pausems
+		mov 	dly1,#$FE
+		mov 	dly,#$0C  ; FE0C = -500
+:p1		mov 	w,dly1
+		or  	w,dly
+		jnz 	:p1
+		ret
+
+
+
+		

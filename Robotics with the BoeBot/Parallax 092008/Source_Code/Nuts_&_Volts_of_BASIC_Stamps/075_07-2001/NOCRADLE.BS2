@@ -1,0 +1,150 @@
+' Listing 1
+' Nuts & Volts -- July 2001
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... NOCRADLE.BS2
+' Purpose... Programs QV306M4 without QV430 programming cradle
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 22 APR 2001
+' Updated... 22 APR 2001 
+
+' {$STAMP BS2}
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This progam facilitiates the programming of the QV306M4 sound module
+' without the expense of the QV430 programming cradle.  Since this 
+' program simply passes seial messages from the PC to the QV306M4, not
+' all QV300S2 functions are available.
+'
+' When started, the program resets the QV306M4 to ensure control.  Once
+' ready, the Record LED is flashed briefly.  When the record command is
+' received from the QV300S2 software, the Record LED is lit solid.  When
+' all files are recorded, the QV300S2 software will send the QV_Direct
+' (play mode) command.  When this is detected, the LED is flashed and the
+' recorded files are played by the Stamp.
+'
+' Note: After starting the QV300S2 software, reset the Stamp and allow it
+' to get ready before clicking on "Record All."
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+' 22 APR 2001 : Version 1 tested and working with QV300S2 "Record All"
+
+
+' -----[ Connections ]-----------------------------------------------------
+'
+' QV306M4 Connections:
+'
+'  1 (RxD)		Stamp.P1
+'  2 (TxD)		Stamp.P2
+'  3 (Busy)		Stamp.P3
+'  4 (BR1)		Ground
+'  5 (BR0)		Ground
+'  7 (+5)		+5 volts
+'  8 (Gnd)		Ground
+' 10 (Ain)		Analog in from sound card (through 0.47 uF cap)
+' 14 (Reset)		Stamp.P0
+' 15 (Sp-)		8 ohm speaker -
+' 16 (Sp+)		8 ohm speaker +
+'
+'
+' LED to Stamp.P7 through 220 ohm resistor
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+PC_in		CON	16			' serial via programming port
+RecLED		CON	7			' recording LED
+
+QV_RST		CON	0			' QV306M4.14
+QV_RX		CON	1			' QV306M4.1
+QV_TX		CON	2			' QV306M4.2
+QV_BUSY		VAR	In3			' QV306M4.3
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+N2400		CON	16780			' 2400 baud, inverted
+T2400		CON	396			' 2400 baud, true
+
+QV_Direct	CON	$F0			' play mode
+QV_Record	CON	$F4			' record mode
+
+IsBusy		CON	0
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+pcByte		VAR	Byte			' command byte from PC
+files		VAR	Byte			' sound files downloaded
+temp		VAR	Byte			' general purpose
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Initialize:
+  LOW QV_RST					' reset the QV306M4
+  PAUSE 100
+  HIGH QV_RST
+  PAUSE 2000
+
+IsReady:
+  files = 0
+  HIGH RecLED					' blip LED to indicate ready
+  PAUSE 500
+  LOW RecLED
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Main:
+  SERIN PC_in,N2400,[pcByte]			' get byte from PC
+  SEROUT QV_RX,T2400,[pcByte]			' pass it to QV306M4
+
+CheckRec:
+  IF (pcByte <> QV_Record) THEN CheckEOF	
+  HIGH RecLED					' light LED if record
+  GOTO Main
+
+CheckEOF:
+  IF (pcByte <> 0) THEN CheckPlay		' end of sound file?
+  files = files + 1				'  - yes, update counter
+  GOTO Main
+
+CheckPlay:
+  IF (pcByte <> QV_Direct) THEN Main
+
+IsDone:						' flash LED when done
+  FOR temp = 1 TO 10
+    TOGGLE RecLED
+    PAUSE 100
+  NEXT
+  LOW RecLED
+
+Playback:					' play recorded files
+  IF (files = 0) THEN IsReady
+  FOR temp = 0 TO (files - 1)
+    GOSUB Say_Phrase
+  NEXT
+
+LetPlaybackFinish:
+  IF (QV_Busy = IsBusy) THEN LetPlaybackFinish
+
+  GOTO Initialize				' do it again
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+' ************************
+' Say an individual phrase
+' ************************
+'
+Say_Phrase:
+  IF (QV_Busy = IsBusy) THEN Say_Phrase	' wait until not busy
+  SEROUT QV_RX,T2400,[temp]			' say the phrase
+  RETURN

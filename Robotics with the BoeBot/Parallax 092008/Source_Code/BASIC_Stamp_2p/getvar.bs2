@@ -1,0 +1,62 @@
+' This program demonstrates sending a variable 
+' from MondoMini web server to BASIC Stamp 2.
+' A click in your web browser sets a flag on BS2. 
+' BASIC Stamp Activity Board was used as target hardware.
+' The serial link is connected to a PC's COM Port running
+' Mondo Mini webserver.
+
+' Created: 28.02.2001 Claus Kuhnel
+
+string VAR byte(8)
+flag 	VAR bit		
+
+LCD	CON 1					' Serial LCD on P1
+LED 	CON 10				
+POTIN CON 7					' Potentiometer on P7
+N2400 CON $418c				' Baudrate for serial LCD
+I 	CON 254 				' Instruction prefix value.
+CLR 	CON 1 				' LCD clear-screen instruction
+
+
+	DIRS =%0000111100000000
+	OUTC =%1111
+
+	PAUSE 1000
+	SEROUT LCD,n2400,[I,CLR] 	' Clear the LCD screen.
+	PAUSE 1
+	SEROUT LCD,n2400,[I,128]	
+	SEROUT LCD,n2400,["Value:"] 	' Print message.
+	
+	'Tell MondoMini to clear all commands queued up
+	SEROUT 16,84+$4000,1,["CC;"]
+
+start:
+	HIGH LED: PAUSE 500: 		' Blink LED
+	LOW LED :PAUSE 10
+
+
+	'Query the MondoMini for a command.
+	SEROUT 16,84+$4000,1,["QC;"]
+
+	'Wait 1000 ms for a command from MondoMini
+	SERIN 16,84+$4000,1000,no_command,[STR string\7\";"]
+
+	'Test for "P1=1"
+	IF (string(0)<>"P" OR string(1)<>"1" OR string(3)<>"1") THEN next_command
+		flag = 1 : OUT8 = flag
+		SEROUT LCD,n2400,[I,135]
+		SEROUT LCD,N2400,[BIN1 flag] ' Print value on LCD
+		SEROUT 16,84+$4000,1,["P1=", BIN1 flag, ";"] 
+
+next_command:
+	'Test for "P1=0"
+	IF (string(0)<>"P" OR string(1)<>"1" OR string(3)<>"0") THEN next_command1
+		flag = 0 : OUT8 = flag
+		SEROUT LCD,n2400,[I,135]
+		SEROUT LCD,N2400,[BIN1 flag] ' Print value on LCD
+		SEROUT 16,84+$4000,1,["P1=", BIN1 flag, ";"]	
+
+next_command1:
+
+no_command:
+	GOTO start

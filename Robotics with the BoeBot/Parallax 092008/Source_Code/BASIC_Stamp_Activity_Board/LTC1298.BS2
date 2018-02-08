@@ -1,0 +1,40 @@
+'************************************************************************
+'*  Basic Stamp Activity Board Sample Program                 LTC-1298  *
+'*  9 September, 1997                                           (BS-2)  *
+'*                                                                      *
+'*  This program shows how to use the LTC-1298 from Linear Technology.  *
+'*  Insert the LTC-1298 into Socket A and remove the jumpers in 'X4'.   *
+'*  Apply the analog inputs according to the drawing depicted in the    *
+'*  Basic Stamp Activity Board Notes. Power it up and hit 'Alt-R' to    *
+'*  download. The analog input voltages must be 0-5Vdc.                 *
+'************************************************************************
+
+CS	con	12		' Chip select (low true)
+CLK	con	15		' ADC Clock
+Din	con	13		' ADC Data input
+Dout	con	14		' ADC Data output
+config	var	nib		' Configuration bits for ADC
+ADres	var	word		' Variable to hold 12-bit AD result
+startB	var	config.bit0	' Start bit for comm with ADC
+sglDif	var	config.bit1	' Single-ended or differential mode
+oddSign	var	config.bit2	' Channel selection
+msbf	var	config.bit3	' Output 0s after data xfer complete
+
+INIT				' Initialization code
+	high CS			' Deactivate ADC to begin
+	high Din		' Set up data lines
+	high Dout
+START				' Main loop
+	for oddSign = 0 to 1	' Toggle between input channels
+	gosub convert		' Get data from ADC and display it
+	debug "Ch:",dec oddSign, " ", dec ADres,cr
+	pause 500		' Wait a half second
+next				' Change channels
+	goto START		' Repeat forever
+convert				' Convert subroutine start here
+	config = config | %1011	' Set all bits except oddSign
+	low CS			' Activate the ADC
+	shiftout Din,CLK,lsbfirst,[config\4]	' Send config bits to ADC
+	shiftin Dout,CLK,msbpost,[ADres\12]	' Get data bits from ADC
+	high CS			' Deactivate the ADC. 
+return				' Return to main program

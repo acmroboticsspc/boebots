@@ -1,0 +1,18 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 1.1 - Servo Centering.bs2
+' Electrically center Toddler servos during robot construction
+' {$STAMP BS2} 
+' {$PBASIC 2.5}
+
+' -----[ Declarations ]----------------------------------------------------
+
+TiltServo               CON     12      ' Tilting servo on P12
+StrideServo             CON     13      ' Stride servo on P13
+
+' -----[ Main Routine ]----------------------------------------------------
+
+Center:                                 ' Center servos with 1500 us pulses
+  PULSOUT TiltServo, 750                
+  PULSOUT StrideServo, 750 
+  PAUSE 25                              ' Wait 25 ms
+GOTO Center                             ' Repeat

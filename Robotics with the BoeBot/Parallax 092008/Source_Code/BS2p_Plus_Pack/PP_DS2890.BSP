@@ -1,0 +1,130 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' BS2p Plus Pack
+'
+' File...... PP_DS2890.BSP
+' Purpose... Demonstrates DS2980 digital pot by adjusting an RC circuit
+' Author.... Parallax
+' E-mail.... stamptech@parallaxinc.com
+' Started...
+' Updated... 26 SEP 2001
+
+' {$STAMP BS2p}
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program demonstrates the DS2980 digital pot by placing it in an RC
+' circuit that would typically be used with RCTIME.  This program assumes only
+' one device on the 1-Wire bus and reads the ROM code for the connected
+' device.
+'
+' Refer to PP_DS1822-2.BSP for an example of dealing with multiple 1-Wire
+' devices on the same pin.
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+OWpin           CON     15                      ' 1-Wire bus
+RCpin           CON     14                      ' RCTIME pin
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+' 1-Wire Support
+'
+OW_FERst        CON     %0001                   ' Front-End Reset
+OW_BERst        CON     %0010                   ' Back-End Reset
+OW_BitMode      CON     %0100
+OW_HighSpd      CON     %1000
+
+ReadROM         CON     $33                     ' read ID, serial num, CRC
+MatchROM        CON     $55                     ' look for specific device
+
+' DS2890 control
+'
+RdPot           CON     $F0                     ' read pot position
+WrPot           CON     $0F                     ' write pot position
+RdCtrl          CON     $AA                     ' read control register
+WrCtrl          CON     $55                     ' write control register
+IncPot          CON     $C3                     ' increment resistance
+DecPot          CON     $99                     ' decrement resistance
+Release         CON     $96                     ' release new pot setting
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+romData         VAR     Byte(8)                 ' ROM data from device
+idx             VAR     Byte
+temp            VAR     Byte
+potLevel        VAR     Byte
+rcValue         VAR     Word
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Get_SN:
+  DEBUG CLS
+  PAUSE 250                                     ' let debug window open
+  DEBUG "DS2980 - Reading serial number"
+  OWOUT OWpin,OW_FERst,[ReadROM]                ' send Read ROM command
+  OWIN  OWpin,OW_BERst,[STR romData\8]          ' read serial number & CRC
+  DEBUG CR, "         "
+  FOR idx = 6 TO 1                              ' display serial number
+    DEBUG HEX2 romData(idx)
+  NEXT
+  PAUSE 1000
+
+  DEBUG CLS
+  DEBUG "DS2980 - Setting control register"
+
+Set_Ctrl:
+  ' wiper 1, charge pump off
+  OWOUT OWpin, OW_FERst, [MatchROM, STR romData\8, WrCtrl, %00001100]
+  OWIN OWpin, OW_BERst, [temp]                  ' read back ctrl data
+  IF (temp = $FF) THEN Set_Ctrl                 ' $FF = invalid ctrl reg val
+  PAUSE 1000
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  DEBUG CLS
+  DEBUG "DS2980 1-Wire Pot Demo", CR, CR
+  DEBUG "Pot Setting... ",CR
+  DEBUG "RC Value...... "
+
+Demo_Pot:
+  FOR potLevel = 255 TO 0 STEP 5
+    DEBUG Home, CR, CR, "Pot Setting... ", DEC potLevel, "   ", CR
+    ' send new level to pot
+    OWOUT OWpin, OW_FERst, [MatchROM, STR romData\8, WrPot, potLevel]
+    OWIN OWpin, 0, [temp]                       ' read new level back
+    IF (temp <> potLevel) THEN Pot_Error        ' check for correct receipt
+    OWOUT OWpin, OW_BERst, [Release]            ' release new value
+    PAUSE 100
+
+    HIGH RCpin                                  ' dicharge RC cap
+    PAUSE 1
+    RCTIME RCpin, 1, rcValue                    ' read pot
+    DEBUG "RC Value...... ", DEC rcValue, "    "
+    PAUSE 500
+  NEXT
+
+  GOTO Main
+  END
+
+' -----[ Subroutines ]----------------------------------------------------------
+'
+Pot_Error:
+  DEBUG CLS
+  DEBUG "Error -- could not set pot"
+  END

@@ -1,0 +1,129 @@
+' =========================================================================
+'
+'   File...... Drum_Sequencer.BS1
+'   Purpose... General-purpose drum sequencer
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallax.com
+'   Started...
+'   Updated... 11 APR 2004
+'
+'   {$STAMP BS1}
+'   {$PBASIC 1.0}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+SYMBOL  Dpin            = PIN0                  ' to 74HC595.14
+SYMBOL  Clock           = 1                     ' to 74HC595.11
+SYMBOL  Latch           = 2                     ' to 74HC595.12
+SYMBOL  Mode            = PIN5                  ' timed or step
+SYMBOL  Advance         = PIN6                  ' manual step advance
+SYMBOL  SpdInput        = 7                     ' speed controller input
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+SYMBOL  Yes             = 1                     ' use multiplier
+SYMBOL  No              = 0
+
+SYMBOL  MdTimer         = 1                     ' timed steps
+SYMBOL  MdStep          = 0                     ' single step
+
+SYMBOL  Pressed         = 0                     ' for active low button
+SYMBOL  NotPressed      = 1
+
+SYMBOL  Multiplier      = 10                    ' timing multiplier
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+SYMBOL  dOut            = B0                    ' data for 74HC595
+SYMBOL  stepTime        = B1                    ' step timing (compressed)
+SYMBOL  stepOuts        = B2                    ' step outputs
+SYMBOL  drumPntr        = B3                    ' drum pointer
+SYMBOL  delay           = B4                    ' inner loop timing delay
+SYMBOL  idx             = W3                    ' loop counter
+SYMBOL  timer           = W4                    ' step timer
+
+SYMBOL  dataMSB         = BIT7                  ' MSB of step data
+SYMBOL  longStep        = BIT15                 ' Bit7 or stepTime
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+Drum:
+  EEPROM (%10000001, %00000101)
+  EEPROM (%01000010, %00001010)
+  EEPROM (%00100100, %10000010)
+  EEPROM (%00011000, %10000011)
+  EEPROM (%00000000, 0)                         ' end of sequence
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  PINS = %00000000
+  DIRS = %00000111
+  drumPntr = 0                                  ' reset drum
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  READ drumPntr, stepOuts                       ' get outputs from drum
+  drumPntr = drumPntr + 1                       ' point to step time
+  READ drumPntr, stepTime                       ' get step time from drum
+  drumPntr = drumPntr + 1                       ' point to next step
+  IF stepTime = 0 THEN Reset                    ' 0 time means start over
+  dOut = stepOuts
+  GOSUB Shift_Out                               ' update outputs
+
+Check_Mode:
+  IF Mode = MdTimer THEN Timed_Step             ' check mode
+
+Force_Release:
+  IF Advance = Pressed THEN Force_Release
+
+Wait_For_Press:
+  IF Advance = NotPressed THEN Wait_For_Press
+  GOTO Main
+
+Timed_Step:
+  GOSUB Step_Timer
+  GOTO Main
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Shift_Out:
+  FOR idx = 1 TO 8                              ' shift eight bits
+    Dpin = dataMsb                              ' put MSB on data pin
+    PULSOUT Clock, 1                            ' clock it out
+    dOut = dOut * 2                             ' shift data bits left
+  NEXT
+  PULSOUT Latch, 1                              ' latch new byte to outputs
+  RETURN
+
+
+Step_Timer:
+  timer = stepTime & %0111111                   ' get base time
+  IF longStep = No THEN Timer_Loop              ' check multiplier bit
+  timer = timer * Multiplier                    ' -- use mutliplier
+
+Timer_Loop:                                     ' run the delay
+  POT SpdInput, 103, delay                      ' read speed pot
+  delay = delay * 69 / 100 + 25                 ' scale to 25 - 200
+  FOR idx = 1 TO timer
+    PAUSE delay
+  NEXT
+  RETURN

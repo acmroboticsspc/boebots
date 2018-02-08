@@ -1,0 +1,186 @@
+' Nuts & Volts - Stamp Applications
+' August 2000 (Listing 1)
+
+' ======================================================================== 
+' Program... POLLSTMP.BS2
+' Author.... Jon Williams
+' Started... 25 MAY 2000
+' Updated... 29 JUN 2000
+' ========================================================================
+
+
+' -----[ Program Description ]--------------------------------------------
+'
+' This program waits for a text command from the PC and responds with a
+' string that contains the name of the data and its current value.
+'
+' If the ATN line is opened, this program will work with any general-
+' purpose terinal program (i.e., HyperTerm).  To read the temperature you
+' would type the characters '?', 'A', '1', followed by a carriage return.
+
+
+' -----[ Revision History ]-----------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------
+'
+SIOpin	CON	16			' serial I/O on programming port
+
+Rst	CON 	13			' DS1620.3
+Clk	CON	14			' DS1620.2
+DQ	CON	15			' DS1620.1
+
+' -----[ Constants ]------------------------------------------------------
+'
+Baud96	CON	84			' 9600-8-N-1 (matches DEBUG)
+
+CmdID	CON	$F0			' get string ID
+CmdSet	CON	$F1			' set string ID
+CmdTmp	CON	$A0			' get DS1620 - display raw count
+CmdTmpC	CON	$A1			' get DS1620 - display in C
+CmdTmpF	CON	$A2			' get DS1620 - display in F
+CmdStat	CON	$B0			' get digital output status
+CmdLEDs	CON	$B1			' set LED outputs
+
+' DS1620 commands
+'
+RTmp	CON	$AA			' read temperature
+WTHi	CON	$01			' write TH (high temp register)
+WTLo	CON	$02			' write TL (low temp register)
+RTHi	CON	$A1			' read TH
+RTLo	CON	$A2			' read TL
+StartC	CON	$EE			' start conversion
+StopC	CON	$22			' stop conversion
+WCfg	CON	$0C			' write configuration register
+RCfg	CON	$AC			' read configuration register
+
+
+' -----[ Variables ]------------------------------------------------------
+'
+cmd	VAR	Byte			' command from PC/terminal
+addr	VAR	Byte			' EE address pointer
+eeDat	VAR	Byte			' EE data
+param	VAR	Word			' parameter from PC
+char	VAR	param.LOWBYTE
+tmpIn	VAR	Word			' raw data from DS1620
+halfBit	VAR	tmpIn.Bit0		' 0.5 degree C indicator
+sign	VAR	tmpIn.Bit8		' 1 = negative temperature
+tempC	VAR	Word			' degrees C in tenths
+tempF	VAR	Word			' degrees F in tenths
+potVal	VAR	Word			' reading from BSAC pot
+buttons	VAR	Nib			' BSAC input buttons
+
+
+' -----[ EEPROM Data ]----------------------------------------------------
+'
+ID	DATA "Parallax BS2", CR		' CR-terminated string
+
+
+' -----[ Initialization ]-------------------------------------------------
+'
+	OUTC = %1111			' turn off LEDs (active low)
+	DIRC = %1111			' make port C all outputs	
+
+	HIGH Rst			' alert the DS1620
+	' use with CPU; free run mode
+	SHIFTOUT DQ,Clk,LSBFIRST,[WCfg, %10] 
+	LOW Rst
+	PAUSE 10			' pause for DS1620 EE write cycle
+	HIGH Rst
+	' start temp conversion
+	SHIFTOUT DQ,Clk,LSBFIRST,[StartC]
+	LOW Rst
+
+
+' -----[ Main ]-----------------------------------------------------------
+'
+Main:	' wait for a command
+	cmd = 0
+	SERIN SIOpin,Baud96,[WAIT ("?"),HEX cmd]
+
+	' check for valid command
+
+	IF cmd = CmdID THEN ShowID
+	IF cmd = CmdSet THEN SetID
+	IF cmd = CmdTmp THEN ShowTemp
+	IF cmd = CmdTmpC THEN ShowTempC
+	IF cmd = CmdTmpF THEN ShowTempF
+	IF cmd = CmdStat THEN ShowStat
+	IF cmd = CmdLEDs THEN SetLEDs
+
+BadCommand:
+	DEBUG "Invalid Command: ",HEX2 cmd,CR
+	GOTO Main
+
+
+' -----[ Subroutines ]----------------------------------------------------
+'
+ShowID:	DEBUG "ID="			' label output
+	addr = ID			' point to first character of ID
+GetEE:	READ addr, eeDat		' read a character from EEPROM
+	DEBUG eeDat			' print the character
+	addr = addr + 1			' point to next character
+	IF eeDat <> CR THEN GetEE	' if not CR, read another
+	GOTO Main
+
+
+SetID:	addr = ID			' point to ID location
+GetC:	SERIN SIOpin,Baud96,[char]	' get character from PC
+	WRITE addr, char		' write character to EEPROM
+	addr = addr + 1			' point to next location
+	IF char <> CR THEN GetC		' if not CR, wait for another
+	GOTO ShowID			' confirm new ID
+
+
+ShowTemp:
+	GOSUB GetTemp
+	DEBUG "DS1620=",DEC tmpIn,CR	' send raw temp to PC
+	GOTO Main
+
+
+ShowTempC:
+	' will only return temps above freezing (0 C)
+	GOSUB GetTemp
+	IF sign = 0 THEN NoNegC
+	tmpIn = 0
+NoNegC: ' convert raw count to 10ths C
+	tempC = tmpIn * 5
+	DEBUG "TempC=",DEC (tempC/10),".",DEC (tempC//10),CR
+	GOTO Main
+
+
+ShowTempF:
+	' will only return temps above freezing (32 F)
+	GOSUB GetTemp
+	IF sign = 0 THEN NoNegF
+	tmpIn = 0
+NoNegF: ' convert raw count to 10ths F
+	tempF = (tmpIn * 9) + 320
+	DEBUG "TempF=",DEC (tempF/10),".",DEC (tempF//10),CR
+	GOTO Main	
+
+
+ShowStat:
+	' show LED status
+	DEBUG "Status=", BIN4 ~OUTC, CR
+	GOTO Main
+
+
+SetLEDs:
+	' wait for output bits
+	' - as binary string
+	'
+	SERIN SIOpin,Baud96,[BIN param]
+	OUTC = ~param.LOWNIB		' set the outputs
+	GOTO ShowStat			' confirm new outputs
+
+
+GetTemp:
+	HIGH Rst			' alert the DS1620
+	SHIFTOUT DQ,Clk,LSBFIRST,[RTmp]	' read temperature
+	SHIFTIN DQ,Clk,LSBPRE,[tmpIn\9]	' get the temperature
+	LOW Rst
+	RETURN
+
+

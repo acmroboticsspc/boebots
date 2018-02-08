@@ -1,0 +1,226 @@
+' ==============================================================================
+'
+'   File...... IRB Master.BS2
+'   Purpose... Buffered serial comms with IR Buddy
+'   Author.... Parallax, Inc.
+'   E-mail.... stamptech@parallaxinc.com
+'   Started...
+'   Updated... 25 NOV 2002
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' This program sends a command and data in an eight-byte packet to a slave
+' device.  The slave can act on the command and send data back.
+'
+' Note: For best performance, shield IR Buddy from external interference
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+
+IRbSIO          PIN     15                      ' IR Buddy serial I/O
+TxLED           PIN      0                      ' transmitter on indicator
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+IRbDataTx       CON     $44                     ' 8-byte data transmit
+IRbDataRx       CON     $64                     ' 8-byte data receive
+
+IRbMod          CON     38                      ' modulation freq: 30, 38 or 56
+
+IRb96           CON      84 + $8000             ' 9600 baud, open
+IRb48           CON     188 + $8000             ' 4800 baud, open
+IRb24           CON     396 + $8000             ' 2400 baud, open
+IRbBaud         CON     IRb96
+
+STX             CON     $02
+ACK             CON     $06
+NAK             CON     $15
+
+ErrHeader       CON     %0001                   ' bad header
+ErrChkSum       CON     %0010                   ' bad checksum
+ErrCommand      CON     %0100                   ' invalid command
+ErrSlave        CON     %1000                   ' bad slave packet
+
+LightLeds       CON     $C0                     ' commands for slave
+LedsOff         CON     $C1
+
+Busy            CON     0                       ' IR Buddy is transmitting
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+buffer          VAR     Byte                    ' tx-rx buffer (8 bytes)
+cmd             VAR     Byte
+data1           VAR     Byte
+data2           VAR     Byte
+data3           VAR     Byte
+data4           VAR     Byte
+data5           VAR     Byte
+chkSum          VAR     Byte
+
+header          VAR     buffer                  ' tx header
+ackByte         VAR     buffer                  ' rx status
+lastCmd         VAR     Byte                    ' last command sent
+rxChkSum        VAR     Byte                    ' comparison checksum
+errorLevel      VAR     Nib                     ' possible packet errors
+
+counter         VAR     Nib                     ' counter for slave display
+idx             VAR     Nib                     ' loop counter
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Setup:
+  PAUSE 250                                     ' let DEBUG window open
+  DEBUG CLS
+  DEBUG "IR Buddy Master-Slave Demo", CR
+  DEBUG "--------------------------", CR
+  DEBUG CR
+  DEBUG "TX: ", CR
+  DEBUG "RX: ", CR
+  DEBUG CR
+  DEBUG "Status: " 
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Build_Packet:
+  GOSUB Clear_Buffer
+  header = STX                                  ' build TX packet
+  cmd = LightLeds
+  data1 = counter
+  GOSUB Make_CheckSum
+  GOSUB Show_TX_Packet
+  lastCmd = cmd                                 ' save for RX check
+
+TX_Packet:
+  GOSUB IR_Buddy_Reset
+  HIGH TxLED
+  SEROUT IRbSIO, IRbBaud, [IRbDataTx, IRbMod, STR buffer\8]
+  PAUSE 5                                       ' let IRB grab SIO line
+
+TX_Wait:
+  DO WHILE (IRbSIO = Busy) : LOOP               ' wait for TX to end
+  LOW TxLED
+
+RX_Packet:
+  GOSUB IR_Buddy_Reset
+  SEROUT IRbSIO, IRbBaud, [IRbDataRx]           ' prep for 8-byte RX
+  SERIN  IRbSIO, IRbBaud, 1000, TO_Error, [STR buffer\8]
+  GOSUB Show_RX_Packet                          ' display received bytes
+
+Check_RX_Packet:
+  errorLevel = 0                                ' clear previous errors
+  IF (header = ACK) THEN 
+    rxChkSum = chkSum                           ' save rx checksum
+    GOSUB Make_CheckSum                         ' calc checksum of rx packet
+    IF (rxChkSum <> chkSum) THEN                ' compare checksum values
+      errorLevel = ErrSlave | ErrChkSum         ' bad checksum from slave
+    ENDIF
+  ELSE
+    IF (header = NAK) THEN
+      errorLevel = data1                        ' get errors from packet
+    ELSE
+      errorLevel = ErrSlave                     ' slave packet bad
+    ENDIF
+  ENDIF
+
+Status_Report:
+  DEBUG CrsrXY, 8, 6                            ' move cursor
+  IF (errorLevel = 0) THEN
+    DEBUG "Good Packet", ClrEOL
+    counter = (counter + 1) & $0F               ' update counter
+    PAUSE 500
+  ELSE
+    IF (errorLevel.Bit3) THEN                   ' bad slave packet?
+      DEBUG "Bad packet from slave", ClrEOL
+    ELSE
+      DEBUG "Slave returned NAK", ClrEOL
+    ENDIF
+    PAUSE 250                                   ' give slave time to reset
+  ENDIF
+
+  GOTO Build_Packet
+
+
+TO_Error:
+  DEBUG CrsrXY, 8, 6
+  DEBUG "Timeout error", ClrEOL
+  PAUSE 250                                     ' give slave time to reset
+  GOTO Build_Packet
+
+  END
+
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+' Reset the IR Buddy.  This code is useful for clearing data from the RX
+' buffer and prepping to switch modes.  Timing specific; do not change.
+
+IR_Buddy_Reset:
+  LOW IRbSIO                                    ' signal reset
+  PAUSE 5
+  INPUT IRbSIO                                  ' release reset signal
+  PAUSE 50                                      ' allow time for reset actions
+  RETURN
+
+
+Clear_Buffer:
+  FOR idx = 0 TO 7
+    buffer(idx) = 0
+  NEXT
+  RETURN
+
+
+Make_CheckSum:                                  ' checksum of bytes 0 to 6
+  chkSum = 0
+  FOR idx = 0 TO 6
+    chkSum = chkSum + buffer(idx)
+  NEXT
+  RETURN
+
+
+Show_TX_Packet:
+  DEBUG CrsrXY, 4, 4, ClrEOL                    ' clear last RX message
+  DEBUG CrsrXY, 4, 3, ClrEOL                    ' clear last TX message
+  GOTO Show_Packet_Data
+
+Show_RX_Packet:
+  DEBUG CrsrXY, 4, 4, ClrEOL                    ' clear last RX message
+
+Show_Packet_Data:                               ' display packet bytes
+  FOR idx = 0 TO 7
+    DEBUG HEX2 buffer(idx), " "
+  NEXT
+  RETURN

@@ -1,0 +1,247 @@
+' ==============================================================================
+'
+'   File...... PCF8583.BS2
+'   Purpose... Very simple PCF8583 RTC Demo
+'   Author.... Jon Williams
+'   E-mail.... jonwms@aol.com
+'   Started... 26 SEP 2001
+'   Updated... 29 MAR 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' This program demonstrates essential I2C routines and communication with the
+' Philips PCF8583 RTC/RAM.
+'
+' When the program starts, you will be asked to enter hours, minutes and
+' seconds.  The RTC will be setup and the DEBUG window will display the
+' running clock.
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+'
+SDA             CON     0                       ' I2C serial data line
+SCL             CON     1                       ' I2C serial clock line
+
+RxD             CON     16                      ' serial receive (from DEBUG)
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+DevType         CON     %1010 << 4              ' device type
+DevAddr         CON     %0 << 1                 ' address = %0 -> %1
+Wr8583          CON     DevType | DevAddr | 0   ' write to PCF8583
+Rd8583          CON     DevType | DevAddr | 1   ' read from PCF8583
+
+ACK             CON     0                       ' acknowledge bit
+NAK             CON     1                       ' no ack bit
+
+Baud96          CON     84                      ' 9600-8-N-1 (matches DEBUG)
+
+CrsrXY          CON     2                       ' DEBUG Position Control
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+i2cSDA          VAR     Nib                     ' I2C serial data pin
+i2cReg          VAR     Byte                    ' register address
+i2cData         VAR     Byte                    ' data to/from device
+i2cWork         VAR     Byte                    ' work byte for TX routine
+i2cAck          VAR     Bit                     ' ACK bit from device
+
+seconds         VAR     Byte
+minutes         VAR     Byte
+hours           VAR     Byte
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Initialize:
+  PAUSE 250                                     ' let DEBUG open
+  DEBUG CLS, "PCF8583 Demo"
+
+Enter_Hours:
+  DEBUG CrsrXY, 0, 2, "Enter Hours (0..23): "
+  SERIN RxD,Baud96,[DEC hours]
+  IF (hours < 24) THEN Enter_Minutes
+  hours = 6
+
+Enter_Minutes:
+  DEBUG CrsrXY, 0, 3, "Enter Minutes (0..59): "
+  SERIN RxD,Baud96,[DEC minutes]
+  IF (minutes < 60) THEN Enter_Seconds
+  minutes = 0
+
+Enter_Seconds:
+  DEBUG CrsrXY, 0, 4, "Enter Seconds (0..59): "
+  SERIN RxD,Baud96,[DEC seconds]
+  IF (minutes < 60) THEN Set_The_Clock
+  seconds = 0
+
+Set_The_Clock:
+  i2cSDA = SDA                                  ' define SDA pin
+  GOSUB Put_Clock
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  DEBUG CLS, "PCF8583 Demo"
+
+Show_Clock:
+  GOSUB Get_Clock
+  DEBUG CrsrXY, 0, 2, "The time is... "
+  DEBUG DEC2 hours, ":", DEC2 minutes, ":", DEC2 seconds
+  PAUSE 200
+  GOTO Show_Clock
+
+  END
+
+
+' ------------------------------------------------------------------------------
+' PCF8583 Subroutines
+' ------------------------------------------------------------------------------
+
+' Write i2cData to i2cReg
+
+Write_Byte:
+  GOSUB I2C_Start
+  i2cWork = Wr8583                              ' send device address
+  GOSUB I2C_TX_Byte
+  i2cWork = i2cReg                              ' send reg number
+  GOSUB I2C_TX_Byte
+  i2cWork = i2cData                             ' send data
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_Stop
+  RETURN
+
+
+' Read i2cData from i2cReg
+
+Read_Byte:
+  GOSUB I2C_Start
+  i2cWork = Wr8583                              ' send device address
+  GOSUB I2C_TX_Byte
+  i2cWork = i2cReg                              ' send reg number
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_Start                               ' restart
+  i2cWork = Rd8583                              ' send read command
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_RX_Byte_Nak                         ' read selected reg
+  GOSUB I2C_Stop
+  i2cData = i2cWork
+  RETURN
+
+
+' Write seconds, minutes and hours .. sequntial mode
+' -- variables are converted to BCD before sending to PCF8583
+
+Put_Clock:
+  GOSUB I2C_Start
+  i2cWork = Wr8583                              ' send device address
+  GOSUB I2C_TX_Byte
+  i2cWork = 2                                   ' start with seconds reg
+  GOSUB I2C_TX_Byte
+  i2cWork = ((seconds / 10) << 4) | (seconds // 10)
+  GOSUB I2C_TX_Byte
+  i2cWork = ((minutes / 10) << 4) | (minutes // 10)
+  GOSUB I2C_TX_Byte
+  i2cWork = ((hours / 10) << 4) | (hours // 10)
+  GOSUB I2C_Stop
+  RETURN
+
+
+' Read seconds, minutes and hours .. sequntial mode
+' -- variables are converted from BCD storage format
+
+Get_Clock:
+  GOSUB I2C_Start
+  i2cWork = Wr8583                              ' send device address
+  GOSUB I2C_TX_Byte
+  i2cWork = 2                                   ' send seconds reg #
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_Start                               ' restart
+  i2cWork = Rd8583                              ' send read command
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_RX_Byte                             ' read back seconds
+  seconds = i2cWork.HighNib * 10 + i2cWork.LowNib
+  GOSUB I2C_RX_Byte
+  minutes = i2cWork.HighNib * 10 + i2cWork.LowNib
+  GOSUB I2C_RX_Byte_Nak                         ' final byte - send NAK
+  hours = i2cWork.HighNib * 10 + i2cWork.LowNib
+  GOSUB I2C_Stop
+  RETURN
+
+
+' ------------------------------------------------------------------------------
+' Low Level I2C Subroutines
+' ------------------------------------------------------------------------------
+
+' --- Start ---
+
+I2C_Start:                                      ' I2C start bit sequence
+  INPUT i2cSDA
+  INPUT SCL
+  LOW i2cSDA                                    ' SDA -> low while SCL high
+
+Clock_Hold:
+  IF (Ins.LowBit(SCL) = 0) THEN Clock_Hold      ' device ready?
+  RETURN
+
+
+' --- Transmit ---
+
+I2C_TX_Byte:
+  SHIFTOUT i2cSDA,SCL,MSBFIRST,[i2cWork\8]      ' send byte to device
+  SHIFTIN i2cSDA,SCL,MSBPRE,[i2cAck\1]          ' get acknowledge bit
+  RETURN
+
+
+' --- Receive ---
+
+I2C_RX_Byte_Nak:
+  i2cAck = NAK                                  ' no ACK = high
+  GOTO I2C_RX
+
+I2C_RX_Byte:
+  i2cAck = ACK                                  ' ACK = low
+
+I2C_RX:
+  SHIFTIN i2cSDA,SCL,MSBPRE,[i2cWork\8]         ' get byte from device
+  SHIFTOUT i2cSDA,SCL,LSBFIRST,[i2cAck\1]       ' send ack or nak
+  RETURN
+
+
+' --- Stop ---
+
+I2C_Stop:                                       ' I2C stop bit sequence
+  LOW i2cSDA
+  INPUT SCL
+  INPUT i2cSDA                                  ' SDA --> high while SCL high
+  RETURN

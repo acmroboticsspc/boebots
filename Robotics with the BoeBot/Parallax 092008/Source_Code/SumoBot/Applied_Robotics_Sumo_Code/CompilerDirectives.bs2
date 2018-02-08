@@ -1,0 +1,59 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - CompilerDirectives.bs2
+' How to use compiler directives to select which code blocks to run.
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+' -----[ Compiler Definitions ]-----------------------------------------------
+
+#DEFINE LED_MODE = 1
+#DEFINE DEBUG_MODE = 2
+
+' -----[ I/O Definitions ]----------------------------------------------------
+
+#IF LED_MODE = 1 #THEN
+  LedSpeaker PIN 5
+#ENDIF
+
+' -----[ Variables ]----------------------------------------------------------
+
+counter VAR Word
+
+' -----[ Initialization ]-----------------------------------------------------
+
+DEBUG CLS, "Program running...", CR, CR
+
+#SELECT DEBUG_MODE
+  #CASE 0
+    DEBUG "DEBUG_MODE is zero."
+  #CASE 1
+    DEBUG "DEBUG_MODE is one."
+  #CASE 2
+    DEBUG "DEBUG_MODE is two."
+#ENDSELECT
+
+DEBUG CR, CR
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+DO
+
+  DEBUG CRSRX, 0, ? counter
+  counter = counter + 1
+
+  #IF LED_MODE = 1 #THEN
+
+    DEBUG "LED state = ", BIN1 counter.BIT0, CRSRUP
+    TOGGLE LedSpeaker
+    PAUSE 200
+
+  #ELSE
+
+    DEBUG "LED_MODE disabled", CRSRUP
+    PAUSE 100
+
+  #ENDIF
+
+LOOP
+

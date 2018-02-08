@@ -1,0 +1,100 @@
+' Program Listing 42.1
+' Nuts & Volts: Stamp Applications, August 1998
+
+' -----[ Title ]--------------------------------------------------
+'
+' File...... PC1620.BS2
+' Purpose... Dallas DS1620 <-> Stamp II -> PC (Visual Basic)
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' WWW....... http://members.aol.com/jonwms
+' Started... 10 JUN 1998
+' Updated... 10 JUN 1998
+
+
+' -----[ Program Description ]------------------------------------
+'
+' This program reads the temperature from the Dallas DS1620 and sends it
+' to the PC for conversion and display.
+
+
+' -----[ Revision History ]---------------------------------------
+'
+' 10 JUN 98 : Rev 1 complete
+
+
+' -----[ Constants ]----------------------------------------------
+'
+True	CON	1
+False	CON	0
+
+' DS1620 pins
+' -- setup for BSAC
+'
+Rst	CON 	13			' DS1620.3
+Clk	CON	14			' DS1620.2
+DQ	CON	15			' DS1620.1
+
+' DS1620 commands
+'
+RdTmp	CON	$AA			' read temperature
+WrTHi	CON	$01			' write TH (high temp register)
+WrTLo	CON	$02			' write TL (low temp register)
+RdTHi	CON	$A1			' read TH
+RdTLo	CON	$A2			' read TL
+StartC	CON	$EE			' start conversion
+StopC	CON	$22			' stop conversion
+WrCfg	CON	$0C			' write configuration register
+RdCfg	CON	$AC			' read configuration register
+CPU	CON	%10
+NoCPU	CON	%00
+OneShot	CON	%01
+Cont	CON	%00
+
+Baud96	CON	84			' serial baud rate (to PC)
+SIOPin	CON	16			' use programming port
+
+
+' -----[ Variables ]----------------------------------------------
+'
+tmpIn	VAR	Word			' 9-bit temp input from DS1620
+
+
+' -----[ EEPROM Data ]--------------------------------------------
+'
+
+
+' -----[ Initialization ]-----------------------------------------
+'
+Init:	LOW Rst
+	HIGH Clk
+	PAUSE 100
+
+' Initialize the DS1620
+' - use with CPU in free run mode
+'
+I_1620:	HIGH Rst
+	SHIFTOUT DQ,Clk,LSBFIRST,[WrCfg,CPU+Cont]
+	LOW Rst
+	PAUSE 10
+	HIGH Rst
+	SHIFTOUT DQ,Clk,LSBFIRST,[StartC]
+	LOW Rst
+
+
+' -----[ Main Code ]----------------------------------------------
+'
+Main:	' get temp from DS1620
+	HIGH Rst
+	SHIFTOUT DQ,Clk,LSBFIRST,[RdTmp]
+	SHIFTIN DQ,Clk,LSBPRE,[tmpIn\9]
+	LOW Rst
+
+	' send to PC
+	SEROUT SIOPin, Baud96, [hex2 $55, hex2 $01, hex4 tmpIn, 13]
+
+	PAUSE 1000
+	GOTO Main
+
+
+' -----[ Subroutines ]--------------------------------------------

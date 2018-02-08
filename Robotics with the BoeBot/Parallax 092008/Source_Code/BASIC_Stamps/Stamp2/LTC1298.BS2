@@ -1,0 +1,60 @@
+'{$STAMP BS2}
+
+' Program: LTC1298.BS2 (LTC1298 analog-to-digital converter)
+' This program demonstrates use of the Shiftout and Shiftin instructions
+' to communicate with an LTC1298 serial ADC. Shiftout is used to 
+' send setup data to the ADC; Shiftin to capture the results of the 
+' conversion. The comments in this program concentrate on explaining
+' the operation of the Shift instructions. for more information on 
+' the ADC, see Stamp app note #21 or the Linear Tech spec sheets. 
+
+CS 	con	0	' Chip select; 0 = active
+CLK	con	1	' Clock to ADC; out on rising, in on falling edge. 
+DIO_n	con	2	' Data I/O pin _number_. 
+config	var	nib	' Configuration bits for ADC. 
+AD	var	word	' Variable to hold 12-bit AD result. 
+
+startB	var	config.bit0	' Start bit for comm with ADC. 
+sglDif	var	config.bit1	' Single-ended or differential mode. 
+oddSign	var	config.bit2	' Channel selection. 
+msbf	var	config.bit3	' Output 0s after data xfer complete. 
+
+' ==========================================================
+'                     Demo Program
+' ==========================================================
+
+' This program demonstrates the LTC1298 by alternately sampling the two
+' input channels and presenting the results on the PC screen using Debug. 
+
+high CS			' Deactivate ADC to begin. 
+high DIO_n		' Set data pin for first start bit. 
+again: 			' Main loop. 
+  for oddSign = 0 to 1	' Toggle between input channels. 
+    gosub convert	' Get data from ADC. 
+    debug "channel ",DEC oddSign, ": ",DEC AD,cr	' Display data. 
+    pause 500		' Wait a half second. 
+  next			' Change channels. 
+goto again		' Endless loop. 
+
+' ==========================================================
+'                     ADC Subroutine
+' ==========================================================
+
+' Here's where the conversion occurs. The Stamp first sends the config 
+' bits to the 1298, then clocks in the conversion data. Note the use of
+' the new BS2 instructions Shiftout and Shiftin. Their use is pretty 
+' straightforward here: Shiftout sends data bits to pin DIO and clock
+' the CLK pin. Sending the least-significant bit first, it shifts out
+' the four bits of the variable config. Then Shiftin changes DIO to 
+' input and clocks in the data bits--most-significant bit first, post
+' clock (valid after clock pulse). It shifts in 12 bits to the 
+' variable AD. 
+
+convert: 
+  config = config | %1011	' Set all bits except oddSign. 
+  low CS			' Activate the ADC. 
+  shiftout DIO_n,CLK,lsbfirst,[config\4]	' Send config bits. 
+  shiftin DIO_n,CLK,msbpost,[AD\12]		' Get data bits. 
+  high CS		' Deactivate the ADC. 
+return			' Return to program. 
+

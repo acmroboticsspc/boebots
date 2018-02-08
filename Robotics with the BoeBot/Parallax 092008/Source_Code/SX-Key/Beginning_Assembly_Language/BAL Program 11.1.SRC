@@ -1,0 +1,165 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 11.1
+;Simple A/D Converter
+;=======================================================================
+; Device
+;
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	reset_entry
+;
+;
+; Equates
+;
+tx_pin		=	ra.3
+adc0_out_pin	=	rb.0
+adc0_in_pin	=	rb.1
+;
+;
+; Variables
+;
+		org	8
+
+temp		ds	1
+number_low	ds	1
+complete	ds	1   		; bit 0 = 1 when complete
+; holding for voltages
+v0		ds	1
+
+
+		org	10h			
+serial		=	$
+
+tx_high		ds	1		;tx
+tx_low		ds	1
+tx_count	ds	1
+tx_divide	ds	1
+txdivisor	=	16   		; 16 periods per bit
+
+		org	30h
+analog		=	$
+
+port_buff	ds	1		;buffer - used by all
+
+adc0		ds	1		;adc0
+adc0_acc	ds	1
+
+adc_count	ds	1		; count for both ADCs
+
+
+		org	0
+;
+;
+; Interrupt routine - ADC + UART
+;
+interrupt	
+		bank	analog			
+
+; shifting moves the input bit to the output bit
+		mov	w,>>rb		; read capacitor level 
+		not	w		; invert
+		and	w,#%00000001	; write to output
+		mov	port_buff,w
+		mov	rb,w		; and update pins
+
+		sb	port_buff.0	; adc0
+		incsz	adc0_acc	; if it was high, inc acc
+		inc	adc0_acc
+		dec	adc0_acc	; inc/inc/dec prevents rollover
+		inc	adc_count	; done (8 bits)?
+		jnz	adc_out
+; Done so store result
+		mov	adc0,adc0_acc
+		setb	complete.0	; set complete flag
+; clear for next pass
+		clr	adc0_acc
+; standard UART transmit
+adc_out
+		bank	serial			
+		dec	tx_divide
+		jnz   	noisr
+		mov	tx_divide,#txdivisor   	; ready for next			
+		test	tx_count	       	; busy?
+		jz 	noisr		       	; no byte being sent
+		stc				; ready stop bit
+		rr	tx_high			
+		rr	tx_low			
+		dec	tx_count		
+		movb	tx_pin,/tx_low.6   	;output next bit
+noisr
+		mov	w,#-163		 ;interrupt every 163 clocks
+		retiw				
+;
+
+; required to output HEX numbers
+_hex		dw	'0123456789ABCDEF'
+;
+;
+;***********************************************************************
+;* Subroutines *
+
+; Send hex byte (2 digits)
+;
+send_hex
+		mov	number_low,w		; save W
+		mov	w,<>number_low		;send first digit
+		call	:digit
+
+		mov	w,number_low		;send second digit
+
+:digit		and	w,#$F			;read hex chr
+		mov	temp,w
+		mov	w,#_hex
+		clc			; just in case +c is enabled
+		add	w,temp
+		mov	m,#0
+		iread             	; read from program mem!
+		mov	m,#$F
+
+; fall into send byte
+
+;***********************************************************************
+;
+;
+; Send byte via serial port
+;
+send_byte	bank	serial
+
+:wait		test	tx_count		;wait for not busy
+		jnz	:wait
+
+		mov	tx_high,w
+		clrb  	tx_low.7   		; set start bit
+
+
+		mov	tx_count,#10	;1 start + 8 data + 1 stop bit
+		ret
+reset_entry	mov	ra,#%1000		;init ra
+		mov	!ra,#%0111
+		clr	rb			;init rb
+		mov	!rb,#%00000010
+		mov	m,#$D			;set cmos input levels
+		mov	!rb,#0
+		mov	m,#$F
+
+		clr	fsr			;reset all ram banks
+:loop		setb	fsr.4
+		clr	ind
+		ijnz	fsr,:loop
+		mov	tx_divide,txdivisor
+		mov	!option,#%10011111
+
+; **** Your code goes here ****
+top						; main loop
+		bank	analog
+:wait		jnb	complete.0,:wait   	; wait for data ready
+		mov	w,adc0
+		clrb	complete.0 	   	; get ready to wait again
+		call	send_hex       		; write out
+		mov	w,#13		   	; send cr 
+		call	send_byte
+		jmp	top
+
+

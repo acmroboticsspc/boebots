@@ -1,0 +1,316 @@
+' Program Listing 33.1
+' Stamp Applications: Nuts & Volts, November 1997
+
+' ----[ Title ]-----------------------------------------------------------
+'
+' File...... BS2CLOCK.BS2
+' Purpose... Stamp II-based Alarm Clock
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' WWW....... http://members.aol.com/jonwms
+' Started... 20 SEP 97
+' Updated... 27 SEP 97
+
+
+' ----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates basic timekeeping functions using the DS1302
+' from Dallas Semiconductor. In order to minimize the number of I/O pins
+' used, a 74HC595 is used to send data to an LCD. The DS1302 and 74HC595
+' share the Dio and Clock lines.
+
+
+' ----[ Revision History ]------------------------------------------------
+'
+' 26 SEP 97 : Timekeeping functions complete
+' 27 SEP 97 : Alarm function complete
+
+
+' ----[ Constants ]-------------------------------------------------------
+'
+' ===================
+' I/O Pin Definitions
+' ===================
+'
+Dio	CON	    8			' DS1302.6, 74HC595.14
+Clk	CON	    9			' DS1302.7, 74HC595.11
+CS_595	CON	   10			' 74HC595.12
+CS_1302	CON	   11			' DS1302.5
+SetHr	CON	   12
+SetMn	CON	   13
+TmAlrm	VAR	 In14
+Alarm	VAR	Out15
+
+
+' ================
+' DS1302 Registers
+' ================
+'
+WrSc	CON	$80			' write seconds
+RdSc	CON	$81			' read seconds
+WrMn	CON	$82
+RdMn	CON	$83
+WrHr	CON	$84
+RdHr	CON	$85
+
+CWPr	CON	$8E			' write protect register
+WPr1	CON	$80			' set write protect
+WPr0	CON	$00			' clear write protect
+
+WrBrst	CON	$BE			' write burst of data
+RdBrst	CON	$BF			' read burst of data
+
+WrRam	CON	$C0			' RAM address control
+RdRam	CON	$C1
+
+T24hr	CON	0			' 24 hour clock mode
+T12hr	CON	1			' 12 hour clock mode
+AM	CON	0
+PM	CON	1
+
+AlrmLen	CON	1			' length of alarm (in minutes)
+
+
+' ======================
+' LCD control characters
+' ======================
+'
+ClrLCD 	CON    	$01                  	' clear the LCD
+CrsrHm 	CON    	$02                  	' move cursor to home position
+CrsrLf 	CON    	$10                  	' move cursor left
+CrsrRt 	CON    	$14                  	' move cursor right
+DispLf 	CON    	$18                  	' shift displayed chars left
+DispRt 	CON    	$1C			' shift displayed chars right
+DDRam  	CON    	$80			' Display Data RAM control
+CGRam	CON	$40			' Char Gen RAM control
+
+
+' ----[ Variables ]-------------------------------------------------------
+'
+addr	VAR	Byte			' DS1302 address to read/write
+ioByte	VAR	Byte
+
+secs	VAR	Byte
+sc10	VAR	secs.HIGHNIB
+sc01	VAR	secs.LOWNIB
+mins	VAR	Byte
+mn10	VAR	mins.HIGHNIB
+mn01	VAR	mins.LOWNIB
+hrs	VAR	Byte
+hr10	VAR	hrs.HIGHNIB
+hr01	VAR	hrs.LOWNIB
+
+ampm	VAR	hrs.Bit5		' 0 = AM, 1 = PM
+tMode	VAR	hrs.Bit7		' 0 = 24, 1 = 12
+
+rawTime	VAR	Word(2)			' raw storage of time values
+work	VAR	Word			' work variable for display output
+oldSc	VAR	Byte			' previous seconds value
+apChar	VAR	Byte			' "A" (65) or "P" (80)
+
+char	VAR	Byte			' character to send to LCD
+temp	VAR	Byte			' work variable for LCD routine
+lcd_E	VAR	temp.Bit2		' LCD Enable pin
+lcd_RS	VAR     temp.Bit3		' Register Select (1 = char)
+
+butn	VAR	Byte			' BUTTON workspace variable
+alrmX	VAR	Bit
+
+
+' ----[ EEPROM Data ]-----------------------------------------------------
+'
+
+
+' ----[ Initialization ]--------------------------------------------------
+'
+Init:	DirH = %10001110
+
+	addr = CWPr			' clear write protect register
+	ioByte = WPr0
+	GOSUB RTCout
+
+	oldSc = $99			' set the display flag
+	tMode = T24Hr			' put clock in 24-hour mode
+	rawTime(0) = 360		' preset alarm to 6:00 AM
+	GOSUB SetRTm			' set time to 12:00 AM
+
+' Initialize the LCD (Hitachi HD44780 controller)
+'
+LCDini: PAUSE 500			' let the LCD settle
+	char = %0011			' 8-bit mode
+	GOSUB LCDcmd
+	PAUSE 5
+	GOSUB LCDcmd
+	GOSUB LCDcmd
+	char = %0010			' put in 4-bit mode
+	GOSUB LCDcmd
+	char = %00001100		' disp on, crsr off, blink off
+	GOSUB LCDcmd                     
+	char = %00000110		' inc crsr, no disp shift
+	GOSUB LCDcmd
+	char = ClrLCD
+	GOSUB LCDcmd
+
+
+' ----[ Main Code ]-------------------------------------------------------
+'
+Start:	GOSUB GetTm
+	IF secs = oldSc THEN ChkHr
+	GOSUB ShowTm
+	
+ChkHr:	BUTTON SetHr,0,150,10,butn,0,ChkMn	' is Set Hours pressed?
+	GOSUB GetTm				' yes, get the clock
+	rawTime(TmAlrm) = rawTime(TmAlrm)+60//1440
+	IF TmAlrm = 0 THEN NoSet1		' skip 1302 set for alarm
+	GOSUB SetRTm				' set new time
+NoSet1:	GOSUB ShowTm				' display the change
+	PAUSE 100				' pause between changes
+	GOTO ChkHr				' still pressed?
+
+ChkMn:	BUTTON SetMn,0,150,10,butn,0,ChAlrm	' is Set Mins pressed?
+	GOSUB GetTm
+	rawTime(TmAlrm) = rawTime(TmAlrm)+1//1440
+	IF TmAlrm = 0 THEN NoSet2
+	GOSUB SetRTm
+NoSet2:	GOSUB ShowTm
+	PAUSE 100
+	GOTO ChkMn
+
+ChAlrm:	IF AlrmLen = 0 THEN Start		' skip if no alarm length
+	alrmX = 0				' assume no alarm
+	FOR temp = 0 TO (AlrmLen-1)		' check for length of alarm
+	  work = rawTime(0)+temp//1440	' calculate alarm range
+	  IF rawTime(1) <> work THEN NoAlrm	' is time in range?
+	  alrmX = 1				' yes
+NoAlrm:	NEXT
+	Alarm = alrmX				' output the alarm state
+
+	GOTO Start				' start all over
+
+
+' ----[ Subroutines ]-----------------------------------------------------
+'
+' send a byte (ioByte) to the DS1302 location specified by addr
+'
+RTCout:	HIGH CS_1302
+ 
+
+' get a byte (ioByte) from the DS1302 location specified by addr
+'
+RTCin:	HIGH CS_1302
+	SHIFTOUT Dio,Clk,LSBFIRST,[addr]
+	SHIFTIN Dio,Clk,LSBPRE,[ioByte]
+	LOW CS_1302
+	RETURN
+
+' convert raw time format to BCD bytes for DS1302
+'
+SetRTm:	hr10 = rawTime(1) / 600
+	hr01 = rawTime(1) // 600 / 60
+	mn10 = rawTime(1) // 60 / 10
+	mn01 = rawTime(1) // 10
+	secs = $00
+
+' use burst mode to set the clock and calendar
+' -- do not remove the third SHIFTOUT line
+' -- you must send 8 bytes for data to be written in burst mode
+'
+SetTm:	HIGH CS_1302
+	addr = WrBrst
+	temp = 0
+	SHIFTOUT Dio,Clk,LSBFIRST,[addr]
+	SHIFTOUT Dio,Clk,LSBFIRST,[secs,mins,hrs]
+	SHIFTOUT Dio,Clk,LSBFIRST,[temp,temp,temp,temp,temp]
+	LOW CS_1302
+	RETURN
+
+' use burst mode to the grab time (hrs, mins & secs)
+'
+GetTm:	HIGH CS_1302
+	addr = RdBrst
+	SHIFTOUT Dio,Clk,LSBFIRST,[addr]
+	SHIFTIN Dio,Clk,LSBPRE,[secs,mins,hrs]
+	LOW CS_1302
+	rawTime(1) = ((hr10 & %11)*600)+(hr01*60)+(mn10*10)+mn01
+	RETURN
+
+' Send command to the LCD
+'
+LCDcmd: lcd_RS = 0			' command mode
+	GOTO LCDout
+
+' Write ASCII char to LCD 
+'
+LCDwr:	lcd_RS = 1			' character mode
+
+
+LCDout:	temp.HIGHNIB = char.HIGHNIB	' get high nibble
+	lcd_E = 1
+	SHIFTOUT Dio, Clk, MSBFIRST, [temp]
+	PULSOUT CS_595, 1
+	lcd_E = 0			' drop Enable line low
+	SHIFTOUT Dio, Clk, MSBFIRST, [temp]
+	PULSOUT CS_595, 1
+	temp.HIGHNIB = char.LOWNIB	' get low nibble
+	lcd_E = 1
+	SHIFTOUT Dio, Clk, MSBFIRST, [temp]
+	PULSOUT CS_595, 1
+	lcd_E = 0
+	SHIFTOUT Dio, Clk, MSBFIRST, [temp]
+	PULSOUT CS_595, 1
+	RETURN
+
+
+' Show time in LCD
+' -- the time displayed is controlled by the position
+' -- of the TmAlrm switch input
+'
+ShowTm:	char = DDRam+$02		' move to third position in LCD
+	GOSUB LCDcmd
+
+	work = rawTime(TmAlrm)		' get the raw time
+	hrs = work / 60		' extract (decimal) hours
+	mins = work // 60		' extract (decimal) minutes
+	IF TmAlrm = 1 THEN ST0
+	secs = 0			' show zero seconds if alarm
+
+ST0:	apChar = "A"
+	IF hrs > 0 THEN ST1
+	hrs = 12			' zero hours --> 12 AM
+	GOTO ST3
+
+ST1:	IF hrs > 11 THEN ST2
+	GOTO ST3
+
+ST2:	apChar = "P"
+	IF hrs = 12 THEN ST3
+	hrs = hrs-12			' 13 - 23 --> 1 - 11 PM
+
+ST3:	char = hrs DIG 1+48		' get hours, convert to ASCII
+	IF char <> "0" THEN ST4
+	char = " "			' remove leading zero
+
+ST4:	GOSUB LCDwr			' write hours.tens
+	char = hrs DIG 0+48
+	GOSUB LCDwr			' write hours.ones
+	char = ":"
+	GOSUB LCDwr
+	char = mins DIG 1+48
+	GOSUB LCDwr
+	char = mins DIG 0+48
+	GOSUB LCDwr
+	char = ":"
+	GOSUB LCDwr
+	char = sc10+48
+	GOSUB LCDwr
+	char = sc01+48
+	GOSUB LCDwr
+	char = " "
+	GOSUB LCDwr
+	char = apChar
+	GOSUB LCDwr
+	char = "M"
+	GOSUB LCDwr
+
+	oldSc = secs			' reset check value
+EndST:	RETURN 

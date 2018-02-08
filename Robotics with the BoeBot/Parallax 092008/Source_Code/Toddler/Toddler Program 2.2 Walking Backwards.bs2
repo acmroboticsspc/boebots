@@ -1,0 +1,120 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 2.2 - Walking Backwards.bs2
+' Run Movement Patters M9 to M13 to walk backwards
+' {$STAMP BS2} 
+' {$PBASIC 2.5}
+
+' -----[ Declarations ]----------------------------------------------------
+
+TiltStep        CON     5               ' TiltServo step size                       
+StrideStep      CON     5               ' StrideServo step size                     
+MoveDelay       CON     20              ' in micrcoseconds                          
+                                                                            
+RightTilt       CON     620             ' Tilt limits                               
+CenterTilt      CON     750                                                  
+LeftTilt        CON     880                                                  
+                                                                            
+RightForward    CON     650             ' Stride limits                             
+StrideCenter    CON     750                                                  
+LeftForward     CON     850                                                  
+                                                                            
+StrideServo     CON     12              ' Stride servo on P12                       
+TiltServo       CON     13              ' Tilt servo on P13                         
+                                                                            
+MoveLoop        VAR     Nib             ' Repeat movements                          
+Pulses          VAR     Word            ' Pulse variable                            
+                                                                            
+' -----[ Initialization ]--------------------------------------------------
+                                                                            
+' -----[ Main Routine ]----------------------------------------------------
+                                                                            
+Main_Program:                                                                       
+  GOSUB M0                              ' center servos                             
+  GOSUB M1                              ' tilt right                                
+  GOSUB M9                              ' step back                                
+                                                                            
+    FOR MoveLoop = 1 to 3                                                   
+      GOSUB M10                         ' tilt left                                 
+      GOSUB M11                         ' step left                                 
+      GOSUB M12                         ' tilt right                                
+      GOSUB M13                         ' step right                                
+    NEXT                                                                    
+                                                                            
+  GOSUB M10                             ' tilt left                                 
+  GOSUB M14                             ' center feet                               
+  GOSUB M8                              ' center servos                             
+END
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+M0:     
+  FOR Pulses = 1 TO 100 STEP StrideStep                         
+    PULSOUT TiltServo, CenterTilt               
+    PULSOUT StrideServo, StrideCenter
+    PAUSE MoveDelay                                     
+  NEXT
+  RETURN
+
+M1:
+  FOR Pulses = CenterTilt TO RightTilt STEP TiltStep
+    PULSOUT TiltServo, Pulses           
+    PULSOUT StrideServo, StrideCenter
+    PAUSE MoveDelay                                     
+  NEXT
+  RETURN
+
+M8:
+  FOR Pulses = LeftTilt TO CenterTilt STEP TiltStep             
+    PULSOUT TiltServo,Pulses            
+    PULSOUT StrideServo, StrideCenter
+    PAUSE MoveDelay                                     
+  NEXT
+  RETURN
+
+M9:
+  FOR Pulses = StrideCenter TO RightForward STEP StrideStep                     
+    PULSOUT TiltServo, RightTilt                
+    PULSOUT StrideServo, Pulses
+    PAUSE MoveDelay                                     
+  NEXT
+  RETURN
+
+M10:
+  FOR Pulses =  RightTilt TO LeftTilt STEP TiltStep
+    PULSOUT TiltServo,Pulses            
+    PULSOUT StrideServo, RightForward
+    PAUSE MoveDelay                                     
+  NEXT
+  RETURN
+
+M11:
+  FOR Pulses = RightForward TO LeftForward STEP StrideStep                      
+    PULSOUT TiltServo,LeftTilt  
+    PULSOUT StrideServo, Pulses
+    PAUSE MoveDelay                                     
+  NEXT
+  RETURN
+
+M12:
+  FOR Pulses = LeftTilt TO RightTilt STEP TiltStep
+    PULSOUT TiltServo,Pulses    
+    PULSOUT StrideServo, LeftForward
+    PAUSE MoveDelay                                     
+  NEXT
+  RETURN
+
+M13:
+  FOR Pulses = LeftForward TO RightForward STEP StrideStep                      
+    PULSOUT TiltServo,RightTilt
+    PULSOUT StrideServo, Pulses
+    PAUSE MoveDelay                                     
+  NEXT
+  RETURN
+
+M14:
+  FOR Pulses = RightForward TO StrideCenter STEP StrideStep                     
+    PULSOUT TiltServo,LeftTilt
+    PULSOUT StrideServo, Pulses
+    PAUSE MoveDelay                                     
+  NEXT
+  RETURN

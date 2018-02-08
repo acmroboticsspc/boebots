@@ -1,0 +1,110 @@
+' Nuts & Volts - Stamp Applications
+' July 2000 (Listing 1)
+
+' ======================================================================== 
+' Program... TEMPPLOT.BS2
+' Author.... Jon Williams
+' Started... 29 MAY 2000
+' Updated... 29 MAY 2000
+' ========================================================================
+
+
+' -----[ Program Description ]--------------------------------------------
+'
+' Plot temperatures measured by a DS1620 using Stamp Plot Lite from
+' SelmaWare Solutions (www.selmaware.com)
+
+
+' -----[ Revision History ]-----------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------
+'
+Rst	CON 	13			' DS1620.3
+Clk	CON	14			' DS1620.2
+DQ	CON	15			' DS1620.1
+
+
+' -----[ Constants ]------------------------------------------------------
+'
+
+' DS1620 commands
+'
+RTmp	CON	$AA			' read temperature
+WTHi	CON	$01			' write TH (high temp)
+WTLo	CON	$02			' write TL (low temp)
+RTHi	CON	$A1			' read TH
+RTLo	CON	$A2			' read TL
+StartC	CON	$EE			' start conversion
+StopC	CON	$22			' stop conversion
+WCfg	CON	$0C			' write config register
+RCfg	CON	$AC			' read config register
+
+
+' -----[ Variables ]------------------------------------------------------
+'
+tmpIn	VAR	Word			' raw data from DS1620
+halfBit	VAR	tmpIn.Bit0		' 0.5 degree C indicator
+sign	VAR	tmpIn.Bit8		' 1 = negative temperature
+tempF	VAR	Word			' degrees F in tenths
+
+
+' -----[ EEPROM Data ]----------------------------------------------------
+'
+
+
+' -----[ Initialization ]-------------------------------------------------
+'
+Init_DS1620:
+	HIGH Rst			' alert the DS1620
+	' use with CPU; free run mode
+	SHIFTOUT DQ,Clk,LSBFIRST,[WCfg, %10] 
+	LOW Rst
+	PAUSE 10			' allow DS1620 EE write
+	HIGH Rst
+	' start temp conversion
+	SHIFTOUT DQ,Clk,LSBFIRST,[StartC]
+	LOW Rst
+
+Init_Graph:
+	DEBUG "!RSET", CR			' clear graph
+	DEBUG "!SPAN 70,80", CR			' disply 70 - 80 degrees
+	DEBUG "!AMUL 0.1", CR			' convert from tenths
+	DEBUG "!CLMM"				' clear min/max values
+	DEBUG "!TMAX 3600", CR			' 1 hour scale
+	DEBUG "!PNTS 3600", CR			' graph every second
+	DEBUG "!MAXS", CR			' stop when graph full
+	DEBUG "!TSMP ON", CR			' enable time stamping
+
+	DEBUG "!TITL Jon's Home Temp", CR		' set window title
+	DEBUG "!USRS Temperature in Fahrenheit", CR	' graph legend
+	DEBUG "!CLRM", CR			' clear messages
+	DEBUG "Reset and monitoring temperature", CR	' message box
+
+	DEBUG "!PLOT ON", CR			' enable plotting
+
+
+' -----[ Main ]-----------------------------------------------------------
+'
+Main:	GOSUB GetTemp			' get the raw temperature
+	IF sign = 0 THEN NotNeg		' if positive, okay
+	tmpIn = 0			'  - otherwise make zero
+NotNeg: tempF = (tmpIn * 9) + 320	' convert to 10ths F
+	DEBUG DEC tempF, CR		' send to Stamp Plot Lite
+
+	PAUSE 990			' wait about 1 second
+
+	GOTO Main			' do it again	
+
+
+' -----[ Subroutines ]----------------------------------------------------
+'
+
+GetTemp:
+	HIGH Rst			' alert the DS1620
+	SHIFTOUT DQ,Clk,LSBFIRST,[RTmp]	' read temperature
+	SHIFTIN DQ,Clk,LSBPRE,[tmpIn\9]	' get the temperature
+	LOW Rst
+	RETURN
+

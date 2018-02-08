@@ -1,0 +1,86 @@
+' -----[ Title ]----------------------------------------------------
+
+'
+' File......  ADXL_2P1.BSP
+' Purpose...  Demonstration einiger  LCD.. Befehle der BS2P
+'             in Verbindung Beschleunigungssensor ADXL202
+              
+' Author....  Klaus Zahnert
+' Started...  10.6.01
+' Updated... 
+
+' -----[ Program Description ]--------------------------------------
+--
+' 
+' Mit PULSIN-Befehl wird das pulslängenmodulierte Signal des 
+' Beschleunigungssensors ADXL202 für 2 orthonale Richtungen 
+' x und y erfasst. Die Messwerte werden in eine Impulsrate umgesetzt 
+' und m. H. der LCD - Befehle periodisch zur Anzeige gebracht
+
+' -----[ Revision History ]-----------------------------------------
+'
+' 10.6.01 : Version 1.0
+
+' -----[ Constants ]------------------------------------------------
+'
+p 	con 	1
+xpin	con	11
+ypin	con	10     
+
+
+
+
+' -----[ Variables ]------------------------------------------------
+'
+n 		var  byte
+x 		var 	word
+y		var	word
+sum_x		var 	word
+sum_y		var 	word    
+
+' -----[ Initialization ]-------------------------------------------
+'
+
+' -----[ Main Code ]------------------------------------------------
+
+'
+start:	sum_x = 0
+      	sum_y = 0
+      	For n = 1 to 8
+            	pulsin xpin,1,x	:sum_x = sum_x + x
+	      	pulsin ypin,1,y	:sum_y = sum_y + y
+      	next
+      	x =sum_x/8	
+	y =sum_y/8	
+
+	debug "x = ",dec5 x,TAB,TAB,"y = ",dec5 y,cr
+      	gosub disp_LCD
+		pause 100
+		goto start  
+    
+
+' -----[ Subroutines ]----------------------------------------------
+'
+init:		lcdcmd p,48
+		pause 5
+		lcdcmd p,48
+		pause 0
+		lcdcmd p,48
+		pause 0
+	
+		lcdcmd p,32
+		pause 0
+		lcdcmd p,44
+		pause 0
+		lcdcmd p,8
+		lcdcmd p,12	
+		lcdcmd p,6
+       	return	
+
+disp_LCD:	gosub init
+
+		lcdout p,1,  [" X-pos = ",dec5 x]
+		lcdout p,192,[" Y-pos = ",dec5 y]  
+		             'DB7=H,DDRAMadr=$40 für Pos. d. 2. Zeile 
+		return
+

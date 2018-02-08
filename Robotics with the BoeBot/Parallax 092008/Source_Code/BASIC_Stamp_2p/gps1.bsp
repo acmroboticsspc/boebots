@@ -1,0 +1,110 @@
+' -----[ Title ]------------------------------------------------------
+'
+' File...... gps1.bsp
+' Purpose... Reading of GPS information 
+' Author.... Claus Kuehnel  
+' Started... 2001-09-15 
+' Updated... 
+
+' -----[ Program Description ]----------------------------------------
+'
+' The program reads the VTG sentence from NMEA protocoll sent by a GPS
+' receiver each second. An LED signalizes a speed over four different
+' speed limits.
+'
+' -----[ Revision History ]-------------------------------------------
+'
+
+' -----[ Directives ]-------------------------------------------------
+'
+'{$STAMP BS2p} 			'specifies a BS2p
+
+' -----[ Constants ]--------------------------------------------------
+'
+B4800 	con 500		'4800 Baud for NMEA default
+N2400 	con 17405		'Baudmode-2400 bps inverted
+
+RxD		con 16		'Serial Data from GPS
+LCDpin	con 0      		'Serial Data to LCD
+
+SpeedLimit1 con 50		'Speedlimits
+SpeedLimit2 con 80
+SpeedLimit3 con 100
+SpeedLimit4 con 120
+
+LED1		con 8			'Speed LEDs
+LED2		con 9
+LED3 		con 10
+LED4		con 11
+
+offset 	con 24
+
+I 		con 254 		'Instruction prefix value
+
+
+' LCD control characters
+'
+ClrLCD	con $01		' clear the LCD
+Line1		con $80		' addr line #1 ¦ 80H
+     
+' -----[ Variables ]--------------------------------------------------
+'
+speed		var word
+value 	var word 
+idx		var byte
+temp		var byte(3)
+   
+
+' -----[ Initialization ]---------------------------------------------
+'
+' Initialize the Serial LCD (HD44780 controller & Serial Backpack)
+'
+LCDini: 
+	low LCDpin					'Make the serial output low
+	pause 1000					'Let the LCD wake-up
+	serout LCDpin,n2400,[I,ClrLCD] 	'Clear the LCD screen
+
+
+' -----[ Main Code ]--------------------------------------------------
+'
+loop:	'Read the VTG sentence from GPS
+	'$GPVTG,315.0,T,315.0,M,040.0,N,074.1,K*48
+	'puts serin data in scratchpad RAM
+	serin RxD, B4800, [wait("GPVTG,"), spstr 35]
+
+	'put offset, 4 : put offset+1, 5 : put offset+2, 6 'for test
+
+	for idx = 0 to 2
+		get idx+offset, temp(idx)
+	next
+ 	speed = (temp(0)-48)*100
+	speed = (temp(1)-48)*10 + speed
+	speed = (temp(2)-48) + speed
+
+	serout LCDpin,n2400,[I,Line1]
+	serout LCDpin,n2400,["Speed = ", dec3 speed, " km/h"]
+ 	
+	value = 999
+	lookdown speed, > [SpeedLimit4, SpeedLimit3, SpeedLimit2, SpeedLimit1], value
+	branch value, [_SL4, _SL3, _SL2, _SL1] 
+	goto loop
+
+' -----[ Subroutines ]------------------------------------------------
+'
+_SL1:	outc = $F		'LEDs off
+	low LED1		'LED1 on
+	goto loop
+
+_SL2:	outc = $F		'LEDs off
+	low LED2		'LED2 on
+	goto loop
+
+_SL3:	outc = $F		'LEDs off
+	low LED3		'LED3 on
+	goto loop
+
+_SL4:	outc = $F		'LEDs off
+	low LED4		'LED4 on
+	goto loop
+
+' -----[ Data ]-------------------------------------------------------

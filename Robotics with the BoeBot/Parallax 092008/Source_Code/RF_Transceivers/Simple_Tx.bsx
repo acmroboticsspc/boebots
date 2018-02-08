@@ -1,0 +1,38 @@
+'{$STAMP BS2SX}
+'*********************************************************************************************************
+'* Program:  Simple_Tx.BSX         Author:   Jeff A. Martin, Parallax, Inc.                              *
+'* Date:     1/28/00               Revision: 1.0                                                         *
+'*                                                                                                       *
+'* Description:                                                                                          *
+'* This BS2SX-IC code demonstrates simple transmitting with the Parallax RF Transceivers.                *
+'*                                                                                                       *
+'* This code must be run on a BASIC Stamp 2sx, interfaced to an RF Transceiver Part#27988 or an          *
+'* RF Transmitter Part#27986.  This code is meant to interface with a second Stamp 2sx running           *
+'* Simple_Rx.BSX.                                                                                        *
+'*                                                                                                       *
+'* Wiring:  Refer to the "Set Up Constants" section below for pin wiring indications.  Make sure to      *
+'* connect the transceiver's MODE pin to +5 volts (Vdd) to place the transceiver into serial mode.       * 
+'*********************************************************************************************************
+
+'---Set up Variables---
+Value 	VAR BYTE							'Holds data value being transmitted
+
+'---Set up Constants---
+Tx	 	CON 15							'Transmit I/O pin number
+TxFlow	CON 14							'Transmit flow control I/O pin number
+N9600		CON $40F0							'Baud mode value for 9600 baud, 8,N,1
+
+Initialize:
+  LOW Tx									'Initialize transmitter interface
+
+'---------------------------------------- Main Routine -------------------------------------------
+
+'Transmit data
+SenderMain:
+  FOR Value = 0 TO 255							'Transmit numbers from 0 to 255
+    DEBUG "Transmitting: ",DEC3 Value,CR
+    SEROUT Tx\TxFlow,N9600,[Value]
+    PAUSE 100
+  NEXT
+  PAUSE 1000								'Pause for 1 second
+GOTO SenderMain								'Then start over again	

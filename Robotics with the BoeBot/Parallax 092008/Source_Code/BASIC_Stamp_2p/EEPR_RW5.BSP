@@ -1,0 +1,106 @@
+' -----[ Title ]------------------------------------------------------
+'
+' File EEPR_rw1.BSP                                 
+' Purpose...Sample for I2IN /I2OUT: clone external EEPROM via bank 5
+'		
+' Author....Klaus Zahnert  
+' Started...1.7.01  
+' Updated... 
+
+' -----[ Program Description ]----------------------------------------
+'
+' external switched pin 2 runs two separate parts of program.
+' with pin 2 = high a plugged programmed EEPROM gives his contents 
+'                   to bank 5 as an mirror. 
+' with pin 2 = low  a plugged EEPROM is deleted and then the contents
+'                   of bank 5 is transmitted (re-mirrored) to this 
+'                   EEPROM. 
+' All transmitted bytes are verified from source to destination
+' and displayed on screen                     
+
+' -----[ Revision History ]-------------------------------------------
+'
+' 
+
+' -----[ Constants ]--------------------------------------------------
+'
+datapin	con 	0	'high byte adressing I2C
+wr_adr	con	$A0  	'adress of EEPROM write
+rd_adr  con	$A1   	'adress of EEPROM read
+
+' -----[ Variables ]--------------------------------------------------
+'
+n		var	word
+rdbyt		var	byte
+backbyt	var 	byte
+
+' -----[ Initialization ]---------------------------------------------
+'
+dir2	= 0   		'pin  for input
+
+' -----[ Main Code ]--------------------------------------------------
+'
+'{$stamp bs2p}
+
+debug cls
+							
+ 	     if IN2 = 0 then wrEEPR          'IN2=1:read external EEPROM
+						       'IN2=0:del./write ext.EEPR.  
+						    
+
+rdEEPR:	debug cr                       'from MASTER-EEPROM to Bank5
+		debug"read EEPROM",cr,cr	
+            pause 1000
+		For n=0 to 2047
+			i2cin datapin,rd_adr,n,[rdbyt] 'read ext. EEPROM-cell 
+                  store 5: write n,rdbyt         'write to bank-cell
+                  store 5: read  n,backbyt       'read back for verify
+                  if rdbyt <> backbyt then err_str     
+			debug dec4 n,tab,hex rdbyt,tab,"read ok",cr
+               	next
+		goto finis
+
+
+wrEEPR:    	debug cr                       'del. EEPROM with filled $FF 
+		debug"delete EEPROM",cr,cr	
+            pause 1000
+ 		For n=0 to 2047                 
+                  i2cout datapin,wr_adr,n,[$FF] 'kill this line for 
+ 								'test of EEPROM empty
+                  pause 10
+                  i2cin datapin,rd_adr,n,[backbyt]
+                  if backbyt<>$FF then err_str
+                  debug dec4 n,tab,"delete",cr
+               	next
+            END '========================>this statement for delete only
+	
+	      debug cr  				'write EEPROM from bank5 cells                     
+		debug"write EEPROM",cr,cr	
+            pause 500
+            
+
+		For n=0 to 2047                 'from Bank5 to new EEPROM
+          		store 5: read n,rdbyt
+          	      i2cout datapin,wr_adr,n,[rdbyt]
+		      pause 10
+                  i2cin datapin,rd_adr,n,[backbyt]
+                  if rdbyt<>backbyt then err_str
+ 	            debug dec4 n,tab,hex rdbyt,tab,"write ok",cr
+            next
+            goto finis
+
+err_str:    debug "             E R R O R on  cell-adress  =  ",dec n,cr
+	      goto finis
+
+
+
+finis:	debug cr
+		debug "end of program ",cr
+		end
+
+
+' -----[ Subroutines ]------------------------------------------------
+'
+' no 
+
+

@@ -1,0 +1,308 @@
+' =========================================================================
+'
+'   File...... Emic_TTS.BS2
+'   Purpose... Demonstrates Features of the Emic TTS Platform
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallax.com
+'   Started... 09 SEP 2003
+'   Updated... 21 FEB 2004
+'
+'   {$STAMP BS2p}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates the TTS capabilities of the GIS Emic TTS
+' module (Parallax version).  Before running this demo make sure that the
+' both Emic DIP switches are set to OFF (Hex mode of Emic TTS).
+'
+' Adding Abbreviations CAUTION:
+'
+' If you use the AddAbbr command, do so only once.  By writing the same
+' abbreviation over and over you are simply consuming flash space on the
+' WTS701 -- flash that cannot be recovered without device reprogramming.
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+TX              PIN     0                       ' connects to Emic SIn
+RX              PIN     1                       ' connects to Emic SOut
+Busy            PIN     2                       ' 1 = busy
+Rst             PIN     3                       ' low to reset Emic TTS
+AOut            PIN     7                       ' audio out from Stamp
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+#SELECT $STAMP
+  #CASE BS2, BS2E
+    T2400       CON     396
+    TmAdj       CON     $100                    ' x 1.0 (note time adjust)
+    FrAdj       CON     $100                    ' x 1.0 (note freq adjust)
+
+  #CASE BS2SX
+    T2400       CON     1021
+    TmAdj       CON     $280                    ' x 2.5
+    FrAdj       CON     $066                    ' x 0.4
+
+  #CASE BS2P
+    T2400       CON     1021
+    TmAdj       CON     $3C5                    ' x 3.77
+    FrAdj       CON     $044                    ' x 0.265
+
+  #CASE BS2PE
+    T2400       CON     396
+    TmAdj       CON     $100                    ' x 1.0
+    FrAdj       CON     $0AA                    ' x 0.665
+#ENDSELECT
+
+Baud            CON     T2400
+Yes             CON     1
+No              CON     0
+
+' Emic Commands (Hex Mode)
+
+Say             CON     $00                     ' say Engish text
+Volume          CON     $01                     ' set volume, 0 - 7
+Speed           CON     $02                     ' set speed, 0 - 4
+Pitch           CON     $03                     ' set pitch, 0 - 6
+AddAbbr         CON     $04                     ' add abbreviation
+DelAbbr         CON     $05                     ' delete abbreviation
+ListAbbr        CON     $06                     ' list abbreviations
+Version         CON     $07                     ' get version
+Reset           CON     $08                     ' soft reset
+Audio           CON     $09                     ' enable audio in
+PhT             CON     $10                     ' start of phonetic text
+Help            CON     $FE                     ' display help
+EOM             CON     $AA                     ' end of message
+
+OK              CON     $55                     ' "okay" for hex mode
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+cmd             VAR     Byte                    ' menu command
+response        VAR     cmd                     ' user response
+
+vol             VAR     Nib                     ' current volume
+spd             VAR     Nib                     ' current speed
+ptch            VAR     Nib                     ' current pitch
+
+eePntr          VAR     Word                    ' EEPROM pointer
+char            VAR     Byte                    ' character from EE
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+Demo1           DATA    Say, "Nuts & Volts rocks!", EOM
+Demo2           DATA    Say, "The time is 12:45", EOM
+UseAbbr         DATA    Say, "Your current speed is 65 MPH", EOM
+Dial            DATA    Say, "Dialing", EOM
+Phone           DATA    Say, "1-916-624-8333", EOM
+Nihongo         DATA    Say, PhT, "konniCiwa ", EOM
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Setup:
+  GOSUB Hard_Reset                              ' restore defaults
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DEBUG CLS,                                    ' display options menu
+        "Emic TTS Demo Menu", CR,
+        "------------------", CR,
+        "[V] Set Volume (", DEC1 vol, ")", CR,
+        "[S] Set Speed (", DEC1 spd, ")", CR,
+        "[P] Set Pitch (", DEC1 ptch, ")", CR,
+        CR,
+        "[1] Demo 1", CR,
+        "[2] Demo 2", CR,
+        "[3] Sound Effects (uses Ain)", CR,
+        CR,
+        "[A] Use Abbreviation", CR,
+        "[J] Japanese (phonetic demo)", CR,
+        CR,
+        ">> "
+
+  DEBUGIN cmd                                   ' get command
+  LOOKDOWN cmd, ["vVsSpP112233aAjJ"], cmd       ' convert to number
+  cmd = cmd / 2                                 ' allow for upper/lower
+  IF (cmd > 7) THEN Main                        ' validate command
+
+  BRANCH cmd, [Set_Volume, Set_Speed, Set_Pitch,
+               Play_Msg, Play_Msg, Play_SFX,
+               Play_Msg, Ph_Demo]
+  GOTO Main
+
+
+' Process Menu command
+
+Set_Volume:
+  DEBUG CLS, "Enter Volume (0 - 7): "           ' prompt user
+  DEBUGIN DEC1 response                         ' get single-digit input
+  vol = response MAX 7                          ' validate
+  SEROUT TX, Baud, [Volume, DEC1 vol, EOM]      ' send to Emic
+  GOSUB Wait_OK
+  GOTO Main
+
+
+Set_Speed:
+  DEBUG CLS, "Enter Speed (0 - 4): "
+  DEBUGIN DEC1 response
+  spd = response MAX 4
+  SEROUT TX, Baud, [Speed, DEC1 spd, EOM]
+  GOSUB Wait_OK
+  GOTO Main
+
+
+Set_Pitch:
+  DEBUG CLS, "Enter Pitch (0 - 6): "
+  DEBUGIN DEC1 response
+  ptch = response MAX 6
+  SEROUT TX, Baud, [Pitch, DEC1 ptch, EOM]
+  GOSUB Wait_OK
+  GOTO Main
+
+
+Play_Msg:
+  DEBUG CLS, "Playing: "
+  LOOKUP (cmd - 3), [Demo1, Demo2, UseAbbr, UseAbbr], eePntr
+  GOSUB Print_String
+  LOOKUP (cmd - 3), [Demo1, Demo2, UseAbbr, UseAbbr], eePntr
+  GOSUB Say_String
+  GOSUB Check_Busy
+  PAUSE 500
+  GOTO Main
+
+
+Play_SFX:
+  DEBUG CLS, "Speech and Sound Effects"
+  eePntr = Dial                                 ' say "Dialing..."
+  GOSUB Say_String
+  GOSUB Check_Busy
+  eePntr = Phone                                ' say phone number
+  GOSUB Say_String
+  GOSUB Check_Busy
+  SEROUT TX, Baud, [Audio, EOM]                 ' enable Emic Ain
+  eePntr = Phone
+  GOSUB Dial_Phone                              ' play DTMF phone number
+  PAUSE 1000
+  ' ring tone
+  FREQOUT AOut, 2000 */ TmAdj, 440 */ FrAdj, 480 */ FrAdj
+  INPUT AOut                                    ' release
+  SEROUT TX, Baud, [EOM]
+  GOSUB Check_Busy
+  PAUSE 500
+  GOTO Main
+
+
+Ph_Demo:
+  DEBUG CLS, "'Hello' in Japanese"
+  eePntr = Nihongo                              ' point to phonetic entry
+  GOSUB Say_String
+  GOSUB Check_Busy
+  PAUSE 500
+  GOTO Main
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' Reset Emic through serial connection
+
+Soft_Reset:
+  GOSUB Check_Busy                              ' wait for busy to release
+  SEROUT TX, Baud, [Reset, EOM]                 ' send soft reset
+  GOSUB Wait_OK
+  vol = 4                                       ' set pgm vars to defaults
+  spd = 2
+  ptch = 1
+  RETURN
+
+
+' Check status of Emic TTS module
+' -- wait until Busy line released by Emic
+' -- code as written does not timeout
+
+Check_Busy:
+  PAUSE 1                                       ' allow busy to activate
+  DO WHILE (Busy = Yes) : LOOP                  ' wait until not busy
+  RETURN
+
+
+' Wait for okay message
+' -- will timeout after 1 second
+
+Wait_OK:
+  SERIN  RX, Baud, 1000, TO_Error, [WAIT(OK)]
+  RETURN
+
+
+' Hard reset
+' -- good when comm link is lost
+
+Hard_Reset:                                     ' reset to default values
+  LOW Rst                                       ' pull reset line low
+  PAUSE 0                                       ' ~100 uS pause
+  INPUT Rst                                     ' let reset float
+  GOSUB Wait_OK
+  vol = 4                                       ' set pgm vars to defaults
+  spd = 2
+  ptch = 1
+  RETURN
+
+
+' Send text string to Emic
+' -- put first char of EE string in eePntr
+
+Say_String:
+  DO
+    READ eePntr, char                           ' get char from EEPROM
+    SEROUT TX, Baud, [char]                     ' send it to Emic
+    eePntr = eePntr + 1                         ' point to next
+  LOOP UNTIL (char = EOM)                       ' stop when EOM found
+  RETURN
+
+
+' Print text string in DEBUG window
+' -- put first char of EE string in eePntr
+
+Print_String:
+  DO
+    READ eePntr, char                           ' get char from EEPROM
+    IF (char >= 32) AND (char < 127) THEN       ' print only ASCII chars
+      DEBUG char
+    ENDIF
+    eePntr = eePntr + 1                         ' point to next
+  LOOP UNTIL (char = EOM)                       ' stop when EOM found
+  RETURN
+
+
+' Process time-out error
+
+TO_Error:
+  DEBUG CLS, "No response from Emic TTS."       ' ruh-roh, Shaggy
+  END
+
+
+' Dials phone string that is saved in DATA statement
+
+Dial_Phone:
+  DO
+    READ eePntr, char                           ' get char from EEPROM
+    IF (char >= "0") AND (char <= "9") THEN     ' valid digit
+      DTMFOUT AOut, 200 */ TmAdj, 50, [char - "0"]
+    ENDIF
+    eePntr = eePntr + 1                         ' point to next
+  LOOP UNTIL (char = EOM)                       ' stop when EOM found
+  RETURN

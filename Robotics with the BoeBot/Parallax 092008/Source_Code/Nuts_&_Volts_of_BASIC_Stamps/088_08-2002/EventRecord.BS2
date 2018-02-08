@@ -1,0 +1,472 @@
+' ==============================================================================
+'
+'   File...... EventRecord.BS2
+'   Purpose... Simple Event Recorder
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallaxinc.com
+'   Started... 26 JUN 2002
+'   Updated... 28 JUN 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' This program scans the upper eight inputs for changes and, when detected,
+' records the new inputs with the day [offset] and time to an EEPROM
+'
+' Event Record Structure:
+'  0 : days offset from start date
+'  1 : hours
+'  2 : minutes
+'  3 : seconds
+'  4 : input scan
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+
+SDA             CON     0                       ' I2C serial data line
+SCL             CON     1                       ' I2C serial clock line
+IntPin          VAR     In2                     ' interrupt input pin from RTC
+NewInputs       VAR     InH                     ' inputs on pins 8 - 15
+TermIO          CON     16                      ' Terminal IO
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+PCF8583         CON     %10100000               ' device code for RTC
+EE24LC256       CON     %10100010               ' device code for EEPROM
+
+ACK             CON     0                       ' acknowledge bit
+NAK             CON     1                       ' no ack bit
+
+RecSize         CON     5                       ' five bytes per event record
+MemSize         CON     32768                   ' assuming 1 24LC256
+MaxRecs         CON     MemSize / RecSize
+
+ByteSize        CON     0                       ' byte-sized address (RTC)
+WordSize        CON     1                       ' word-sized address (EEPROM)
+
+Yes             CON     0
+No              CON     1
+
+TermBaud        CON     84                      ' 9600-8-N-1 (matches DEBUG)
+CrsrXY          CON     2                       ' DEBUG Position Control
+ClrRt           CON     11                      ' clear line to right
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+device          VAR     Byte                    ' device to write/read
+devAddr         VAR     Word                    ' address in device
+addrSize        VAR     Bit                     ' (bytes in address) - 1
+i2cReg          VAR     Byte                    ' register address
+i2cData         VAR     Byte                    ' data to/from device
+i2cWork         VAR     Byte                    ' work byte for TX routine
+i2cAck          VAR     Bit                     ' ACK bit from device
+
+records         VAR     Word                    ' events stored
+recNum          VAR     Word                    ' counter for view display
+oldInputs       VAR     Byte                    ' last event input data
+
+' do not change order of next five variables
+' -- program uses implicit array structure of user memory
+
+daysOfs         VAR     Byte                    ' offset from start date
+hours           VAR     Byte                    ' time of event
+mins            VAR     Byte
+secs            VAR     Byte
+scan            VAR     Byte                    ' event data
+
+month           VAR     recNum.LowByte          ' start date
+day             VAR     recNum.HighByte
+year            VAR     Word
+
+response        VAR     Word                    ' user response
+idx             VAR     Nib
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+NumRecs         DATA    Word 0                  ' stored records
+StartMonth      DATA    6                       ' start date of recording
+StartDay        DATA    28
+StartYear       DATA    Word 2002
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Init:
+  READ NumRecs, records.LowByte                 ' retrieve record count
+  READ (NumREcs + 1), records.HighByte
+
+  READ StartMonth, month                        ' retrieve start date
+  READ StartDay, day
+  READ StartYear, year.LowByte
+  READ (StartYear + 1), year.HighByte
+
+  PAUSE 250                                     ' let DEBUG window open
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  DEBUG CLS                                     ' display menu
+  DEBUG "============================", CR
+  DEBUG " BASIC Stamp Event Recorder ", CR
+  DEBUG "============================", CR
+
+  DEBUG CrsrXY, 0, 6
+
+  DEBUG "[T] Set Current Time", CR
+  DEBUG "[D] Set Start Date", CR
+  DEBUG "[R] Start Recording", CR
+  DEBUG "[V] View (", DEC records, ") Records", CR
+  DEBUG "[C] Clear Records", CR
+
+  DEBUG CrsrXY, 0, 12, "--> ", ClrRt
+
+Show_Time_Date:                                 ' show current time & date
+  GOSUB Get_Clock
+  DEBUG CrsrXY, 4, 4
+  GOSUB Display_Time
+  DEBUG "  "
+  GOSUB Display_Date
+
+Get_User_Input:                                 ' wait for response
+  DEBUG CrsrXY, 4, 12
+  SERIN TermIO, TermBaud, 900, Show_Time_Date, [response]
+  LOOKDOWN response, ["tTdDrRvVcC"], response
+  response = response / 2
+  BRANCH response, [Set_Time, Set_Date, Go_Record, View_Recs, Clear_Recs]
+  GOTO Main
+
+
+' ------------------------------------------------------------------------------
+' Menu Routines
+' ------------------------------------------------------------------------------
+
+' --- Time ---
+
+Set_Time:
+  DEBUG CLS, "Set Current Time"
+
+Enter_Hours:
+  DEBUG CrsrXY, 0, 2, "Enter Hours (0..23)..... ", ClrRt
+  SERIN TermIO, TermBaud, [DEC2 hours]
+  IF (hours > 23) THEN Enter_Hours
+
+Enter_Minutes:
+  DEBUG CrsrXY, 0, 3, "Enter Minutes (0..59)... ", ClrRt
+  SERIN TermIO, TermBaud, [DEC2 mins]
+  IF (mins > 59) THEN Enter_Minutes
+
+Enter_Seconds:
+  DEBUG CrsrXY, 0, 4, "Enter Seconds (0..59)... ", ClrRt
+  SERIN TermIO, TermBaud, [DEC2 secs]
+  IF (secs > 59) THEN Enter_Seconds
+
+  GOSUB Put_Clock                               ' send new time to PCF8583
+  GOTO Main
+
+
+' --- Date ---
+
+Set_Date:
+  DEBUG CLS, "Set Start Date"
+
+Enter_Month:
+  DEBUG CrsrXY, 0, 2, "Enter Month (1..12)... ", ClrRt
+  SERIN TermIO, TermBaud, [DEC2 month]
+  IF (month < 1) OR (month > 12) THEN Enter_Month
+
+Enter_Day:
+  DEBUG CrsrXY, 0, 3, "Enter Day (1..31)..... ", ClrRt
+  SERIN TermIO, TermBaud, [DEC2 day]
+  IF (day < 1) OR (day > 31) THEN Enter_Day
+
+Enter_Year:
+  DEBUG CrsrXY, 0, 4, "Enter Year (2002+).... ", ClrRt
+  SERIN TermIO, TermBaud, [DEC4 year]
+  IF (year < 2002) THEN Enter_Year
+
+  WRITE StartMonth, month                       ' save start date in EEPROM
+  WRITE StartDay, day
+  WRITE StartYear, year.LowByte
+  WRITE (StartYear + 1), year.HighByte
+  GOTO Main
+
+
+' --- Record ---
+
+Go_Record:
+  DEBUG CLS, "Recording... ", CR, CR
+
+  daysOfs = 0                                   ' start today
+  oldInputs = ~NewInputs                        ' force record on start
+
+Wait_For_Int:
+  IF (IntPin = No) THEN Wait_For_Int            ' wait for new second
+  GOSUB Get_Clock                               ' get current time
+  IF (hours <> 0) OR (secs <> 0) THEN Check_Inputs
+  daysOfs = daysOfs + 1                         ' increment day counter
+  IF (daysOfs = 0) THEN Stop_Recording          ' if > 255 stop
+
+Check_Inputs:
+  scan = %11111111
+  FOR idx = 1 TO 5                              ' debounce inputs
+    scan = scan & NewInputs
+    PAUSE 5
+  NEXT
+
+  IF (scan = oldInputs) THEN Wait_For_No_Int    ' if same, skip
+  oldInputs = scan                              ' save current scan
+  GOSUB Put_Record                              ' save record in 24LC256
+
+  DEBUG DEC3 daysOfs, " "                       ' display record
+  GOSUB Display_Time
+  DEBUG " -> ", BIN8 scan, CR
+
+Wait_For_No_Int:
+  IF (IntPin = Yes) THEN Wait_For_No_Int        ' wait for high on int pin
+  GOTO Wait_For_Int
+
+
+' --- View ---
+
+View_Recs:
+  IF (records = 0) THEN Main                    ' oops...
+  DEBUG CLS
+  DEBUG "Records", CR                           ' print header
+  DEBUG "Start Date: "
+  GOSUB Display_Date
+  DEBUG CR, CR
+
+  DEBUG "Day  Time      Inputs  ", CR
+  DEBUG "---  --------  --------", CR
+
+  FOR recNum = 0 TO (records - 1)               ' print records
+    GOSUB Get_Record
+    DEBUG DEC3 daysOfs, "  "
+    GOSUB Display_Time
+    DEBUG "  ", BIN8 scan, CR
+  NEXT
+
+  DEBUG CR, "Press a key..."                    ' user escape
+  SERIN TermIO, TermBaud, [response]
+  GOTO Main
+
+
+' --- Clear ---
+
+Clear_Recs:
+  records = 0                                   ' clear variable
+  WRITE NumRecs, 0                              ' clear EEPROM
+  WRITE (NumRecs + 1), 0
+  GOTO Main
+
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+Display_Time:
+  DEBUG DEC2 hours, ":", DEC2 mins, ":", DEC2 secs
+  RETURN
+
+
+Display_Date:
+  DEBUG DEC2 month, "/", DEC2 day, "/", DEC4 year
+  RETURN
+
+
+Put_Record:
+  records = records + 1                         ' update record count
+  IF (records > MaxRecs) THEN Stop_Recording    ' check limit
+  WRITE NumRecs, records.LowByte                ' store count in local EEPROM
+  WRITE (NumRecs + 1), records.HighByte
+
+  device = EE24LC256                            ' setup for Write_Byte
+  addrSize = WordSize
+
+  FOR idx = 0 TO (RecSize - 1)
+    i2cData = daysOfs(idx)                      ' byte to store
+    devAddr = ((records - 1) * RecSize) + idx   ' caculate address in EE
+    GOSUB Write_Byte                            ' write it
+  NEXT
+  RETURN
+
+
+Get_Record:
+  device = EE24LC256                            ' setup for Read_Byte
+  addrSize = WordSize
+
+  FOR idx = 0 TO (RecSize - 1)
+    devAddr = (recNum * RecSize) + idx          ' calculate address in EE
+    GOSUB Read_Byte                             ' go get it
+    daysOfs(idx) = i2cData                      ' place in user variable
+  NEXT
+  RETURN
+
+
+Stop_Recording:
+  END
+
+
+' ------------------------------------------------------------------------------
+' High Level I2C Subroutines
+' ------------------------------------------------------------------------------
+
+' Byte to be written is passed in i2cData
+' -- address passed in devAddr
+
+Write_Byte:
+  GOSUB I2C_Start                               ' send Start
+  i2cWork = (device & %11111110)                ' send write command
+  GOSUB I2C_TX_Byte
+  IF (i2cAck = NAK) THEN Write_Byte             ' wait until [ee] not busy
+  IF (addrSize = ByteSize) THEN Wr_Low_Addr
+  i2cWork = devAddr / 256                       ' send address high byte
+  GOSUB I2C_TX_Byte
+
+Wr_Low_Addr:
+  i2cWork = devAddr // 256                      ' send address low byte
+  GOSUB I2C_TX_Byte
+  i2cWork = i2cData                             ' send data
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_Stop
+  RETURN
+
+
+' Byte read is returned in i2cData
+' -- address passed in devAddr
+
+Read_Byte:
+  GOSUB I2C_Start                               ' send Start
+  i2cWork = (device & %11111110)                ' send write command
+  GOSUB I2C_TX_Byte
+  IF (i2cAck = NAK) THEN Read_Byte              ' wait until [ee] not busy
+  IF (addrSize = ByteSize) THEN Rd_Low_Addr
+  i2cWork = devAddr / 256                       ' send address high byte
+  GOSUB I2C_TX_Byte
+
+Rd_Low_Addr:
+  i2cWork = devAddr // 256                      ' send address low byte
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_Start
+  i2cWork = (device | 1)                        ' send read command
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_RX_Byte_Nak
+  GOSUB I2C_Stop
+  i2cData = i2cWork
+  RETURN
+
+
+' Write seconds, minutes and hours .. sequntial mode
+' -- variables are converted to BCD before sending to PCF8583
+
+Put_Clock:
+  GOSUB I2C_Start
+  i2cWork = PCF8583                             ' send device address
+  GOSUB I2C_TX_Byte
+  i2cWork = 2                                   ' start with seconds reg
+  GOSUB I2C_TX_Byte
+  i2cWork = ((secs / 10) << 4) | (secs // 10)
+  GOSUB I2C_TX_Byte
+  i2cWork = ((mins / 10) << 4) | (mins // 10)
+  GOSUB I2C_TX_Byte
+  i2cWork = ((hours / 10) << 4) | (hours // 10)
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_Stop
+  RETURN
+
+
+' Read seconds, minutes and hours .. sequntial mode
+' -- variables are converted from BCD storage format
+
+Get_Clock:
+  GOSUB I2C_Start
+  i2cWork = PCF8583                             ' send device address
+  GOSUB I2C_TX_Byte
+  i2cWork = 2                                   ' send seconds reg #
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_Start                               ' restart
+  i2cWork = (PCF8583 | 1)                       ' send read command
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_RX_Byte                             ' read back seconds
+  secs = i2cWork.HighNib * 10 + i2cWork.LowNib
+  GOSUB I2C_RX_Byte
+  mins = i2cWork.HighNib * 10 + i2cWork.LowNib
+  GOSUB I2C_RX_Byte_Nak                         ' final byte - send NAK
+  hours = i2cWork.HighNib * 10 + i2cWork.LowNib
+  GOSUB I2C_Stop
+  RETURN
+
+
+' ------------------------------------------------------------------------------
+' Low Level I2C Subroutines
+' ------------------------------------------------------------------------------
+
+' --- Start ---
+
+I2C_Start:                                      ' I2C start bit sequence
+  INPUT SDA
+  INPUT SCL
+  LOW SDA                                       ' SDA -> low while SCL high
+
+Clock_Hold:
+  IF (Ins.LowBit(SCL) = 0) THEN Clock_Hold      ' device ready?
+  RETURN
+
+
+' --- Transmit ---
+
+I2C_TX_Byte:
+  SHIFTOUT SDA,SCL,MSBFIRST,[i2cWork\8]         ' send byte to device
+  SHIFTIN SDA,SCL,MSBPRE,[i2cAck\1]             ' get acknowledge bit
+  RETURN
+
+
+' --- Receive ---
+
+I2C_RX_Byte_Nak:
+  i2cAck = NAK                                  ' no ACK = high
+  GOTO I2C_RX
+
+I2C_RX_Byte:
+  i2cAck = ACK                                  ' ACK = low
+
+I2C_RX:
+  SHIFTIN SDA,SCL,MSBPRE,[i2cWork\8]            ' get byte from device
+  SHIFTOUT SDA,SCL,LSBFIRST,[i2cAck\1]          ' send ack or nak
+  RETURN
+
+
+' --- Stop ---
+
+I2C_Stop:                                       ' I2C stop bit sequence
+  LOW SDA
+  INPUT SCL
+  INPUT SDA                                     ' SDA --> high while SCL high
+  RETURN

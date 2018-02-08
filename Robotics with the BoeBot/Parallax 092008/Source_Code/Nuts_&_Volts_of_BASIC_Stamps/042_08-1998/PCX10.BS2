@@ -1,0 +1,112 @@
+' Listing 42.2
+' Nuts & Volts: Stamp Applications, August 1998
+
+
+' ----[ Title ]-----------------------------------------------------------
+'
+' File...... PCX10.BS2
+' Purpose... PC-based X-10 Control via the Stamp II
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' WWW....... http://members.aol.com/jonwms
+' Started... 28 JUN 1998
+' Updated... 28 JUN 1998
+
+
+' ----[ Program Description ]---------------------------------------------
+'
+' This program X-10 commands from the pc using the StampNet communications
+' protocol. Actual X-10 control is via the XOUT command.
+'
+' Message structure:
+'
+'	$55		header
+'	addr		node address (must be 1 for X-10)
+'	msg		HighNib = "F" for X-10, HowNib = house code
+'	pcHigh		HighNib = unit code, LowNib = pc X-10 command
+'	pcLow		lamp level for dimmer modules
+
+
+' ----[ Revision History ]------------------------------------------------
+'
+' 28 JUN 98 : Rev 1
+
+
+' ----[ Constants ]-------------------------------------------------------
+'
+Baud96	CON	84			' serial baud rate (to PC)
+SIOPin	CON	16			' use programming port
+					'  - couple ATN with capacitor
+mPin	CON	0			' X-10 comm pin
+zPin	CON	1			' X-10 zero-cross pin
+
+
+' ----[ Variables ]-------------------------------------------------------
+'
+addr	VAR	Byte			' node address
+msg	VAR	Byte			' message
+cmd	VAR	msg.Nib1
+channel	VAR	msg.Nib0
+pcData	VAR	Word			' data from pc
+pcHigh	VAR	pcData.HighByte
+pcLow	VAR	pcData.LowByte
+sData	VAR	Word			' return data
+sDHigh	VAR	sData.HighByte
+sDLow	VAR	sData.LowByte
+
+' X-10 variable mapping
+hCode	VAR	msg.Nib0		' X-10 house code (0-15)
+uCode	VAR	pcHigh.HighNib		' X-10 unit code (0-15)
+x10	VAR	pcHigh.LowNib		' X-10 command (1 - 5)
+lmpLvl	VAR	pcLow			' lamp level (1-19)
+
+
+' ----[ EEPROM Data ]-----------------------------------------------------
+'
+
+
+' ----[ Initialization ]--------------------------------------------------
+'
+
+
+' ----[ Main Code ]-------------------------------------------------------
+'
+Main:	' wait for message from PC
+	SERIN SIOPin, Baud96, [WAIT ($55), addr, msg, pcHigh, pcLow]
+
+	' ignore bad address or non X-10
+	IF (addr <> 1) | (cmd <> $F) THEN Main
+
+	BRANCH x10,[Main, Unit1, Unit0, All1, All0, SetLvl]
+	' ignore if invalid x-10 command
+	' zero is not valid
+	GOTO Main
+	
+
+' ----[ Subroutines ]-----------------------------------------------------
+'
+
+' turn selected unit on
+Unit1:	XOUT mPin, zPin, [hCode\uCode\2,hCode\unitOn]
+	GOTO Rspnd
+
+' turn selected unit off
+Unit0:	XOUT mPin, zPin, [hCode\uCode\2,hCode\unitOff]
+	GOTO Rspnd
+
+' turn all lamps on
+All1:	XOUT mPin, zPin, [hCode\uCode\2,hCode\lightsOn]
+	GOTO Rspnd
+
+' turn all units off
+All0:	XOUT mPin, zPin, [hCode\uCode\2,hCode\unitsOff]
+	GOTO Rspnd
+
+' set light level
+SetLvl:	XOUT mPin, zPin, [hCode\uCode]
+	XOUT mPin, zPin, [hCode\unitOff\2,hCode\dim\lmpLvl]
+	GOTO Rspnd
+
+Rspnd:	' output to PC (x-10 signature)
+	SEROUT SIOPin, Baud96, ["5501F000", 13]
+	GOTO Main

@@ -1,0 +1,205 @@
+' =========================================================================
+'
+'   File...... SRF08_Addr_Set.BS2
+'   Purpose... Daventech SRF08 Ultrasonic Range Finder Address Change
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallax.com
+'   Started... 
+'   Updated... 20 MAY 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+
+' Use this program to set new address in SRF08.  To simplify the process,
+' this routine uses the broadcast address, so make sure that only one 
+' device is connected.
+'
+' Valid Addresses:
+'   $E0, $E2, $E4, $E6, $E8, $EA, $EC, $EE
+'   $F0, $F2, $F4, $F6, $F8, $FA, $FC, $FE
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+SDA             PIN     8                       ' I2C serial data line
+SCL             PIN     9                       ' I2C serial clock line
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+NewSRF08        CON     $E2                     ' new address for SRF08
+
+RegCmd          CON     0                       ' command register
+RegLight        CON     1                       ' light value
+RegRange        CON     2                       ' ranger reading
+
+Ack             CON     0                       ' acknowledge bit
+Nak             CON     1                       ' no ack bit
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+i2cSlave        VAR     Byte                    ' I2C device address
+i2cReg          VAR     Byte                    ' register address
+i2cData         VAR     Word                    ' data to/from device
+i2cWork         VAR     Byte                    ' work byte for I2C io
+i2cAck          VAR     Bit                     ' Ack bit from device
+
+idx             VAR     Nib                     ' loop counter
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DEBUG CLS
+  DEBUG "Changing SRF08 address to: ", IHEX2 NewSRF08, CR
+  DEBUG "Blinking LED confirms address change."
+
+  FOR idx = 0 TO 3                              ' send byte sequence
+    i2cSlave = $00
+    i2cReg = RegCmd
+    LOOKUP idx, [$A0, $AA, $A5, NewSRF08], i2cData
+    GOSUB Write_Byte
+  NEXT
+
+  DO                                            ' blink LED to confirm
+    i2cSlave = NewSRF08                         ' address
+    i2cReg = RegCmd                             ' command register
+    i2cData = $50                               ' range command
+    GOSUB Write_Byte                            ' send it
+    PAUSE 65
+  LOOP
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' --------------------------
+' High Level I2C Subroutines
+' --------------------------
+
+' Writes low byte of i2cData to i2cReg
+
+Write_Byte:
+  GOSUB I2C_Start
+  i2cWork = i2cSlave
+  GOSUB I2C_TX_Byte                             ' send device address
+  i2cWork = i2cReg
+  GOSUB I2C_TX_Byte                             ' send register number
+  i2cWork = i2cData.LowByte
+  GOSUB I2C_TX_Byte                             ' send the data
+  GOSUB I2C_Stop
+  RETURN
+
+
+' Writes i2cData to i2cReg
+
+Write_Word:
+  GOSUB I2C_Start
+  i2cWork = i2cSlave
+  GOSUB I2C_TX_Byte                             ' send device address
+  i2cWork = i2cReg
+  GOSUB I2C_TX_Byte                             ' send register number
+  i2cWork = i2cData.HighByte
+  GOSUB I2C_TX_Byte                             ' send the data - high byte
+  i2cWork = i2cData.LowByte
+  GOSUB I2C_TX_Byte                             ' send the data - low byte
+  GOSUB I2C_Stop
+  RETURN
+
+
+' Read i2cData (8 bits) from i2cReg
+
+Read_Byte:
+  GOSUB I2C_Start
+  i2cWork = i2cSlave
+  GOSUB I2C_TX_Byte                             ' send device address
+  i2cWork = i2cReg
+  GOSUB I2C_TX_Byte                             ' send register number
+  GOSUB I2C_Start                               ' start (sets register)
+  i2cWork = (i2cSlave | 1)
+  GOSUB I2C_TX_Byte                             ' send read command
+  GOSUB I2C_RX_Byte_Nak
+  GOSUB I2C_Stop
+  i2cData = i2cWork                             ' return the data
+  RETURN
+
+
+' Read i2cData (16 bits) from i2cReg
+
+Read_Word:
+  GOSUB I2C_Start
+  i2cWork = i2cSlave
+  GOSUB I2C_TX_Byte                             ' send device address
+  i2cWork = i2cReg
+  GOSUB I2C_TX_Byte                             ' send register number
+  GOSUB I2C_Start                               ' start (sets register)
+  i2cWork = (i2cSlave | 1)
+  GOSUB I2C_TX_Byte                             ' send read command
+  GOSUB I2C_RX_Byte
+  i2cData.HighByte = i2cWork                    ' read high byte of data
+  GOSUB I2C_RX_Byte_Nak
+  GOSUB I2C_Stop
+  i2cData.LowByte = i2cWork                     ' read low byte of data
+  RETURN
+
+
+' -------------------------
+' Low Level I2C Subroutines
+' -------------------------
+
+' --- Start ---
+
+I2C_Start:                                      ' I2C start bit sequence
+  INPUT SDA
+  INPUT SCL
+  LOW SDA                                       ' SDA -> low while SCL high
+
+Clock_Hold:
+  DO : LOOP WHILE (SCL = 0)                     ' wait for device ready
+  RETURN
+
+
+' --- Transmit ---
+
+I2C_TX_Byte:
+  SHIFTOUT SDA, SCL, MSBFIRST, [i2cWork\8]      ' send byte to device
+  SHIFTIN SDA, SCL, MSBPRE, [i2cAck\1]          ' get acknowledge bit
+  RETURN
+
+
+' --- Receive ---
+
+I2C_RX_Byte_Nak:
+  i2cAck = Nak                                  ' no Ack = high
+  GOTO I2C_RX
+
+I2C_RX_Byte:
+  i2cAck = Ack                                  ' Ack = low
+
+I2C_RX:
+  SHIFTIN SDA, SCL, MSBPRE, [i2cWork\8]         ' get byte from device
+  SHIFTOUT SDA, SCL, LSBFIRST, [i2cAck\1]       ' send ack or nak
+  RETURN
+
+
+' --- Stop ---
+
+I2C_Stop:                                       ' I2C stop bit sequence
+  LOW SDA
+  INPUT SCL
+  INPUT SDA                                     ' SDA --> high while SCL high
+  RETURN

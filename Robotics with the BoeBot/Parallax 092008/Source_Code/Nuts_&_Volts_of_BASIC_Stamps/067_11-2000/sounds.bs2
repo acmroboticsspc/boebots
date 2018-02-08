@@ -1,0 +1,226 @@
+' ======================================================================== 
+' Program... SOUNDS.BS2
+' Author.... Robert Jordan (modified by Jon Williams)
+' Started... 03 SEP 2000
+' Updated... 07 SEP 2000
+' ========================================================================
+
+
+' -----[ Program Description ]--------------------------------------------
+'
+' This program demonstrates the versatility of the Stamp 2 FREQOUT 
+' command.
+
+
+' -----[ Revision History ]-----------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------
+'
+Spkr	CON	15			' speaker port
+
+
+' -----[ Constants ]------------------------------------------------------
+'
+R	CON	0			' rest
+C	CON	33			' ideal is 32.703
+Cs	CON	35			' ideal is 34.648
+D	CON	37			' ideal is 36.708
+Ds	CON	39			' ideal is 38.891
+E	CON	41			' ideal is 41.203
+F	CON	44			' ideal is 43.654
+Fs	CON	46			' ideal is 46.249
+G	CON	49			' ideal is 48.999
+Gs	CON	52			' ideal is 51.913
+A	CON	55			' ideal is 55.000
+As	CON	58			' ideal is 58.270
+B	CON	62			' ideal is 61.735
+
+N1	CON	500			' whole note
+N2	CON	N1/2			' half note
+N3	CON	N1/3			' third note
+N4	CON	N1/4			' quarter note
+N8	CON	N1/8			' eighth note
+
+
+' -----[ Variables ]------------------------------------------------------
+'
+x	VAR	Word			' loop counter
+note1	VAR	Word			' first tone for FREQOUT
+note2	VAR	Word			' second tone for FREQOUT
+dur	VAR	Word			' duration for FREQOUT
+oct1	VAR	Nib			' octave for freq1 (1 - 8)
+oct2	VAR	Nib			' octave for freq2 (1 - 8)
+ee	VAR	Byte			' EEPROM pointer
+digit	VAR	Byte			' DTMF digit
+clkDly	VAR	Word			' delay betweens "clicks"
+
+
+' -----[ EEPROM Data ]----------------------------------------------------
+'
+PN1	DATA 	"972-555-1212",0	' a stored telephone number
+PN2	DATA	"916-624-8333",0	' another number
+
+
+' -----[ Initialization ]-------------------------------------------------
+
+
+' -----[ Main ]-----------------------------------------------------------
+'
+
+Main:
+  DEBUG CLS
+  DEBUG "Robert Jordan's BS2 Sound Demo",CR
+  DEBUG "------------------------------",CR
+
+
+Dial_Tone:
+  DEBUG "Dial tone",CR
+  FREQOUT Spkr,35,35			' "click"
+  PAUSE 100
+  FREQOUT Spkr,2000,350,440		' combine 350 Hz & 440 Hz
+
+
+Dial_Phone1:				' dial phone from EE
+  DEBUG "Dialing number: "
+  ee = PN1				' initialize ee pointer
+GetNum1:
+  READ ee,digit				' read a digit
+  IF digit = 0 THEN Phone_Busy		' when 0, number is done
+  DEBUG digit				' display digit
+  IF digit < "0" THEN IncEE1		' don't dial non-digits
+  DTMFOUT Spkr,200,150,[digit-48]	' dial digit (convert from ASCII)
+IncEE1:
+  ee = ee + 1				' update ee pointer
+  GOTO GetNum1				' get another digit
+
+
+Phone_Busy:
+  PAUSE 1000
+  DEBUG CR, " - busy...",CR
+  FOR x = 1 TO 8
+    FREQOUT Spkr,400,480,620		' combine 480 Hz and 620 Hz
+    PAUSE 620
+  NEXT
+  FREQOUT Spkr,35,35			' "click"
+
+
+Dial_Phone2:
+  DEBUG "Calling Parallax: "
+  ee = PN2
+GetNum2:
+  READ ee,digit
+  IF digit = 0 THEN Phone_Rings
+  DEBUG digit
+  IF digit < "0" THEN IncEE2
+  DTMFOUT Spkr,200,150,[digit-48]
+IncEE2:
+  ee = ee + 1
+  GOTO GetNum2
+
+
+Phone_Rings:
+  PAUSE 1000
+  DEBUG CR, " - ringing"
+  FOR x = 1 TO 4
+    FREQOUT Spkr,2000,440,480		' combine 440 Hz and 480 Hz
+    PAUSE 4000
+  NEXT
+
+
+Camptown_Song:
+  DEBUG CR,"Play a camptown song",CR
+  FOR x = 0 TO 13
+    LOOKUP x,[ G, G, E, G, A, G, E, R, E, D, R, E, D, R],note1
+    LOOKUP x,[ 4, 4, 4, 4, 4, 4, 4, 1, 4, 4, 1, 4, 4, 1],oct1
+    LOOKUP x,[N2,N2,N2,N2,N2,N2,N2,N2,N2,N1,N2,N2,N1,N8],dur
+    GOSUB Play1Note
+  NEXT
+
+
+Howler:
+  DEBUG "Howler -- watch out!!!",CR
+  FOR x = 1 TO 4
+    FREQOUT Spkr,1000,1400,2060		' combine 1400 Hz and 2060 Hz
+    FREQOUT Spkr,1000,2450,2600		' combine 2450 Hz and 2600 Hz
+  NEXT
+
+
+Alt_Dial_Tone:
+  DEBUG "Alternate Dial Tone",CR
+  FREQOUT Spkr,5000,600,133		' combine 600 Hz and 133 Hz
+  
+
+Fast_Busy:
+  DEBUG "Fast Busy signal",CR
+  FOR x = 1 TO 10
+    FREQOUT Spkr,200,480,620		' combine 480 Hz and 620 Hz
+    PAUSE 310
+  NEXT
+
+
+' **************************
+' Additional sounds from Jon
+' **************************
+
+Roulette_Wheel:
+  DEBUG "Roulette Wheel",CR
+  note1 = 35				' frequency for "click"
+  dur = 5				' duration for "click"
+  clkDly = 250				' starting delay between clicks
+  FOR x = 1 TO 8			' spin up wheel
+    FREQOUT Spkr,dur,note1		' click
+    PAUSE clkDly
+    clkDly = clkDly */ $00BF		' accelerate (speed * 0.75)
+  NEXT
+  FOR x = 1 TO 10			' spin stable
+    FREQOUT Spkr,dur,note1
+    PAUSE clkDly
+  NEXT
+  FOR x = 1 TO 20			' slow down
+    FREQOUT Spkr,dur,note1
+    PAUSE clkDly
+    clkDly = clkDly */ $010C		' decelerate (speed * 1.05)
+  NEXT
+  FOR x = 1 TO 30			' slow down and stop
+    FREQOUT Spkr,dur,note1
+    PAUSE clkDly
+    clkDly = clkDly */ $0119		' decelerate (speed * 1.10)
+  NEXT
+
+
+Computer_Beeps:				' looks great with randmom LEDs
+  DEBUG "50's Sci-Fi Computer",CR
+  FOR x = 1 TO 50			' run about 5 seconds
+    RANDOM note1			' create random note
+    note1 = note1 // 2000		' don't let note go to high
+    FREQOUT Spkr,50,note1		' play it
+    PAUSE 100				' short pause between notes
+  NEXT
+
+  DEBUG CR,"Sound demo complete."
+
+  END
+
+
+' -----[ Subroutines ]----------------------------------------------------
+'
+Play1Note:
+  note1 = note1 << (oct1-1)		' get frequency for note + octave
+  FREQOUT Spkr,dur,note1		' play it
+  RETURN
+
+
+Play2Notes:
+  note1 = note1 << (oct1-1)		' get frequency for note + octave
+  note2 = note2 << (oct2-1)		' get frequency for note + octave
+  FREQOUT Spkr,dur,note1,note2		' play both
+  RETURN
+
+
+WarbleNote:
+  note1 = note1 << (oct1-1)		' get frequency for note + octave
+  note2 = note2 - 8 MAX $7FFF		' create slightly lower frequency
+  FREQOUT Spkr,dur,note1,note2		' play warbled
+  RETURN

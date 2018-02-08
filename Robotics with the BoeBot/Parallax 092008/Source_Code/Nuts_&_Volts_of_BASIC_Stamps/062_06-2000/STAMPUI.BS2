@@ -1,0 +1,479 @@
+' Nuts & Volts "Stamp Applications" - June 2000
+' Program Listing 64.1
+
+'=========================================================================
+' Program... STAMPUI.BS2
+' Purpose... Stamp User-Interface for general control applications
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+'=========================================================================
+
+
+' ----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates a multi-level menu system using a keypad input
+' and LCD output.  Stamp pins are conserved by using shift registers for
+' the keys and LCD.
+ 
+
+' ----[ Revision History ]------------------------------------------------
+'
+
+
+' ----[ I/O Definitions ]-------------------------------------------------
+'
+Clock	CON	0				' shared clock line
+SL_165	CON	1				' shift/load of 74HC165
+DI_165	CON	2				' serial data from 74HC165
+L_595	CON	3				' 74HC595 output latch
+DO_595	CON	4				' serial data to 74HC595
+
+
+' ----[ Constants ]-------------------------------------------------------
+'
+ClrLCD  CON     $01                     	' clear the LCD
+CrsrHm  CON     $02                     	' move cursor home
+CrsrLf  CON     $10                     	' move cursor left
+CrsrRt  CON     $14                     	' move cursor right
+DispLf  CON     $18                     	' shift chars left
+DispRt  CON     $1C                     	' shift chars right
+
+Crsr1	CON 	%00001110			' underline cursor on
+Crsr0	CON	%00001100			' underline cursor off
+
+DDRam   CON     $80                     	' Display Data RAM control
+CGRam	CON	$40				' Char Gen RAM control
+
+Line1	CON	$00				' line 1, column 0
+Line2	CON	$40
+Line3	CON	$14
+Line4	CON	$54
+
+Key_Up	CON	%000001				' input keys
+Key_Dn	CON	%000010
+Key_Lf	CON	%000100
+Key_Rt	CON	%001000
+Key_OK	CON	%010000
+Key_Set	CON	%100000
+
+RunMode	CON	0				' menu displays
+MNU_Tm	CON	1
+MNU_Day	CON	2
+
+SET_Hr	CON	1				' setting hours
+SET_Min	CON	2				' setting minutes
+SET_Day	CON	1				' setting day
+
+D_Sun	CON	0				' days of week
+D_Mon	CON	1
+D_Tue	CON	2
+D_Wed	CON	3
+D_Thu	CON	4
+D_Fri	CON	5
+D_Sat	CON	6
+
+Yes	CON	1
+No	CON	0
+
+
+' ----[ Variables ]-------------------------------------------------------
+'
+key	VAR	Byte				' key input
+char	VAR	Byte				' character out to LCD
+temp	VAR	Byte				' work variable for LCD
+lcd_E	VAR	temp.Bit2               	' LCD Enable pin
+lcd_RS	VAR     temp.Bit3               	' Reg Select (1 = char)
+addr	VAR	Byte				' EE address for LCDprint
+base	VAR	Byte				' base for display
+
+hrs	VAR	Byte				' hours
+mins	VAR	Byte				' minutes
+day	VAR	Nib				' day of week, 0 to 6
+
+state	VAR	Byte				' program state
+mode	VAR	state.HighNib			' menu mode
+level	VAR	state.LowNib			' edit level
+
+tempW	VAR	Word				' general purpose word
+temp1	VAR	tempW.HighByte
+temp2	VAR	tempW.LowByte
+tempB	VAR	Byte				' general purpose byte
+loop	VAR	Byte				' loop counter
+
+flags	VAR	Nib
+updtLCD	VAR	flags.Bit0			' update LCD flag
+
+
+
+' ----[ EEPROM Data ]-----------------------------------------------------
+'
+Digits	DATA	"0123456789ABCDEF"		' digits for LCDnum2 sub
+
+Days	DATA	"SUN", 0			' day strings
+	DATA	"MON", 0
+	DATA	"TUE", 0
+	DATA	"WED", 0
+	DATA	"THU", 0
+	DATA	"FRI", 0
+	DATA	"SAT", 0
+
+LCD_ST	DATA	"SET TIME", 0			' menu strings
+LCD_SD	DATA	"SET DAY", 0
+
+
+' ----[ Initialization ]--------------------------------------------------
+'
+' Initialize the LCD (Hitachi HD44780 controller)
+'
+LCDinit: 
+	PAUSE 500				' let the LCD settle
+	char = %0011				' 8-bit mode
+	GOSUB LCDcmd
+	PAUSE 5
+	GOSUB LCDcmd
+	GOSUB LCDcmd
+	char = %0010				' put in 4-bit mode
+	GOSUB LCDcmd
+	char = %00101000			' 2-line mode
+	GOSUB LCDcmd
+	char = %00001100			' disp on, crsr off
+	GOSUB LCDcmd
+	char = %00000110			' inc crsr, no disp shift
+	GOSUB LCDcmd
+	char = ClrLCD
+	GOSUB LCDcmd
+
+
+Initialize:
+	updtLCD = Yes				' refresh the LCD
+	state = RunMode			' top menu
+				
+	hrs = 12
+	mins = 34
+	day = D_Sun
+
+
+' ----[ Main ]------------------------------------------------------------
+'
+Main:
+	GOSUB GetKey
+	BRANCH mode, [Mode_Run, Mode_Time, Mode_Day]
+	GOTO LoopPad100
+
+' =========================
+'  Run Display (top level)
+' =========================
+
+Mode_Run:
+	IF updtLCD = No THEN Mode_Run2		' no update, check key
+	char = Crsr0				' clear cursor frome edit
+	GOSUB LCDcmd
+	char = ClrLCD				' clear the LCD
+	GOSUB LCDcmd
+	GOSUB PrintTime				' print the time
+	char = DDRam + Line1 + 6		' move to position 6
+	GOSUB LCDcmd
+	GOSUB PrintDay				' print the day
+	updtLCD = No				' LCD updated
+
+Mode_Run2:
+	IF key <> Key_Set THEN LoopPad100	' "Set" not pressed
+	mode = MNU_Tm				' "Set" pressed, Time menu
+	level = 0				' menu level
+	updtLCD = Yes				' update the LCD
+	GOTO LoopPad250				' allow key release
+
+
+' ==============
+'  Time Display
+' ==============
+
+Mode_Time:
+	' branch to current mode level
+	BRANCH level, [Time_Menu, Time_Hours, Time_Mins]
+	GOTO LoopPad100
+
+Time_Menu:					' display "SET TIME"
+	IF updtLCD = No THEN Time_Menu2		' update on if required
+	char = Crsr0
+	GOSUB LCDcmd
+	char = ClrLCD
+	GOSUB LCDcmd
+	addr = LCD_ST
+	GOSUB LCDprint
+	updtLCD = No
+
+Time_Menu2:
+	IF key <> Key_OK THEN Time_Menu2a	' check "OK"
+	state = RunMode				' - pressed; up to top
+	updtLCD = Yes
+	GOTO LoopPad100
+
+Time_Menu2a:
+	IF key <> Key_Set THEN Time_Menu2b	' check "Set"
+	level = SET_Hr				' - pressed; set hours
+	updtLCD = Yes
+	GOTO LoopPad250
+
+Time_Menu2b:
+	IF key <> Key_Dn THEN LoopPad100	' check "Down"
+	mode = MNU_Day				'  - move to day menu
+	updtLCD = Yes
+	GOTO LoopPad250
+
+Time_Hours:					' display hours with cursor
+	IF updtLCD = No THEN Time_Hours1		' - if refresh required
+	char = Crsr0				' no cursor during refresh
+	GOSUB LCDcmd
+	char = DDRam + Line2			' time on Line 2
+	GOSUB LCDcmd
+	GOSUB PrintTime
+	char = DDRam + Line2 + 1		' cursor under hours
+	GOSUB LCDcmd
+	char = Crsr1
+	GOSUB LCDcmd
+	updtLCD = No
+
+Time_Hours1:
+	IF key <> Key_OK THEN Time_Hours1a	' check "OK"
+	level = 0				' - back to menu
+	updtLCD = Yes
+	GOTO LoopPad250
+
+Time_Hours1a:
+	IF key <> Key_Up THEN Time_Hours1b	' check "Up"
+	hrs = hrs + 1 // 24			' - increment with rollover
+	updtLCD = Yes
+	GOTO LoopPad250
+
+Time_Hours1b:
+	IF key <> Key_Dn THEN Time_Hours1c	' check "Down"
+	hrs = hrs + 23 // 24			' - dec with rollunder
+	updtLCD = Yes
+	GOTO LoopPad250
+
+Time_Hours1c:
+	IF key <> Key_Rt THEN LoopPad100	' check "Right"
+	level = SET_Min				' - set minutes
+	updtLCD = Yes
+	GOTO LoopPad100
+
+Time_Mins:					' display mins with cursor
+	IF updtLCD = No THEN Time_Mins1		' - if refresh required
+	char = Crsr0
+	GOSUB LCDcmd
+	char = DDRam + Line2
+	GOSUB LCDcmd
+	GOSUB PrintTime
+	char = DDRam + Line2 + 4		' cursor under minutes
+	GOSUB LCDcmd
+	char = Crsr1
+	GOSUB LCDcmd
+	updtLCD = No
+	GOTO LoopPad100
+
+Time_Mins1:
+	IF key <> Key_OK THEN Time_Mins1a	' check "OK"
+	level = 0				' - back to menu
+	updtLCD = Yes
+	GOTO LoopPad100
+
+Time_Mins1a:
+	IF key <> Key_Up THEN Time_Mins1b	' check "Up"
+	mins = mins + 1 // 60			' - inc with rollover
+	updtLCD = Yes
+	GOTO LoopPad100
+
+Time_Mins1b:
+	IF key <> Key_Dn THEN Time_Mins1c	' check "Down"
+	mins = mins + 59 // 60			' - dec with rollunder
+	updtLCD = Yes
+	GOTO LoopPad100
+
+Time_Mins1c:
+	IF key <> Key_Lf THEN LoopPad100	' check "Left"
+	level = SET_Hr				' - set hours
+	updtLCD = Yes
+	GOTO LoopPad100
+
+
+' =============
+'  Day Display
+' =============
+
+Mode_Day:
+	' branch to current mode level
+	BRANCH level, [Day_Menu, Day_Set]
+	GOTO LoopPad100
+
+Day_Menu:					' display "SET DAY"
+	IF updtLCD = No THEN Day_Menu2	' - if refresh required
+	char = Crsr0
+	GOSUB LCDcmd
+	char = ClrLCD
+	GOSUB LCDcmd
+	addr = LCD_SD
+	GOSUB LCDprint
+	updtLCD = No
+
+Day_Menu2:
+	IF key <> Key_OK THEN Day_Menu2a	' check "OK"
+	state = RunMode			' - back to top
+	updtLCD = Yes
+	GOTO LoopPad100
+
+Day_Menu2a:
+	IF key <> Key_Set THEN Day_Menu2b	' check "Set"
+	level = SET_Day			' - set day
+	updtLCD = Yes
+	GOTO LoopPad250
+
+Day_Menu2b:
+	IF key <> Key_Up THEN LoopPad100	' check "Up"
+	mode = MNU_Tm				' - back to time menu
+	level = 0
+	updtLCD = Yes
+	GOTO LoopPad100
+
+Day_Set:
+	IF updtLCD = No THEN Day_Set1
+	char = Crsr0
+	GOSUB LCDcmd
+	char = DDRam+ Line2
+	GOSUB LCDcmd
+	GOSUB PrintDay
+	char = DDRam + Line2
+	GOSUB LCDcmd
+	char = Crsr1
+	GOSUB LCDcmd
+	updtLCD = No
+	GOTO LoopPad100
+
+Day_Set1:
+	IF key <> Key_OK THEN Day_Set1a		' check "OK"
+	level = 0				' - back up to menu
+	updtLCD = Yes
+	GOTO LoopPad100	
+
+Day_Set1a:
+	IF key <> Key_Up THEN Day_Set1b		' check "Up"
+	day = day + 1 // 7			' - inc with rollover
+	updtLCD = Yes
+	GOTO LoopPad250
+
+Day_Set1b:
+	IF key <> Key_Dn THEN LoopPad100	' check "Down"
+	day = day + 6 // 7			' - dec with rollunder
+	updtLCD = Yes
+	GOTO LoopPad250
+
+' ==================
+'  End of Main Loop
+' ==================
+
+
+LoopPad250:					' 250 ms pad
+	PAUSE 150
+
+LoopPad100:					' 100 ms pad
+	PAUSE 100
+	GOTO Main
+
+
+' ----[ Subroutines ]-----------------------------------------------------
+'
+
+' Send command to the LCD
+'
+LCDcmd:
+	lcd_RS = 0				' command mode
+	GOTO LCDout
+
+
+' Write ASCII char to LCD 
+'
+LCDputc:
+	lcd_RS = 1				' character mode
+	GOTO LCDout
+
+
+' send char to LCD
+'
+LCDout:
+	temp.HIGHNIB = char.HIGHNIB		' get high nibble
+	lcd_E = 1
+	SHIFTOUT DO_595, Clock, MSBFIRST, [temp]
+	PULSOUT L_595, 1
+	lcd_E = 0				' drop Enable line low
+	SHIFTOUT DO_595, Clock, MSBFIRST, [temp]
+	PULSOUT L_595, 1
+	temp.HIGHNIB = char.LOWNIB		' get low nibble
+	lcd_E = 1
+	SHIFTOUT DO_595, Clock, MSBFIRST, [temp]
+	PULSOUT L_595, 1
+	lcd_E = 0
+	SHIFTOUT DO_595, Clock, MSBFIRST, [temp]
+	PULSOUT L_595, 1
+	RETURN
+
+
+' send EE string to LCD
+' - string starts at addr and ends with zero
+'
+LCDprint:
+	READ addr, char			' get character from EE
+	IF char = 0 THEN LCDprintX		' if 0, we're done
+	GOSUB LCDputc				' write the character
+	addr = addr + 1			' point to next character
+	GOTO LCDprint
+
+LCDprintX:
+	RETURN
+
+
+' print 2-digit number on LCD
+'
+LCDdec2:
+	base = 10				' display number as decimal
+	GOTO LCDnum2
+
+LCDhex2:
+	base = 16				' display number as hex
+
+LCDnum2:
+	READ Digits + (tempB / base), char	' high digit
+	GOSUB LCDputc
+	READ Digits + (tempB // base), char	' low digit
+	GOSUB LCDputc
+	RETURN
+
+
+GetKey:
+	key = %00111111			' assume all pressed
+	FOR loop = 1 TO 5			' test five times
+	  LOW SL_165				' load data from keys
+	  PAUSE 1
+	  HIGH SL_165				' allow data to shift in
+
+	  SHIFTIN DI_165, CLOCK, MSBPRE, [tempB\8]
+
+	  key = key & ~tempB			' test against new input
+	  PAUSE 5				' wait 5 ms between tests
+	NEXT
+	RETURN
+
+
+PrintTime:
+	tempB = hrs	
+ 	GOSUB LCDdec2
+	char = ":"
+	GOSUB LCDputc
+	tempB = mins
+	GOSUB LCDdec2
+	RETURN
+
+
+PrintDay:
+	addr = Days + (day * 4)		' point to day string
+	GOSUB LCDprint				' print it
+	RETURN

@@ -1,0 +1,68 @@
+' Program Listing 22.1. BS2 Program to scan a 16-key matrix keypad
+' Program: KEYP.BS2 (Scan a 16-key matrix keypad)
+' This program shows how to scan a 4x4 matrix
+' keypad using a BASIC Stamp II (BS2). A subroutine
+' scans the keypad when it is called. On return, a
+' flag bit (press) will contain a 1 if a key was
+' pressed, and a nibble variable (key) will contain
+' the key number (0-15). Once the program has
+' responded to a key press, it must clear the
+' press bit to prevent multiple actions triggered
+' by the same key press. In a similar way, the
+' keyScan subroutine uses another bit, db, to
+' avoid responding to a key press until the key
+' previously pressed has been released.
+
+db 	var bit 	' Debounce bit for use by keyScan.
+press 	var bit 	' Flag to indicate keypress.
+key 	var nib 	' Key number 0-15.
+row 	var nib 	' Counter used in scanning keys.
+cols 	var INB 	' Input states of pins P4-P7.
+
+' Demo loop. Waits for press to indicate a keypress, then
+' displays the key on the debug screen. Note that that
+' this code clears the press bit when done in order to
+' prepeare for the next press.
+
+again:
+  gosub keyScan
+  if press = 0 then again
+  debug "key pressed = ", hex key,cr
+  press = 0
+goto again
+
+' ==================== KEYPAD SUBROUTINE ====================
+' This code scans a 0 across the row connections of the keypad,
+' then looks at the column nibble to see if that 0 has shown up
+' on any of those bits. If the column bits are all 1s, then
+' no key is pressed. If a column bit is 0, then a key is pressed
+' at the intersection of the current row and that column.
+keyScan:
+for row = 0 to 3 	' Scan rows one at a time.
+  low row 		' Output a 0 on current row.
+  key = ~cols 		' Get the inverted state of column bits.
+  key = NCD key 	' Convert to bit # + 1 with NCD.
+  if key <> 0 then push 	' No high on cols? No key pressed.
+  input row 			' Disconnect output on row.
+next 				' Try the next row.
+
+db = 0 				' Reset the debounce bit.
+return 				' Return to program.
+
+push:
+  if db = 1 then done 		' Already responded to this press, so done.
+  db = 1: press = 1 		' Set debounce and keypress flags.
+  key = (key-1)+(row*4) 	' Add column (0-3) to row x 4 (0,4,8,12).
+
+' Key now contains 0-15, mapped to this arrangement:
+' 0 1 2 3
+' 4 5 6 7
+' 8 9 10 11
+' 12 13 14 15
+' A lookup table is translates this to match the actual
+' markings on the key caps.
+  lookup key,[1,2,3,10,4,5,6,11,7,8,9,12,14,0,15,13],key
+
+done:
+  input row 			' Disconnect output on row.
+return 				' Return to program.

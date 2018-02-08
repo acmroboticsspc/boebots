@@ -1,0 +1,288 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 5.3: Follow the Light
+' Marching toward the light
+' {$STAMP BS2}
+' {$PBASIC 2.5}  
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+TiltServo       CON     13              ' Tilt servo on P12
+StrideServo     CON     12              ' Stride servo on P13
+
+LPhotoCircuit   CON     10
+RPhotoCircuit   CON     14
+
+' -----[ Constants ]-------------------------------------------------------
+
+MoveDelay       CON     18              ' in micrcoseconds
+TiltStep        CON     5               ' TiltServo step size
+StrideStep      CON     5               ' StrideServo step size
+
+RightTilt       CON     620             ' Tilt limits
+CenterTilt      CON     750             
+LeftTilt        CON     880             
+
+RightStride     CON     650             ' Stride limits
+CenterStride    CON     750             
+LeftStride      CON     850             
+
+DeadBand	CON	5		' Photoresistor R/C DeadBand
+
+' -----[ Variables ]-------------------------------------------------------
+
+LPhotoVal       VAR     Word            ' Stores measured R/C times 
+RPhotoVal       VAR     Word            ' of photoresistors 
+
+FigureLoop      VAR     Nib
+MoveLoop        VAR     Byte            ' Loop for repeat movements
+MoveLoopLimit   VAR     Byte
+
+SubMoveLoop     VAR     Byte            ' Loop for repeat submovements
+SubMoveLoopLmt  VAR     Byte
+
+Pulses          VAR     Word            ' Pulse variable
+
+CurrentTilt     VAR     Word
+CurrentStride   VAR     Word
+NewValue        VAR     Word
+
+Dx              VAR     Pulses
+Mx              VAR     Word
+MxCurrent       VAR     Word
+
+Sx              VAR     Word
+SxCurrent       VAR     Word
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+' The following state tables are lists of movement state numbers.
+' A xx indicates the end of a list.
+' These are used with the Movement routine.
+
+TL              CON     0
+TC              CON     1
+TR              CON     2
+SL              CON     3
+SC              CON     4
+SR              CON     5
+
+xx              CON     255
+
+' ------ Movement Value Tables ------
+' These can be used with the Movement routine.
+' The tables can contain Basic Movement Codes.
+'
+' Note: ALL movement tables must be in this section
+
+LeftSemicircle  DATA    7, bLeftTurn,  bLeftTurn,  bForward, xx
+RightSemicircle DATA    7, bRightTurn, bRightTurn, bForward, xx
+
+WalkForward3    DATA    3, bForward, xx
+WalkForward8    DATA    8, bForward, xx
+
+' ------ Basic Movement Codes ------
+' Used in Movement tables.
+' Referenced below using LOOKUP statement.
+
+bFinish         CON     0
+bForward        CON     1
+bBackward       CON     2
+bLeftTurn       CON     3
+bRightTurn      CON     4
+bPivotLeft      CON     5
+bPivotRight     CON     6
+
+' ------ Basic Movement Tables ------
+'
+' These tables can contain Movement Support Codes.
+
+BasicMovements  CON     Forward
+
+Forward         DATA    1, TR, SL, TL, SR, xx
+Backward        DATA    1, TR, SL, TL, SR, xx
+
+LeftTurn        DATA    1, TL, SR, TC, SL, TL, SR, TR, SL, xx
+RightTurn       DATA    1, TR, SL, TC, SR, TR, SL, TL, SR, xx
+
+PivotLeft       DATA    1, TL, SR, TC, SL, xx
+PivotRight      DATA    1, TR, SL, TC, SR, xx
+
+Finish          DATA    1, TR, SC, TC, xx
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+GOSUB ResetCC                           ' Initialize feet
+
+' -----[ Main Code ]-------------------------------------------------------
+
+Main:
+  
+  ' Measure RC time for left photoresistor.
+  HIGH LPhotoCircuit                    ' Set to output-high
+  PAUSE 3                               ' Pause for 3 ms
+  RCTIME LPhotoCircuit,1,LPhotoVal      ' Measure R/C time on left
+  
+  ' Measure RC time for right photoresistor.
+  HIGH RPhotoCircuit                    ' Set to output-high
+  PAUSE 3                               ' Pause for 3 ms
+  RCTIME RPhotoCircuit,1,RPhotoVal      ' Measure R/C time on right
+
+  ' Measure difference between RPhotoVal and LPhotoVal, decide what to do
+
+  IF ABS(LPhotoVal-RPhotoVal) > DeadBand THEN check_dir
+
+  ' Check if difference between RC times is within the deadband
+  ' If yes, then forward.  If no then skip to check_dir subroutine.
+
+  walk_forward:
+    Mx = Forward
+    GOSUB Movement
+    goto main
+
+  ' Select right_turn or left_turn depending on which RC time is larger
+
+  check_dir:
+    IF LPhotoVal > RPhotoVal THEN turn_right
+    IF LPhotoVal < RPhotoVal THEN turn_left
+
+'----- Navigation Routines -------
+
+turn_left:                              ' turn left towards light       
+  Mx = PivotLeft
+  GOSUB Movement
+  goto main                             ' go back to main routine.
+
+Turn_right:                             ' turn right towards light      
+  Mx = PivotRight
+  GOSUB Movement
+  GOTO main                             ' go back to main routine.
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' ----- Movement: Move feet using DATA table referenced by Mx -----
+'
+' Input: Mx = movement table index, table ends in xx
+'    or
+'        Mx = submovement table index, table ends in xx
+'
+' Note: All submovment tables come after the movment tables in this file.
+
+Movement:
+  IF Mx < BasicMovements THEN SetupMovement
+  MxCurrent = Mx                        ' setup to use submovement table
+  MoveLoopLimit = 1                     
+  GOTO StartMovement
+
+SetupMovement:
+  READ Mx, MoveLoopLimit                ' read movement table 
+  MxCurrent = Mx + 1                    ' repeat count
+
+StartMovement:
+  FOR MoveLoop = 1 to MoveLoopLimit
+    Mx = MxCurrent                      ' Mx = start of movement table
+   'debug hex Mx, " Movement ", dec MoveLoop, " of ", dec MoveLoopLimit,cr
+    IF Mx < BasicMovements THEN MovementLoop
+                                        ' skip if movement table
+    SxCurrent = Mx                      ' SxCurrent = submovement index
+    GOTO StartSubMovement               ' enter middle of loop
+
+    MovementLoop:
+      READ Mx, SxCurrent                ' read next submovment byte
+      Mx = Mx + 1
+      IF SxCurrent = xx THEN MovementDone
+                                        ' skip if end of list
+     'debug "  ", dec SxCurrent, " movement",cr
+      LOOKUP SxCurrent,[Finish,Forward,Backward,LeftTurn,RightTurn,
+      PivotLeft,PivotRight],SxCurrent
+                                        ' lookup submovement table index
+    StartSubMovement:                   ' start executing submovement table
+      READ SxCurrent, SubMoveLoopLmt    ' read submovement table repeat count
+      SxCurrent = SxCurrent + 1
+      FOR SubMoveLoop = 1 to SubMoveLoopLmt
+        Sx = SxCurrent
+
+'DEBUG "   ", DEC Sx, " submovement ", DEC SubMoveLoop, " of ", dec SubMoveLoopLmt,CR
+
+        SubMovementLoop:
+          READ Sx, Dx                   ' read next submovent action
+          Sx = Sx + 1
+          IF Dx = xx THEN SubMovementDone
+                                        ' skip if end of list
+          GOSUB DoMovement              ' execute movement
+          GOTO SubMovementLoop
+
+        SubMovementDone:
+      NEXT
+      IF Mx < BasicMovements THEN MovementLoop
+
+      MovementDone:
+    NEXT
+  RETURN
+
+DoMovement:
+  'debug "    ", dec Dx, " action",cr
+  BRANCH Dx,[TiltLeft,TiltCenter,TiltRight,StrideLeft,
+  StrideCenter,StrideRight]
+                                ' will fall through if invalid index
+RETURN
+
+
+' ----  Movement routines can be called directly ----
+
+TiltLeft:
+  NewValue = LeftTilt
+  GOTO MovementTilt
+
+TiltCenter:
+  NewValue = CenterTilt
+  GOTO MovementTilt
+
+TiltRight:
+  NewValue = RightTilt
+
+MovementTilt:
+  FOR Pulses = CurrentTilt TO NewValue STEP TiltStep
+    PULSOUT TiltServo,   Pulses         
+    PULSOUT StrideServo, CurrentStride
+    PAUSE MoveDelay                                     
+  NEXT
+
+  CurrentTilt = NewValue
+  RETURN
+
+StrideLeft:
+  NewValue = LeftStride
+  GOTO MovementStride
+
+StrideCenter:
+  NewValue = CenterStride
+  GOTO MovementStride
+
+StrideRight:
+  NewValue = RightStride
+
+MovementStride:
+  FOR Pulses = CurrentStride TO NewValue STEP StrideStep                        
+    PULSOUT TiltServo,   CurrentTilt
+    PULSOUT StrideServo, Pulses
+    PAUSE MoveDelay                                     
+  NEXT
+
+  CurrentStride = NewValue
+  RETURN
+
+
+' ----- Move feet to initial center position -----
+
+ResetCC:
+  CurrentTilt   = CenterTilt
+  CurrentStride = CenterStride
+
+  FOR Pulses = 1 TO 100 STEP StrideStep                         
+    PULSOUT TiltServo, CenterTilt               
+    PULSOUT StrideServo, CenterStride
+    PAUSE MoveDelay                                     
+  NEXT
+
+DoReturn:
+RETURN

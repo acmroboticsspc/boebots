@@ -1,0 +1,64 @@
+' =========================================================================
+'
+'   File....... SW21-EX17-Freq_Measure-Adv.BS2
+'   Purpose.... Measuring frequency using PULSIN
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 07 SEP 2006
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program monitors and displays the frequency of a signal on 15. The
+' period of the input cycle is measured in two halves: low, then high.
+' Frequency is calculated using the forumula F = 1 / Period.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+FreqIn          PIN     15                      ' frequency input pin
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+#SELECT $STAMP
+  #CASE BS2, BS2E, BS2PE
+    Scale       CON     $200                    ' 2.0 us per unit
+  #CASE BS2SX, BS2P, BS2PX
+    Scale       CON     $0CC                    ' 0.8 us per unit
+#ENDSELECT
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+pHigh           VAR     Word                    ' high pulse timing
+pLow            VAR     Word                    ' low pulse timing
+period          VAR     Word                    ' cycle time (high + low)
+freq            VAR     Word                    ' frequency
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  DEBUG CLS,                                    ' setup report output
+        "Period.(uS)... ", CR,
+        "Freq (Hz)..... "
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    PULSIN FreqIn, 0, pLow                      ' get low side of input
+    PULSIN FreqIn, 1, pHigh                     ' get high side of input
+    period = (pLow + pHigh) */ Scale            ' scale to uSecs
+    freq = 62500 / period * 16                  ' calculate frequency
+
+    DEBUG CRSRXY, 15, 0, DEC period, CLREOL,    ' display values
+          CRSRXY, 15, 1, DEC freq, CLREOL
+  LOOP

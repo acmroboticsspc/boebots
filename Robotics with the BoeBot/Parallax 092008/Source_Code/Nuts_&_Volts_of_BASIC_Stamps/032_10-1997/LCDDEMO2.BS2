@@ -1,0 +1,139 @@
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... LCDDEMO2.BS2
+' Purpose... Stamp 2 -> Multi-line LCD (4-bit interface)
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' WWW....... http://members.aol.com/jonwms
+' Started... 16 JUL 1994
+' Updated... 25 JUL 1997
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates the various standard features of a 2x16 LCD
+' display that uses the Hitachi HD44780 controller. 
+'
+' LCD Connections:
+'
+' LCD        (Function)         Stamp
+' ---------------------         -----
+' pin 1         Vss             Gnd
+' pin 2         Vdd             +5
+' pin 3         Vo              wiper of 10K pot
+' pin 4         RS              P4
+' pin 5         R/W             Gnd
+' pin 6         E               P5
+' pin 7         DB0             Gnd
+' pin 8         DB1             Gnd
+' pin 9         DB2             Gnd
+' pin 10        DB3             Gnd
+' pin 11        DB4             P0
+' pin 12        DB5             P1
+' pin 13        DB6             P2
+' pin 14        DB7             P4
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+' 16 JUL 94 : Version 1.0 - compilation of code from last 3 months
+' 08 AUG 96 : Trimmed code to save space -- no performance changes!
+' 25 JUL 97 : Updated for Nuts & Volts
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+RS      CON     4                       ' Register Select (1 = char)
+E       CON     5                       ' LCD Enable pin  (1 = enabled)
+
+' LCD control characters
+'
+ClrLCD  CON     $01                     ' clear the LCD
+CrsrHm  CON     $02                     ' move cursor to home position
+CrsrLf  CON     $10                     ' move cursor left
+CrsrRt  CON     $14                     ' move cursor right
+DispLf  CON     $18                     ' shift displayed chars left
+DispRt  CON     $1C                     ' shift displayed chars right
+DDRam   CON     $80                     ' Display Data RAM control
+Line1	CON	$00			' starting address of line 1
+Line2	CON	$40			' starting address of line 2
+
+ 
+' -----[ Variables ]-------------------------------------------------------
+'
+char    VAR     Byte                    ' character sent to LCD
+index   VAR     Byte                    ' loop counter
+ 
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+Msg1	DATA    "This is Line 1"	' preload EEPROM with messages
+Msg2	DATA    "This is Line 2"
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Init:   DirL = %00111111                ' set pins 0-5 as outputs
+	Outs = $0000                    ' clear the pins
+
+' Initialize the LCD (Hitachi HD44780 controller)
+'
+LCDini: PAUSE 500                       ' let the LCD settle
+	OutA = %0011                    ' 8-bit mode
+	PULSOUT E, 1
+	PAUSE 5
+	PULSOUT E, 1
+	PULSOUT E, 1
+	OutA = %0010                    ' 4-bit mode
+	PULSOUT E, 1
+	char = %00101000                ' 2-line mode
+	GOSUB LCDcmd
+	char = %00001100                ' disp on, crsr off, blink off
+	GOSUB LCDcmd                     
+	char = %00000110                ' inc crsr, no disp shift
+	GOSUB LCDcmd
+	char = ClrLCD
+	GOSUB LCDcmd
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Start:	char = ClrLCD			' clear LCD, home cursor
+	GOSUB LCDcmd
+	PAUSE 1000
+
+L1:	FOR index = Msg1 TO (Msg1 + 13)
+	  READ index, char		' get character from EEPROM
+	  GOSUB LCDwr                   ' write it
+	  PAUSE 50                      ' delay between chars
+	NEXT
+	PAUSE 2000                      ' wait 2 seconds
+
+	char = DDRam + Line2		' move to line 2
+	GOSUB LCDcmd
+
+L2:	FOR index = Msg2 TO (Msg2 + 13)
+	  READ index, char
+	  GOSUB LCDwr
+	  PAUSE 50
+	NEXT
+	PAUSE 2000
+
+	GOTO Start
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+' Send command to the LCD
+'
+LCDcmd: LOW RS                          ' enter command mode
+					'  then write the character
+
+' Write ASCII char to LCD 
+'
+LCDwr:  OutA = char.HIGHNIB             ' output high nibble
+	PULSOUT E, 1                    ' strobe the Enable line
+	OutA = char.LOWNIB              ' output low nibble
+	PULSOUT E, 1
+	HIGH RS                         ' return to character mode
+	RETURN

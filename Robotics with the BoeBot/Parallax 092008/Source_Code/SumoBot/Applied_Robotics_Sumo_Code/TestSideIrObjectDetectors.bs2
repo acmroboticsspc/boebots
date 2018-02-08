@@ -1,0 +1,49 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - TestSideIrObjectDetectors.bs2
+' This program tests only IR object detectors on the SumoBot's breadboard
+' that look to the left and right.  It does not test the ones mounted in
+' front.
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+IrLedLS        PIN     2                     ' Left IR LED connected to P2
+IrSenseLS      PIN     1                     ' Left IR detector to P1
+
+IrLedRS        PIN     3                     ' Right IR LED connected to P3
+IrSenseRS      PIN     0                     ' Right IR detector to P0
+
+' -----[ Constants ]----------------------------------------------------------
+
+IrFreq     CON     38500                     ' IR LED transmit frequency
+
+' -----[ Variables ]----------------------------------------------------------
+
+irLS       VAR     Bit                       ' State of Left Side IR
+irRS       VAR     Bit                       ' State of Right Side IR
+
+' -----[ Initialization ]-----------------------------------------------------
+
+DEBUG CLS, "IR DETECTORS", CR,               ' Display heading
+           "Left   Right", CR,
+           "----   -----", CR
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+DO                                           ' DO...LOOP repeats indefinitely
+
+  FREQOUT IrLedLS, 1, IrFreq                 ' Left IRLED shines IR light
+  irLS = ~IrSenseLS                          ' Save IR receiver output
+
+  FREQOUT IrLedRS, 1, IrFreq                 ' Repeat for Right IRLED/receiver
+  irRS = ~IrSenseRS
+
+  DEBUG CRSRX, 1, BIN1 irLS,                 ' Display object detect bits
+        CRSRX, 9, BIN1 irRS
+
+  PAUSE 100                                  ' Delay for slower PCs
+
+LOOP
+

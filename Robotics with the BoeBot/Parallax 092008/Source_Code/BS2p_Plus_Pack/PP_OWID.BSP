@@ -1,0 +1,135 @@
+' -----[ Title ]-----------------------------------------------------------
+'
+' BS2p Plus Pack
+'
+' File...... PP_OWID.BSP
+' Purpose... Reads ROM data from 1-Wire device
+' Author.... Parallax
+' E-mail.... stamptech@parallaxinc.com
+' Started...
+' Updated... 26 SEP 2001
+
+' {$STAMP BS2p, PP_OWNAMES.BSP}
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Reads 1-Wire device ROM pattern.  Data is displayed in DEBUG window
+'
+' If using the iButton socket on the BS2p demo board, install Jumper iB1.
+'
+' If using a "Blue Dot Receptor" (RJ-11 connection) with the BS2p Demo
+' Board, install Jumper iB2
+'
+' Do not connect more than one device.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+OWpin           CON     15                      ' 1-wire device pin
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+' 1-Wire Support
+'
+OW_FERst        CON     %0001                   ' Front-End Reset
+OW_BERst        CON     %0010                   ' Back-End Reset
+OW_BitMode      CON     %0100
+OW_HighSpd      CON     %1000
+
+ReadROM         CON     $33                     ' read ID, serial num, CRC
+SearchROM       CON     $F0                     ' search
+
+NoDevice        CON     %11                     ' no device present
+NamesPgm        CON     1                       ' names are stored in slot 1
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+idx             VAR     Byte                    ' loop counter
+romData         VAR     Byte(8)                 ' ROM data from device
+devType         VAR     romData
+devCheck        VAR     Nib                     ' device check return ocde
+addr            VAR     Word                    ' address of string pointer
+strPtr          VAR     Word                    ' string pointer (device address)
+char            VAR     Byte                    ' character for LCD
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Initialize:
+  PAUSE 500                                     ' let DEBUG window open
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Main:
+  DEBUG CLS
+  GOSUB Device_Check                            ' look for device
+  IF (devCheck <> NoDevice) THEN Display_ROM
+
+No_Device_Found:
+  DEBUG "No 1-Wire device present."
+  END
+
+Display_ROM:
+  OWOUT OWpin,OW_FERst,[ReadROM]                ' send Read ROM command
+  OWIN  OWpin,OW_BERst,[STR romData\8]          ' read serial number & CRC
+
+  IF (romData(7) < $FF) THEN Show_Device
+  DEBUG CLS,"Bad device?"
+  END
+
+Show_Device
+  DEBUG "Dallas 1-Wire ID : ", HEX2 romData(0), " ("
+  GOSUB Display_Device_Type
+  DEBUG ")",CR
+
+  DEBUG "   Serial Number : "
+
+  FOR idx = 6 TO 1
+    DEBUG HEX2 romData(idx)
+  NEXT
+
+  DEBUG CR, "        Checksum : ", HEX2 romData(7),CR,CR
+
+  DEBUG "      Stamp Data : ",IHEX2 romData(0)
+  FOR idx = 1 TO 7
+    DEBUG ",",IHEX2 romData(idx)
+  NEXT
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+
+' This subroutine checks to see if any 1-Wire devices are present on the
+' bus.  It does NOT search for ROM codes
+'
+Device_Check:
+  devCheck = 0
+  OWOUT OWpin,OW_FERst,[SearchROM]              ' reset and start search
+  OWIN  OWpin,OW_BitMode,[devCheck.Bit1,devCheck.Bit0]
+  RETURN
+
+
+' This subroutine is used to display the part number of a 1-Wire device.
+' The text data and pointers to it are stored in the EE of a different
+' program slot.
+
+Display_Device_Type:
+  addr = devType * 2 + $600                     ' calulate string pointer addr
+  STORE NamesPgm                                ' point to names EEPROM
+  READ addr,strPtr.LowByte                      ' get the string location
+  READ addr+1,strPtr.HighByte
+Read_Char:
+  READ strPtr,char                              ' read character from string
+  IF (char = 0) THEN Dev_Type_Done              ' at end? (0 = Yes)
+  DEBUG char                                    ' no, print the char
+  strPtr = strPtr + 1                           ' point to next char
+  GOTO Read_Char
+Dev_Type_Done:
+  STORE 0                                       ' point to main pgm slot
+  RETURN

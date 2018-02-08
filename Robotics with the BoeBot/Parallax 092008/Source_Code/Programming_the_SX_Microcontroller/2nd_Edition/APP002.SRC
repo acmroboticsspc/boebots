@@ -1,0 +1,119 @@
+; APP002.SRC - Ramp Generator With Pre-defined Frequency
+;
+; ---------------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller", 2nd Edition by Guenther Daubach
+; Copyright (c) by Parallax Inc. 2004
+; ---------------------------------------------------------------------
+
+include           "Setup28.inc"
+
+id                'RampGen'                             
+reset             Main
+
+                  org  $08
+
+flags0            ds 1
+flags1            ds 1
+localTemp0        ds 1
+localTemp1        ds 1
+localTemp2        ds 1
+isrTemp           ds 1
+
+dacEnable         equ  flags0.0
+
+toggleDac         macro
+  xor             flags0, #%00000001
+endm
+
+                  org  $10
+bank0             =    $
+dacOutVal         ds   1
+
+
+;***********************************************************************
+; Port Assignment
+;***********************************************************************
+
+RC_latch          equ   %00000000    ; Port C latch init
+RC_DDIR           equ   %00000000    ; Port C DDIR value 
+      
+ 
+;***********************************************************************
+; Port and pin definitions
+;***********************************************************************
+
+DAC_PORT          equ   rc
+
+;***********************************************************************
+; Program constants
+;***********************************************************************
+
+int_period        equ   200  ;RTCC Interrupt rate
+DDIR_W            equ   $0F  ;Write Port Direction
+
+INTERRUPT_ORG     equ $000
+MAIN_ORG          equ $1fb
+MAIN_PROGRAM_ORG  equ $600
+
+      org    INTERRUPT_ORG
+           
+;***********************************************************************
+ISR
+;***********************************************************************
+
+      bank   dacOutVal
+      snb    dacEnable
+      jmp    :Continue
+      clr    dacOutVal
+      jmp    :dacOut
+:Continue
+      inc    dacOutVal
+      cjb    dacOutVal, #250, :dacOut
+      clr    dacOutVal
+:dacOut
+      mov    DAC_PORT, dacOutVal
+          
+isrOut
+      mov    w, #-int_period
+      retiw
+                                    
+      org    MAIN_ORG
+      
+Main    
+      page   _Main
+      jmp    _Main
+
+      org    MAIN_PROGRAM_ORG
+      
+_Main
+      mov    w, #RC_latch   ;Initialize RC data latch
+      mov    rc, w      
+      mode   DDIR_W         ; point MODE to write DDIR register
+      mov    w, #RC_DDIR    ; Setup RC Direction register
+      mov    !rc, w       
+
+include "Clr2x.inc"
+
+RTCC_ON      =  %10000000   ; Enables RTCC at address $01 (RTW hi)
+                            ; *WREG at address $01 (RTW lo) by
+                            ; default
+RTCC_PS_OFF  =  %00001000   ; Assigns prescaler to RTCC (PSA lo)
+PS_111       =  %00000111   ; RTCC = 1:256, WDT = 1:128
+
+OPTIONSETUP  equ RTCC_ON | RTCC_PS_OFF | PS_111
+
+      mov    !option, #OPTIONSETUP
+      bank   localTemp0
+      setb   dacEnable
+mainLoop
+      decsz  localTemp0
+        jmp  mainLoop
+      decsz  localTemp1
+        jmp  mainLoop
+      decsz  localTemp2
+        jmp  mainLoop
+      toggleDac
+      jmp    mainLoop  
+
+END

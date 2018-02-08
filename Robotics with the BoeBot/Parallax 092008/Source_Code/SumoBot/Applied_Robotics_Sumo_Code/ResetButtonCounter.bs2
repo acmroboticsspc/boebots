@@ -1,0 +1,28 @@
+' Applied Robotics with the SumoBot - ResetButtonCounter.bs2
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+EepromCounter DATA 0
+
+temp VAR Byte
+
+READ EepromCounter, temp
+
+temp = temp + 1
+
+WRITE EepromCounter, temp
+
+temp = temp - 1
+
+IF temp = 0 THEN
+  DEBUG "Since download, you have", CR,
+        "pressed Reset ", DEC temp,
+        " times.", CR
+ELSE
+  DEBUG CRSRX, 11, "...", DEC temp,
+        " times.", CR
+ENDIF
+
+END
+

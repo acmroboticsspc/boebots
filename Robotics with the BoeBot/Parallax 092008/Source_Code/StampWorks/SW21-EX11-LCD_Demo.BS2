@@ -1,0 +1,167 @@
+' =========================================================================
+'
+'   File....... SW21-EX11-LCD_Demo.BS2
+'   Purpose.... Essential LCD control
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 15 AUG 2006
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates essential character LCD control.
+'
+' The connections for this program conform to the BS2p-family LCDCMD,
+' LCDIN, and LCDOUT instructions.  Use this program for the BS2, BS2e,
+' or BS2sx.  There is a separate program for the BS2p, BS2pe, and BS2px.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+E               PIN     1                       ' Enable pin
+RW              PIN     2                       ' Read/Write
+RS              CON     3                       ' Register Select
+LcdBus          VAR     OUTB                    ' 4-bit LCD data bus
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+LcdCls          CON     $01                     ' clear the LCD
+LcdHome         CON     $02                     ' move cursor home
+LcdCrsrL        CON     $10                     ' move cursor left
+LcdCrsrR        CON     $14                     ' move cursor right
+LcdDispL        CON     $18                     ' shift chars left
+LcdDispR        CON     $1C                     ' shift chars right
+
+LcdDDRam        CON     $80                     ' Display Data RAM control
+LcdCGRam        CON     $40                     ' Character Generator RAM
+LcdLine1        CON     $80                     ' DDRAM address of line 1
+LcdLine2        CON     $C0                     ' DDRAM address of line 2
+
+
+#DEFINE _LcdReady = ($STAMP >= BS2P)
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+char            VAR     Byte                    ' character sent to LCD
+idx             VAR     Byte                    ' loop counter
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+Msg             DATA    "The BASIC STAMP!", 0   ' store message
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Check_Stamp:
+  #IF (_LcdReady) #THEN
+    #ERROR "Please use BS2p version: SW21-EX11-LCD_Demo.BSP"
+  #ENDIF
+
+  DIRL = %11111110                              ' setup pins for LCD
+  PAUSE 100                                     ' let the LCD settle
+
+Lcd_Setup:
+  LcdBus = %0011                                ' 8-bit mode
+  PULSOUT E, 3
+  PAUSE 5
+  PULSOUT E, 3
+  PULSOUT E, 3
+  LcdBus = %0010                                ' 4-bit mode
+  PULSOUT E, 1
+  char = %00001100                              ' on, no crsr, no blink
+  GOSUB LCD_Cmd
+  char = %00000110                              ' inc crsr, no disp shift
+  GOSUB LCD_Cmd
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  char = LcdCls                                 ' clear the LCD
+  GOSUB LCD_Cmd
+  PAUSE 500
+  idx = Msg                                     ' get EE address of message
+
+Write_Message:
+  DO
+    READ idx, char                              ' get character from EE
+    IF (char = 0) THEN EXIT                     ' if 0, message is complete
+    GOSUB LCD_Out                               ' write the character
+    idx = idx + 1                               ' point to next character
+  LOOP
+  PAUSE 2000                                    ' wait 2 seconds
+
+Cursor_Demo:
+  char = LcdHome                                ' move the cursor home
+  GOSUB LCD_Cmd
+  char = %00001110                              ' turn the cursor on
+  GOSUB LCD_Cmd
+  PAUSE 500
+
+  char = LcdCrsrR
+  FOR idx = 1 TO 15                             ' move cursor l-to-r
+    GOSUB LCD_Cmd
+    PAUSE 150
+  NEXT
+
+  FOR idx = 14 TO 0                             ' move cursor r-to-l by
+    char = LcdDDRam + idx                       '  moving to a specific
+    GOSUB LCD_Cmd                               '   column
+    PAUSE 150
+  NEXT
+
+  char = %00001101                              ' cursor off, blink on
+  GOSUB LCD_Cmd
+  PAUSE 2000
+
+  char = %00001100                              ' blink off
+  GOSUB LCD_Cmd
+
+Flash_Demo:
+  FOR idx = 1 TO 10                             ' flash display
+    char = char ^ %00000100                     ' toggle display bit
+    GOSUB LCD_Cmd
+    PAUSE 250
+  NEXT
+  PAUSE 1000
+
+Shift_Demo:
+  FOR idx = 1 TO 16                             ' shift display
+    char = LcdDispR
+    GOSUB LCD_Cmd
+    PAUSE 100
+  NEXT
+  PAUSE 1000
+
+  FOR idx = 1 TO 16                             ' shift display back
+    char = LcdDispL
+    GOSUB LCD_Cmd
+    PAUSE 100
+  NEXT
+  PAUSE 1000
+
+  GOTO Main                                     ' do it all over
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+LCD_Cmd:
+  LOW RS                                        ' enter command mode
+
+
+LCD_Out:
+  LcdBus = char.HIGHNIB                         ' output high nibble
+  PULSOUT E, 3                                  ' strobe the Enable line
+  LcdBus = char.LOWNIB                          ' output low nibble
+  PULSOUT E, 3
+  HIGH RS                                       ' return to character mode
+  RETURN

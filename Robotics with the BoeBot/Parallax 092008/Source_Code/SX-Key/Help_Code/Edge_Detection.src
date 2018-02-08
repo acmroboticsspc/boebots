@@ -1,0 +1,74 @@
+;=======================================================================
+;TITLE:         Edge_Detection.src
+;
+;PURPOSE:       This SX28 code demonstrates setup and use of Edge Detection.
+;
+;AUTHOR:        Parallax, Inc.
+;
+;REVISIONS:
+;  08/12/99 -   Initial Release
+;  09/17/04 -   Updated to support SASM
+;
+;CONNECTIONS:
+;  For circuit simplicity, this code has internal pull-up resisters
+;  configured on all Port B pins.  Simply connect at least one Port B pin
+;  to a button and connect the other end of the button to ground.
+;
+;DETAILS:
+;  To configure Edge Detection, the Wake-Up Edge register must be set and
+;  the Wake-Up Pending register must be cleared.  It is important to clear
+;  the Wake-Up Pending register at initialization.  The Wake-Up Pending
+;  register defaults to all ones ($FF).
+;
+;  Use Run -> Debug (CTRL+D) to program the SX chip.  After it has 
+;  programmed and the Debug screens appear, click on the Poll button to
+;  run the code in polling mode.  The code will run full speed, but will
+;  update the screen at the BREAK directive (below).  Try pressing the 
+;  a button you connected to a Port B pin while watching the W register.
+;  You should see the corresponding bits in W change to 1 briefly 
+;  (indicating the detection and clearing of the edge).
+;=======================================================================
+
+
+;-------------------------- DEVICE DIRECTIVES --------------------------
+
+		DEVICE		SX28,OSC4MHZ,TURBO
+
+IFDEF	__SASM  ;SASM Directives
+		DEVICE		STACKX,OPTIONX
+		IRC_CAL		IRC_SLOW
+		
+ELSE		;Parallax Assember Directives
+		DEVICE		STACKX_OPTIONX
+ENDIF
+
+		RESET		Initialize
+
+;---------------------------- DEBUG SETTINGS ---------------------------
+
+		FREQ	4_000_000
+	
+;------------------------ INITIALIZATION ROUTINE -----------------------
+
+Initialize
+		;Edge Detection Configuration
+		mov	W,#$1A			;Allow Edge configuration
+		mov	M,W				
+		mov	!rb,#%11111111		;Port B bits 0-7 to falling edge
+
+		mov	W,#$1E			;Allow Pull-up configuration
+		mov	M,W				
+		mov	!rb,#%00000000		;Port B bits 0-7 with pullups
+
+		mov	W,#$1F			;Allow Direction configuration
+		mov	M,W				
+		mov	!rb,#%11111111		;Port B bits 0-7 to input direction
+
+;---------------------------- MAIN PROGRAM -----------------------------
+
+Main
+		mode	$09		;Set Mode to allow checking Wake-Up Pending register
+		mov	!rb,#%00000000	;Perform swap between W and WKPND_B (Clear WKPND_B)
+		BREAK			;Break to update screen during debug
+		jmp	Main		;At this point, W should be checked for
+					;high bits, indicating a falling edge occured

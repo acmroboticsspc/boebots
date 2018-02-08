@@ -1,0 +1,60 @@
+' -----[ Title ]---------------------------------------------------
+'
+' File......  SLAVE1.BS2
+' Purpose...  Communication in BASIC Stamp Network - Slave #1
+' Author....  Claus Kühnel
+' Started...   8.10.94
+' Updated...  24.09.01
+'
+' -----[ Program Description ]-------------------------------------
+'
+' In this demonstration three BASIC Stamps build a network.
+' The master sends commands to the two slaves named A_Node and
+' B_Node. After execution the required function the slave sends a
+' return value back to the master.
+'
+' -----[ Revision History ]----------------------------------------
+'
+'  8.10.94: Version 1.0 for BS1
+' 24.09.01: Version 2.0 for BS2
+'
+' -----[ Directives ]----------------------------------------------
+'
+'{$STAMP BS2} 			'specifies a BS2
+' 
+' -----[ Constants ]-----------------------------------------------
+'
+RxD 	con 8
+TxD 	con 9
+LED 	con 10
+
+baud_in 	con 396			'T2400
+baud_out	con 396+$8000		'OT2400
+'
+' -----[ Variables ]-----------------------------------------------
+'
+command 	var byte
+'
+' -----[ Initialization ]------------------------------------------
+'
+	low LED
+'
+' -----[ Main Code ]-----------------------------------------------
+'
+start:	serin RxD, baud_in, [wait("A_Node"), command]
+	if command = "1" then LED_ON
+	if command = "0" then LED_OFF
+	goto start
+
+LED_ON:	
+	high LED
+	serout TxD, baud_out, [command]
+	goto start
+
+LED_OFF:
+	low LED
+	serout TxD, baud_out, [command]
+	goto start
+'
+' -----[ Subroutines ]---------------------------------------------
+'

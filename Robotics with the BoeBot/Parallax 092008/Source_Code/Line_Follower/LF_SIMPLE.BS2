@@ -1,0 +1,90 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' File...... LF_SIMPLE.BS2
+' Purpose... Simple Line Follower
+' Author.... Parallax
+' E-mail.... stamptech@parallaxinc.com
+' { $STAMP BS2 }
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program uses a very simple approach to follow a thin black line on
+' a white field. A test track can be created using a large sheet of white
+' construction paper and a wide-tipped black marking pen. The line width
+' should be just as wide as one sensing element.
+' -----[ Revision History ]-----------------------------------------------------
+'
+' 01 DEC 2001 - Version 1.0
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+LMotor CON 15 ' servo motor connections
+RMotor CON 14
+' -----[ Constants ]------------------------------------------------------------
+'
+LEDon CON 0 ' LF LEDs are active low
+LEDoff CON 1
+WLine CON 0 ' white line on black field
+BLine CON 1 ' black line on white field
+LFmode CON BLine ' set for black line
+MStop CON 750 ' motor stop
+Speed100 CON 125 ' full speed
+Speed075 CON 50 ' three-quarter speed
+Speed050 CON 40 ' half speed
+' -----[ Variables ]------------------------------------------------------------
+'
+ledPos VAR Nib ' LED position in lfBits
+lfBits VAR Byte ' line follower reading
+lastBits VAR Byte ' previous reading
+steer VAR Nib ' steering control
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+OutL = %01111100 ' all LF LEDs off
+DirL = %01111100 ' make pins outputs
+lastBits = %00100 ' assume starting straight
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+GOSUB Read_Line_Follower ' read the Line Follower
+Steer_Robot:
+steer = NCD lfBits ' get highest "on" bit
+BRANCH steer,[Off_Line, Hard_Right, Right, Straight, Left, Hard_Left]
+Save_Last:
+lastBits = lfBits ' save last reading
+GOTO Main
+' -----[ Subroutines ]----------------------------------------------------------
+'
+Read_Line_Follower:
+lfBits = 0 ' clear last reading
+FOR ledPos = 2 TO 6
+OutL.LowBit(ledPos) = LEDon ' turn the LED on
+PAUSE 1 ' allow sensor to read
+lfBits.LowBit(ledPos) = In9 ^ LFmode ' record the sensor reading
+OutL = OutL | %01111100 ' turn LEDs off
+NEXT
+lfBits = lfBits >> 2 ' shift bits to zero index
+RETURN
+Off_Line:
+lfBits = lastBits ' get last known position
+GOTO Steer_Robot
+Hard_Right:
+PULSOUT LMotor, MStop + Speed075 ' slow a bit on left
+PULSOUT RMotor, MStop ' stop right motor
+GOTO Save_Last
+Right:
+PULSOUT LMotor, MStop + Speed100 ' full speed on left
+PULSOUT RMotor, MStop - Speed050 ' slow right motor
+GOTO Save_Last
+Straight:
+PULSOUT LMotor, MStop + Speed100 ' both motors forward
+PULSOUT RMotor, MStop - Speed100
+GOTO Save_Last
+Left:
+PULSOUT LMotor, MStop + Speed050 ' slow left motor
+PULSOUT RMotor, MStop - Speed100 ' full speed on right
+GOTO Save_Last
+Hard_Left:
+PULSOUT LMotor, MStop ' stop left motor
+PULSOUT RMotor, MStop - Speed075
+GOTO Save_Last

@@ -1,0 +1,310 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 4.2: Advanced Walking
+' Demonstrates the use of basic and advanced tables for figure 8s
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+TiltServo       CON     13              ' Tilt servo on P12
+StrideServo     CON     12              ' Stride servo on P13
+LineFeed        CON     10              ' Line Feed
+
+' -----[ Constants ]-------------------------------------------------------
+
+MoveDelay       CON     18              ' in milliseconds
+
+TiltStep        CON     5               ' TiltServo step size
+
+RightTilt       CON     620             ' Tilt limits was 620
+CenterTilt      CON     750             ' was 750
+LeftTilt        CON     880             ' was 880
+
+
+StrideStep      CON     5               ' StrideServo step size
+
+RightStride     CON     650             ' Stride limits was 650
+CenterStride    CON     750             ' was 750
+LeftStride      CON     850             ' was 850
+
+' -----[ Variables ]-------------------------------------------------------
+
+FigureLoop      VAR     Nib
+MoveLoop        VAR     Byte            ' Loop for repeat movements
+MoveLoopLimit   VAR     Byte
+
+SubMoveLoop     VAR     Byte            ' Loop for repeat submovements
+SubMoveLoopLmt  VAR     Byte
+
+Pulses          VAR     Word            ' Pulse variable
+
+CurrentTilt     VAR     Word
+CurrentStride   VAR     Word
+NewValue        VAR     Word
+
+Dx              VAR     Pulses
+
+Mx              VAR     Word
+MxCurrent       VAR     Word
+
+Sx              VAR     Word
+SxCurrent       VAR     Word
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+' ------Movement Support Codes
+' The following state tables are lists of movement state numbers.
+' A xx indicates the end of a list.
+' These are used with the Movement routine.
+
+TL              CON     0
+TC              CON     1
+TR              CON     2
+
+SL              CON     3
+SC              CON     4
+SR              CON     5
+
+xx              CON     255
+
+
+' ----- Movement Value Tables ------
+'
+' These can be used with the Movement routine.
+' The tables can contain Basic Movement Codes.
+'
+' Note: ALL movement tables must be in this section
+
+LeftSemicircle  DATA    7, bLeftTurn,  bLeftTurn,  bForward, xx
+RightSemicircle DATA    7, bRightTurn, bRightTurn, bForward, xx
+
+WalkForward3    DATA    3, bForward, xx
+WalkForward8    DATA    8, bForward, xx
+WalkForward1    DATA    1, bForward, xx
+WalkBackward8   DATA    8, bBackward, xx
+PivotLeft4      DATA    4, bPivotLeft, bForward, xx
+
+' ------ Basic Movement Codes ------
+'
+' Used in Movement tables.
+' Referenced below using LOOKUP statement.
+
+bFinish         CON     0
+bForward        CON     1
+bBackward       CON     2
+bLeftTurn       CON     3
+bRightTurn      CON     4
+bPivotLeft      CON     5
+bPivotRight     CON     6
+
+' ------ Basic Movement Tables ------
+'
+' These tables can contain Movement Support Codes.
+
+BasicMovements  CON     Forward
+
+Forward         DATA    1, TR, SL, TL, SR, xx
+Backward        DATA    1, TR, SR, TL, SL, xx        
+
+LeftTurn        DATA    1, TL, SR, TC, SL, TL, SR, TR, SL, xx
+RightTurn       DATA    1, TR, SL, TC, SR, TR, SL, TL, SR, xx
+
+PivotLeft       DATA    3, TL, SR, TC, SL, TR, SR, TC, SL, xx
+PivotRight      DATA    3, TR, SL, TC, SR, TL, SL, TC, SR, xx
+
+Finish          DATA    1, TR, SC, TC, xx
+
+GOSUB ResetCC
+
+'DEBUG "Forward = ", HEX Forward, CR,LineFeed
+'DEBUG "Backward = ", HEX Backward, CR,LineFeed
+'DEBUG "LeftTurn = ", HEX LeftTurn, CR,LineFeed
+'DEBUG "RightTurn = ", HEX RightTurn, CR,LineFeed
+'DEBUG "PivotLeft = ", HEX PivotLeft, CR,LineFeed
+'DEBUG "PivotRight = ", HEX PivotRight, CR,LineFeed
+'DEBUG "LeftSemicircle = ", HEX LeftSemicircle, CR,LineFeed
+'DEBUG "RightSemicircle = ", HEX RightSemicircle, CR,LineFeed
+'DEBUG "WalkForward3 = ", HEX WalkForward3, CR,LineFeed
+'DEBUG "WalkForward8 = ", HEX WalkForward8, CR,LineFeed
+'DEBUG "WalkForward1 = ", HEX WalkForward1, CR,LineFeed
+'DEBUG "WalkBackward8 = ", HEX WalkBackward8, CR,LineFeed
+'DEBUG "PivotLeft4 = ", HEX PivotLeft4, CR,LineFeed
+'DEBUG "Finish = ", HEX Finish, CR,LineFeed
+
+' -----[ Main Code ]-------------------------------------------------------
+
+Main_Program:
+
+  GOSUB ResetCC
+
+  ' Make a Figure 8
+
+  FOR FigureLoop = 1 TO 5
+    Mx = LeftSemicircle
+    GOSUB Movement
+
+    Mx = WalkForward3
+    GOSUB Movement
+
+    Mx = RightSemicircle
+    GOSUB Movement
+
+    Mx = WalkForward3
+    GOSUB Movement
+  NEXT
+
+
+  ' Make a big polygon
+
+  FOR FigureLoop = 1 TO 5
+    Mx = PivotRight
+    GOSUB Movement
+
+    Mx = WalkForward8
+    GOSUB Movement
+  NEXT
+
+  Mx = Finish
+  GOSUB Movement
+END
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' ----- Movement: Move feet using DATA table referenced by Mx -----
+'
+' Input: Mx = movement table index, table ends in xx
+'    or
+'        Mx = submovement table index, table ends in xx
+'
+' Note: All submovement tables come after the movment tables in this file.
+
+Movement:
+  IF Mx < BasicMovements THEN SetupMovement
+  'DEBUG cr,"use submovements",cr
+  Sx = Mx                               ' setup for submovement table only
+  GOSUB StartSubMovement                ' one pass through submovement table
+  RETURN
+
+SetupMovement:
+  READ Mx, MoveLoopLimit                ' read movement table repeat count
+  Mx = Mx + 1
+
+StartMovement:
+  FOR MoveLoop = 1 TO MoveLoopLimit
+  'DEBUG cr,cr, hex (Mx-1), " Start Movement ", dec MoveLoop, " of "
+  'DEBUG dec MoveLoopLimit,cr
+  MxCurrent = Mx                        ' start of movements
+
+MovementLoop:
+  READ MxCurrent, Sx                    ' read next submovment byte
+  MxCurrent = MxCurrent + 1
+  'DEBUG cr, "  SX = ", dec Sx, " movement"
+  IF Sx = xx THEN MovementDone
+                                        ' skip if end of list
+  LOOKUP Sx,[Finish,Forward,Backward,LeftTurn,RightTurn,
+  PivotLeft,PivotRight],Sx
+                                        ' lookup submovement table index
+  GOSUB StartSubMovement
+  GOTO MovementLoop
+
+MovementDone:
+  NEXT
+  RETURN
+
+'--------
+
+StartSubMovement:                       ' start executing submovement table
+  READ Sx, SubMoveLoopLmt
+                                        ' read submovement table repeat count
+  Sx = Sx + 1
+
+  FOR SubMoveLoop = 1 TO SubMoveLoopLmt
+    'DEBUG cr, "      SX = ", hex (Sx-1), " submovement ", dec SubMoveLoop
+    'DEBUG " of ", dec SubMoveLoopLmt, "  "
+    SxCurrent = Sx
+
+SubMovementLoop:
+    READ SxCurrent, Dx                  ' read next submovement action
+    SxCurrent = SxCurrent + 1
+
+    IF Dx = xx THEN SubMovementDone
+                                        ' skip if end of list
+    GOSUB DoMovement                    ' execute movement
+    GOTO SubMovementLoop
+
+SubMovementDone:
+    NEXT
+    RETURN
+
+DoMovement:
+  BRANCH Dx,[TiltLeft,TiltCenter,TiltRight,StrideLeft,
+  StrideCenter,StrideRight]
+                                        ' will fall through if invalid index
+  RETURN
+
+' ----  Movement routines can be called directly as subroutines
+
+TiltLeft:
+  NewValue = LeftTilt
+  'DEBUG "TL, "
+  GOTO MovementTilt
+
+TiltCenter:
+  NewValue = CenterTilt
+  'DEBUG "TC, "
+  GOTO MovementTilt
+
+TiltRight:
+  NewValue = RightTilt
+  'DEBUG "TR, "
+
+MovementTilt:
+  FOR Pulses = CurrentTilt TO NewValue STEP TiltStep
+    PULSOUT TiltServo,   Pulses
+    PULSOUT StrideServo, CurrentStride
+    PAUSE MoveDelay
+  NEXT
+
+  CurrentTilt = NewValue
+  RETURN
+
+StrideLeft:
+  NewValue = LeftStride
+  'DEBUG "SL, "
+  GOTO MovementStride
+
+StrideCenter:
+  NewValue = CenterStride
+  'DEBUG "SC, "
+  GOTO MovementStride
+
+StrideRight:
+  NewValue = RightStride
+  'DEBUG "SR, "
+
+MovementStride:
+  FOR Pulses = CurrentStride TO NewValue STEP StrideStep
+    PULSOUT TiltServo,   CurrentTilt
+    PULSOUT StrideServo, Pulses
+    PAUSE MoveDelay
+  NEXT
+
+  CurrentStride = NewValue
+  RETURN
+
+' ----- Move feet to initial center position -----
+
+ResetCC:
+  CurrentTilt   = CenterTilt
+  CurrentStride = CenterStride
+  'DEBUG "resetCC", CR, LineFeed
+
+  FOR Pulses = 1 TO 500 STEP StrideStep
+    PULSOUT TiltServo, CenterTilt
+    PULSOUT StrideServo, CenterStride
+    PAUSE MoveDelay
+  NEXT
+
+DoReturn:
+  RETURN

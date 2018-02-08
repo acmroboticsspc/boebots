@@ -1,0 +1,540 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - SumoWrestlerWithDataLogMode.bs2
+' SumoWrestler.bs2 modified so that each state is contained by a
+' subroutine.
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ Compiler Definitions ]-----------------------------------------------
+
+#DEFINE DEBUG_MODE = 0                       ' 0 -> wrestle
+                                             ' 1 -> display
+#DEFINE DATALOG_MODE = 1                     ' 0 -> No log
+                                             ' 1 -> log round
+                                             ' 2 -> display log
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+ServoLeft      PIN     13                    ' Left servo connected to P13
+ServoRight     PIN     12                    ' Right servo connected to P12
+
+qtiPwrLeft     PIN     10                    ' Left QTI on/off pin P10
+qtiSigLeft     PIN     9                     ' Left QTI signal pin P9
+
+qtiPwrRight    PIN     7                     ' Right QTI on/off pin P7
+qtiSigRight    PIN     8                     ' Right QTI signal pin P8
+
+DummyPin       PIN     6                     ' I/O pin for pulse-decay P6
+
+LedSpeaker     PIN     5                     ' LED & speaker connected to P5
+
+IrLedLS        PIN     2                     ' Left IR LED connected to P2
+IrSenseLS      PIN     1                     ' Left IR detector to P1
+
+IrLedLF        PIN     4                     ' Left IR LED connected to P4
+IrSenseLF      PIN     11                    ' Left IR detector to P11
+
+IrLedRF        PIN     15                    ' Right IR LED connected to P15
+IrSenseRF      PIN     14                    ' Right IR detector to P14
+
+IrLedRS        PIN     3                     ' Right IR LED connected to P3
+IrSenseRS      PIN     0                     ' Right IR detector to P0
+
+' -----[ Constants ]----------------------------------------------------------
+
+' SumoBot maneuvers
+
+Forward        CON     0                     ' Forward
+Backward       CON     1                     ' Backward
+RotateLeft     CON     2                     ' RotateLeft
+RotateRight    CON     3                     ' RotateRight
+PivotLeft      CON     4                     ' Pivot to the left
+PivotRight     CON     5                     ' Pivot to the right
+CurveLeft      CON     6                     ' Curve to the left
+CurveRight     CON     7                     ' Curve to the right
+
+' Servo pulse width rotations
+
+FS_CCW         CON     850                   ' Full speed counterclockwise
+FS_CW          CON     650                   ' Full speed clockwise
+NO_ROT         CON     750                   ' No rotation
+LS_CCW         CON     770                   ' Low speed counterclockwise
+LS_CW          CON     730                   ' Low speed clockwise
+
+' IR object detectors
+
+IrFreq         CON     38500                 ' IR LED frequency
+
+#IF DEBUG_MODE = 1 OR DATALOG_MODE > 0 #THEN
+  ' State constants.
+  ATL          CON     0                     ' Avoid_Tawara_Left
+  ATR          CON     1                     ' Avoid_Tawara_Right
+  GF           CON     2                     ' Go-Forward
+  TFLO         CON     3                     ' Track_Front_Left_Object
+  TFRO         CON     4                     ' Track_Front_Right_Object
+  TSLO         CON     5                     ' Track_Side_Left_Object
+  TSRO         CON     6                     ' Track_Side_Right_Object
+  SP           CON     7                     ' Search_Pattern
+#ENDIF
+
+#IF DATALOG_MODE > 0 #THEN
+
+  ' Datalogging constants
+
+  MaxBytes     CON     $150 - $10            ' Maximum number of bytes stored
+
+#ENDIF
+
+' -----[ Variables ]----------------------------------------------------------
+
+temp           VAR     Word                  ' Temporary variable
+multi          VAR     Word                  ' Multipurpose variable
+counter        VAR     Byte                  ' Loop counting variable.
+
+maneuver       VAR     Nib                   ' SumoBot travel maneuver
+
+sensors        VAR     Byte                  ' Sensor flags byte
+
+qtiLF          VAR     sensors.BIT5          ' Stores snapshot of QtiSigLeft
+qtiRF          VAR     sensors.BIT4          ' Stores snapshot of QtiSigRight
+
+irLS           VAR     sensors.BIT3          ' State of Left Side IR
+irLF           VAR     sensors.BIT2          ' State of Left Front IR
+irRF           VAR     sensors.BIT1          ' State of Right Front IR
+irRS           VAR     sensors.BIT0          ' State of Right Side IR
+
+state          VAR     Nib                   ' State machine value
+
+#IF DATALOG_MODE > 0 #THEN
+  logIndex     VAR     Word                  ' Stores EEPROM index
+#ENDIF
+
+' -----[ EEPROM Data ]--------------------------------------------------------
+
+RunStatus      DATA    0                     ' Run status EEPROM byte
+QtiThresh      DATA    Word 0                ' Word for QTI threshold time
+
+#IF DATALOG_MODE = 1 #THEN
+  LogData      DATA    @$10, 0 (MaxBytes)    ' EEPROM data recording space
+#ENDIF
+
+#IF DATALOG_MODE = 2 #THEN
+  LogData      DATA    @$10, (MaxBytes)      ' EEPROM playback space
+#ENDIF
+
+' -----[ Initialization ]-----------------------------------------------------
+
+GOSUB Reset                                  ' Wait for Reset press/release
+GOSUB Start_Delay                            ' 5 Second delay
+GOSUB Calibrate_Qtis                         ' Determine b/w threshold
+
+#IF DEBUG_MODE = 1 OR DATALOG_MODE = 2 #THEN
+  DEBUG CLS,
+        "Sensors   State     Maneuver", CR,  ' Display table heading
+        "--------  --------  --------", CR
+#ENDIF
+
+#IF DATALOG_MODE = 2 #THEN
+  GOTO Playback_Round                        ' Alternate main routine
+#ENDIF
+
+GOSUB Look_About                             ' Was Goto Look_About
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+DO
+
+  IF qtiLF = 1 THEN                          ' Left qti sees line?
+    GOSUB Avoid_Tawara_Left                  ' State = avoid left tawara
+  ELSEIF qtiRF = 1 THEN                      ' Right qti sees line?
+    GOSUB Avoid_Tawara_Right                 ' State = avoid right tawara
+  ELSEIF irLF = 1 AND irRF = 1 THEN          ' Both? Lunge forward
+    GOSUB Go_Forward                         ' State = Go forward
+  ELSEIF irLF = 1 THEN                       ' Just left?
+    GOSUB Track_Front_Left_Object            ' State = Track front left obj.
+  ELSEIF irRF = 1 THEN                       ' Just right?
+    GOSUB Track_Front_Right_Object           ' State = Track front right obj.
+  ELSEIF irLS = 1 THEN                       ' Left side?
+    GOSUB Track_Side_Left_Object             ' State = track side left obj.
+  ELSEIF irRS = 1 THEN                       ' Right side?
+    GOSUB Track_Side_Right_Object            ' State = track side right obj.
+  ELSE                                       ' Nothing sensed?
+    GOSUB Search_Pattern                     ' State = Search pattern
+  ENDIF
+
+LOOP
+
+#IF DATALOG_MODE = 2 #THEN
+
+  Playback_Round:
+
+    FOR logIndex = 0 TO MaxBytes STEP 2      ' Loop gets all records
+
+      READ LogData + logIndex, Word temp     ' Get record
+      sensors = temp.HIGHBYTE                '
+      state = temp.NIB1
+      maneuver = temp.NIB0
+      GOSUB Display_All
+
+    NEXT
+
+    END
+
+#ENDIF
+
+' -----[ Subroutine - Reset ]-------------------------------------------------
+
+Reset:
+
+  READ RunStatus, temp                       ' Byte @RunStatus -> temp
+  temp = temp + 1                            ' Increment temp
+  WRITE RunStatus, temp                      ' Store new value for next time
+
+  IF (temp.BIT0 = 1) THEN                    ' Examine temp.BIT0
+    DEBUG CLS, "Press/release Reset", CR,    ' 1 -> end, 0 -> keep going
+               "button..."
+    END
+  ELSE
+    DEBUG CR, "Program running..."
+  ENDIF
+
+  RETURN
+
+' -----[ Subroutine - Start_Delay ]-------------------------------------------
+
+Start_Delay:
+
+  FOR counter = 1 TO 5                       ' 5 beeps, 1/second
+    PAUSE 900
+    FREQOUT LedSpeaker, 100, 3000
+  NEXT
+
+  RETURN
+
+' -----[ Subroutine - Calibrate_Qtis ]----------------------------------------
+
+Calibrate_Qtis:
+
+  HIGH qtiPwrLeft                            ' Turn left QTI on
+  HIGH qtiSigLeft                            ' Discharge capacitor
+  PAUSE 1
+
+  RCTIME qtiSigLeft, 1, temp                 ' Measure charge time
+
+  LOW qtiPwrLeft                             ' Turn left QTI off
+  multi = temp                               ' Free temp for another RCTIME
+
+  HIGH qtiPwrRight                           ' Turn right QTI on
+  HIGH qtiSigRight                           ' Discharge capacitor
+  PAUSE 1
+  RCTIME qtiSigRight, 1, temp                ' Measure charge time
+
+  multi = (multi + temp) / 2                 ' Calculate average
+
+  multi = multi / 4                          ' Take 1/4 average
+
+  IF multi > 220 THEN                        ' Account for code overhead
+    multi = multi - 220
+  ELSE
+    multi = 0
+  ENDIF
+
+  WRITE QtiThresh, Word multi                ' Threshold to EEPROM
+
+  RETURN
+
+' -----[ Subroutine - Servos_And_Sensors ]------------------------------------
+
+Servos_And_Sensors:
+
+  #IF DEBUG_MODE = 1 #THEN
+    GOSUB Display_All                        ' Call Display_All subroutine
+  #ENDIF
+
+  #IF DATALOG_MODE = 1 #THEN
+    temp.HIGHBYTE = sensors                  ' Copy values to parts of temp
+    temp.NIB1 = state
+    temp.NIB0 = maneuver
+    WRITE LogData + LogIndex, Word temp      ' Store record in EEPROM
+    logIndex = logIndex + 2                  ' Word values -> index + 2
+    IF logIndex >= (LogData + MaxBytes) THEN END
+  #ENDIF
+
+  GOSUB Pulse_Servos                         ' Call Pulse_Servos subroutine
+
+  ' Call sensor subroutine(s).
+
+  sensors = 0                                ' Clear previous sensor values
+
+  GOSUB Read_Object_Detectors                ' Call Read_Object_Detectors
+  GOSUB Read_Line_Sensors                    ' Look for lines
+
+  RETURN
+
+' -----[ Subroutine - Pulse_Servos ]------------------------------------------
+
+Pulse_Servos:
+
+  ' Pulse to left servo
+  LOOKUP maneuver, [ FS_CCW, FS_CW, FS_CW, FS_CCW,
+                     NO_ROT, FS_CCW, LS_CCW, FS_CCW ], temp
+  PULSOUT ServoLeft, temp
+
+  ' Pulse to right servo
+  LOOKUP maneuver, [ FS_CW, FS_CCW, FS_CW, FS_CCW,
+                     FS_CW, NO_ROT, FS_CW, LS_CW ], temp
+  PULSOUT ServoRight, temp
+
+  ' Pause between pulses (remove when using IR object detectors + QTIs).
+  ' PAUSE 20
+
+  RETURN
+
+' -----[ Subroutine - Read_Object_Detectors ]---------------------------------
+
+Read_Object_Detectors:
+
+  FREQOUT IrLedRS, 1, IrFreq                 ' Right side IR LED headlight
+  irRS = ~IrSenseRS                          ' Save right side IR receiver
+
+  FREQOUT IrLedRF, 1, IrFreq                 ' Repeat for right-front
+  irRF = ~IrSenseRF
+
+  FREQOUT IrLedLF, 1, IrFreq                 ' Repeat for left-front
+  irLF = ~IrSenseLF
+
+  FREQOUT IrLedLS, 1, IrFreq                 ' Repeat for left side
+  irLS = ~IrSenseLS
+
+  RETURN
+
+' -----[ Subroutine - Read_Line_Sensors ]-------------------------------------
+
+Read_Line_Sensors:
+
+  HIGH qtiPwrLeft                            ' Turn on QTIs
+  HIGH qtiPwrRight
+  HIGH qtiSigLeft                            ' Push signal voltages to 5 V
+  HIGH qtiSigRight
+  PAUSE 1                                    ' Wait 1 ms for capacitors
+
+  READ QtiThresh, Word temp                  ' Get threshold time
+
+  INPUT qtiSigLeft                           ' Start the decays
+  INPUT qtiSigRight
+
+  PULSOUT DummyPin, temp                     ' Wait threshold time
+
+  qtiLF  = ~qtiSigLeft                       ' Snapshot of QTI signal states
+  qtiRF = ~qtiSigRight
+
+  LOW qtiPwrLeft                             ' Turn off QTIS
+  LOW qtiPwrRight
+
+  RETURN
+
+' -----[ Subroutine - Avoid_Tawara_Left ]-------------------------------------
+
+Avoid_Tawara_Left:
+
+  #IF DEBUG_MODE = 1 OR DATALOG_MODE =1 #THEN state = ATL #ENDIF
+
+  FOR counter = 1 TO 15                      ' Back up
+    maneuver = Backward
+    GOSUB Servos_And_Sensors
+  NEXT
+  FOR counter = 1 TO 15                      ' Turn right
+    maneuver = RotateRight
+    GOSUB Servos_And_Sensors
+  NEXT
+
+  RETURN
+
+' -----[ Subroutine - Avoid_Tawara_Right ]------------------------------------
+
+Avoid_Tawara_Right:
+
+  #IF DEBUG_MODE = 1 OR DATALOG_MODE =1 #THEN state = ATR #ENDIF
+
+  FOR counter = 1 TO 15                      ' Back up
+    maneuver = Backward
+    GOSUB Servos_And_Sensors
+  NEXT
+  FOR counter = 1 TO 15                      ' Turn left
+    maneuver = RotateLeft
+    GOSUB Servos_And_Sensors
+  NEXT
+
+  RETURN
+
+' -----[ Subroutine - Go_Forward ]--------------------------------------------
+
+Go_Forward:
+
+  #IF DEBUG_MODE = 1 OR DATALOG_MODE =1 #THEN state = GF #ENDIF
+
+  maneuver = Forward                         ' 1 forward pulse
+  GOSUB Servos_And_Sensors
+
+  RETURN
+
+' -----[ Subroutine - Track_Front_Left_Object ]-------------------------------
+
+Track_Front_Left_Object:
+
+  #IF DEBUG_MODE = 1 OR DATALOG_MODE =1 #THEN state = TFLO #ENDIF
+
+  counter = 0
+  DO UNTIL (irLF = 1 AND irRF = 1) OR counter > 15
+    maneuver = CurveLeft                     ' Curve left 15
+    GOSUB Servos_And_Sensors
+    counter = counter + 1
+  LOOP
+  DO UNTIL (irLF = 1 AND irRF = 1) OR counter > 30
+    maneuver = RotateLeft                    ' Rotate left 30
+    GOSUB Servos_And_Sensors
+    counter = counter + 1
+  LOOP
+
+  RETURN
+
+' -----[ Subroutine - Track_Front_Right_Object ]------------------------------
+
+Track_Front_Right_Object:
+
+  #IF DEBUG_MODE = 1 OR DATALOG_MODE =1 #THEN state = TFRO #ENDIF
+
+  counter = 0
+  DO UNTIL (irLF = 1 AND irRF = 1) OR counter > 15
+    maneuver = CurveRight                    ' Curve right 15
+    GOSUB Servos_And_Sensors
+    counter = counter + 1
+  LOOP
+  DO UNTIL (irLF = 1 AND irRF = 1) OR counter > 30
+    maneuver = RotateRight                   ' Rotate right 30
+    GOSUB Servos_And_Sensors
+    counter = counter + 1
+  LOOP
+
+  RETURN
+
+' -----[ Subroutine - Track_Side_Left_Object ]--------------------------------
+
+Track_Side_Left_Object:
+
+  #IF DEBUG_MODE = 1 OR DATALOG_MODE =1 #THEN state = TSLO #ENDIF
+
+  DO UNTIL irRF = 1 OR irLF = 1              ' Rotate left
+    maneuver = RotateLeft
+    GOSUB Servos_And_Sensors
+  LOOP
+
+  RETURN
+
+' -----[ Subroutine - Track_Side_Right_Object ]-------------------------------
+
+Track_Side_Right_Object:
+
+  #IF DEBUG_MODE = 1 OR DATALOG_MODE =1 #THEN state = TSRO #ENDIF
+
+  DO UNTIL irRF = 1 OR irLF = 1              ' Rotate right
+    maneuver = RotateRight
+    GOSUB Servos_And_Sensors
+  LOOP
+
+  RETURN
+
+' -----[ Subroutine - Search_Pattern ]----------------------------------------
+
+Search_Pattern:
+
+  #IF DEBUG_MODE = 1 OR DATALOG_MODE =1 #THEN state = SP #ENDIF
+
+  FOR counter = 1 TO 35                      ' and watch all sensors
+    maneuver = Forward                       ' Forward
+    GOSUB Servos_And_Sensors
+    IF sensors <> 0 THEN GOTO Next_State
+  NEXT
+
+  Look_About:
+
+  #IF DEBUG_MODE = 1 OR DATALOG_MODE =1 #THEN state = SP #ENDIF
+
+  FOR counter = 1 TO 12                      ' Look right
+    maneuver = RotateRight
+    GOSUB Servos_And_Sensors
+    IF sensors <> 0 THEN GOTO Next_State
+  NEXT
+  FOR counter = 1 TO 24                      ' Look left
+    maneuver = RotateLeft
+    GOSUB Servos_And_Sensors
+    IF sensors <> 0 THEN GOTO Next_State
+  NEXT
+  FOR counter = 1 TO 12                      ' Re-align to forward
+    maneuver = RotateRight
+    GOSUB Servos_And_Sensors
+    IF sensors <> 0 THEN GOTO Next_State
+  NEXT
+
+  Next_State:                                ' Exit point of search pattern
+
+  RETURN
+
+' -----[ Subroutine - Display_All ]-------------------------------------------
+
+#IF DEBUG_MODE = 1 OR DATALOG_MODE = 2 #THEN
+
+  Display_All:
+
+    DEBUG BIN8 sensors,                      ' Display sensors byte as bits
+          CRSRX, 10                          ' Cursor to column 10
+
+    SELECT state                             ' Display state
+      CASE ATL
+        DEBUG "ATL"
+      CASE ATR
+        DEBUG "ATR"
+      CASE GF
+        DEBUG "GF"
+      CASE TFLO
+        DEBUG "TFLO"
+      CASE TFRO
+        DEBUG "TFRO"
+      CASE TSLO
+        DEBUG "TSLO"
+      CASE TSRO
+        DEBUG "TSRO"
+      CASE SP
+        DEBUG "SP"
+    ENDSELECT
+
+    DEBUG CRSRX, 20                          ' Cursor to column 20
+
+    SELECT maneuver                          ' Display maneuver
+      CASE Forward
+        DEBUG "Fwd"
+      CASE Backward
+        DEBUG "Bkwd"
+      CASE RotateLeft
+        DEBUG "RotLft"
+      CASE RotateRight
+        DEBUG "RotRt"
+      CASE CurveLeft
+        DEBUG "CrvLft"
+      CASE CurveRight
+        DEBUG "CrvRt"
+    ENDSELECT
+
+    DEBUG CR                                 ' Carriage return for next line
+
+    #IF DEBUG_MODE = 1 #THEN
+      PAUSE 200                              ' Pause 0.2 seconds for reading
+    #ELSE
+      PAUSE 50
+    #ENDIF
+
+  RETURN
+
+#ENDIF
+

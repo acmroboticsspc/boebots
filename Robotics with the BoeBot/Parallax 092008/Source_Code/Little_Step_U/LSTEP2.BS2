@@ -1,0 +1,245 @@
+' ===========================================================================
+' ===========================================================================
+' A simple experiment to play with the Little Step-U
+' Runs a stepper motor backwards and forwards at various speeds
+' and using different modes of operation.
+' ===========================================================================
+' ===========================================================================
+
+' Little Step-U connected as follows
+
+'serial in	p10
+'busy		p12
+'ip2		p13
+'ip1		p14
+
+' ===========================================================================
+' The maximum speed depends on the motor. Change this constant for 
+' faster or slower operation.
+' ===========================================================================
+
+speed		con	200
+' ===========================================================================
+baud		con	396 	'baud setting is 396 for 2400
+
+
+' Variables used during remote operation of the motor where the Basic Stamp
+' controls each step and the direction.
+
+step_ctr	var	byte
+dir_ctr	var	nib
+
+' ===========================================================================
+' ===========================================================================
+' Set the initial state of the pins. The output register is set to 1 before
+' the pin is made an output to prevent a low going glitch.
+
+input	12			' Busy input
+out13 = 1			' Set bit high before making pin O/P
+output 13			' Change from being pulled high to being driven high
+out14 = 1			' Same for IP1
+output 14
+
+start:							' Used if program run in loop
+
+' ===========================================================================
+' The program may have been started while the Little Step-U was still
+' doing a move. ie. The reset button pressed. So wait for that to finish
+' before starting.
+' Put everything in a known state. The first command sets the speed to the 
+' value defined above, the ramp time to zero and the drive mode to full step.
+' Next the current position is defined as the home or 0 position ({Q}) and
+' the Little Step-U is instructed to turn the motor coils off when it isn't
+' moving ({P0}).
+' ===========================================================================
+
+debug CLS, "Little Step-U Demo", CR
+pause 100
+gosub CheckBusy						' Check Little Step-U is ready
+serout 10,baud,["{A", dec speed, ",0,0}"]		' Set speed, no ramp, full step
+serout 10,baud,["{Q}"]					' Set current position as home
+serout 10,baud,["{P0}"]					' Stopped power is off
+
+' ===========================================================================
+' Now do a simple move to an absolute position using the parameters just set.
+' Monitor the BUSY signal to determine when the move has been completed.
+' ===========================================================================
+
+debug "Move Absolute at ", dec speed, "steps/sec", CR
+serout 10,baud,["{D500}"]				' Go to position 500
+gosub CheckBusy						' Wait till it gets there
+pause 100
+
+' ===========================================================================
+' Use the relative move command to move backward and forward to arrive back
+' at the same position. Again, the BUSY signal is checked whenever the motor
+' is moving.
+' ===========================================================================
+
+debug "Move Relative backward", CR
+serout 10,baud,["{E-200}"]				' Go to position 300
+gosub CheckBusy						' Wait till it gets there
+pause 100
+debug "Move Relative forward", CR
+serout 10,baud,["{E200}"]				' Go to back to position 500
+gosub CheckBusy						' Wait till it gets there
+pause 500
+
+' ===========================================================================
+' Use the explicit "Go to home" command {N} to return to the position at
+' the start of the program. This command doesn't require any position
+' information so there are no numbers directly after the "N". However, we
+' want to specify a ramp time of 2.0 seconds and no change to the speed
+' setting. As the ramp time is the second parameter when it is used, there
+' are two commas before the number.
+' As there is no number between the first and second commas, the speed 
+' value will remain unchanged and if we also wanted to change the drive
+' method, we could follow the "20" with another comma, followed by 0, 1 or
+' 2.
+' After the move is complete, the ramp value is set back to 0 using the
+' explicit B command.
+' ===========================================================================
+
+debug "Go to home with 2 second ramp", CR
+serout 10,baud,["{N,,20}"]				' Go to home with 2.0 second ramp
+gosub CheckBusy						' Wait till it gets there
+serout 10,baud,["{B0}"]					' Turn off ramping
+
+' ===========================================================================
+' The {K} command instructs the motor to turn clockwise until the IP2 pin
+' is pulled low and to remember this position as the MARK. The motor is
+' also instructed to move slowly (5 steps/sec). In this case we use the 
+' Basic Stamp to generate the stop signal by pulsing the pin low for 1ms,
+' but this would typically be connected to a photo-interrupter. Although
+' we set the ramp to be zero in the command above, it is good practice to 
+' check the BUSY signal because the Little Step-U would ramp down after
+' the input pulse.
+' ===========================================================================
+
+debug "Search for mark at 5 steps/sec", CR
+serout 10,baud,["{K,5}"]				' Go till IP2 and mark
+pause 5000							' Let the motor run for a while
+out13 = 0							' Now pull IP2 low to stop it
+pause 1							' Hold it low for 1ms
+out13 = 1							' And take it high again
+gosub CheckBusy						' Need to wait for ramp to finish
+
+' ===========================================================================
+' Go back to our normal speed setting and return to the home position.
+' ===========================================================================
+
+debug "Return to home position", CR
+serout 10,baud,["{N,", dec speed, "}"]		' Go to home
+gosub CheckBusy
+pause 1000
+
+' ===========================================================================
+' Change to Wave drive and move to the position previously marked using the
+' M command.
+' ===========================================================================
+
+debug "Go to MARK using Wave drive", CR
+serout 10,baud,["{C1}"]					' Wave drive
+serout 10,baud,["{M}"]					' Go to mark
+gosub CheckBusy
+pause 1000
+
+' ===========================================================================
+' Now go back to the home position using the N command after setting to
+' Half-Step mode. Note that the speed, position and mark values are scaled
+' automatically so that the motor travels at the same rotational speed and
+' goes to the correct position.
+' ===========================================================================
+
+debug "Back to home using Half-Step drive", CR
+serout 10,baud,["{C2}"]					' Half step drive
+serout 10,baud,["{N}"]					' Go to home
+gosub CheckBusy
+pause 1000
+
+' ===========================================================================
+' Return to the standard Full-Step drive and move to the mark. Again, the
+' values are corrected for the change in mode.
+' ===========================================================================
+
+debug "To the MARK again with Full-Step drive", CR
+serout 10,baud,["{C0}"]					' Full step drive
+serout 10,baud,["{M}"]					' Go to mark
+gosub CheckBusy
+
+
+' ===========================================================================
+' Change the Little Step-U from an intelligent controller to a dumb slave
+' and have the Basic Stamp generate the step pulses and direction signal.
+' A simple nested loop is used to generate 50 steps in each direction, twice.
+' The Little Step-U moves the motor on each high to low transition so two
+' TOGGLE instructions are required for one step.
+' ===========================================================================
+
+debug "Put into REMOTE mode - Stamp in control", CR
+serout 10,baud,["{S}"]					' Put into remote mode
+
+for dir_ctr = 0 to 3
+  for step_ctr = 0 to 100
+    toggle 14
+    pause 10
+  next
+  toggle 13
+next
+
+' ===========================================================================
+' The "T" command takes the Little Step-U out of remote mode and returns to
+' being an intelligent controller.
+' ===========================================================================
+
+debug "and now back to the scheduled program", CR
+serout 10,baud,["{T}"]					' Take out of remote mode
+out13 = 1
+out12 = 1
+
+' ===========================================================================
+' The following section demonstrates using the LOOKUP function to generate
+' multiple moves with only a few lines of code.
+' ===========================================================================
+
+for dir_ctr = 0 to 15
+  lookup dir_ctr,[200,0,25,0,25,0,100,200,100,75,100,125,150,0,200,400],step_ctr
+  serout 10,baud,["{D", dec step_ctr,"}"]
+  gosub CheckBusy
+  pause 100
+next
+
+' ===========================================================================
+' Some applications require that the motor coils be held on when the motor
+' is stopped. Here the coils are turned on for 5 seconds without any movement
+' to demonstrate the "Holding Torque" of the motor. They are then turned off
+' and the motor position is retained by the motors "detent torque".
+' ===========================================================================
+
+debug "Stopped with windings ON (for 5 seconds)", CR
+serout 10,baud,["{P1}"]					' Stop with windings on
+pause 5000
+serout 10,baud,["{P0}"]					' Turn windings off again
+' ===========================================================================
+' End of the program.
+' Uncomment the following statement if you want the sequence to repeat.
+' ===========================================================================
+
+goto start
+
+debug CR, CR, "That's all folks", CR
+
+end
+
+' ===========================================================================
+' CheckBusy subroutine.
+' Continually checks the state of the BUSY output from the Little Step-U and
+' stays here until it becomes "not busy" (low).
+' ===========================================================================
+
+CheckBusy:
+pause 10
+CB_loop:
+if IN12 = 1 then CB_loop			'Wait till not busy
+pause 1
+return

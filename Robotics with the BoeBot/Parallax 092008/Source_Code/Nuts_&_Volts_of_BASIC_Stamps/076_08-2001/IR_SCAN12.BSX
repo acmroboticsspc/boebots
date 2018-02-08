@@ -1,0 +1,181 @@
+' Listing 1
+' Nuts & Volts, August 2001
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... IR_SCAN12.BSX
+' Purpose... IR Remote Scanner / Reporter
+' Author.... Jon Williams (based on work by Andy Lindsay)
+' E-mail.... jwilliams@parallaxinc.com
+' Started... 23 MAR 2001
+' Updated... 06 JUL 2001 
+
+' { $STAMP BS2sx }
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program monitors an IR detector module and decodes the 12-bit Sony
+' IR protocol (SIRCS).  When a key is detected, it's 12-bit code is
+' displayed on the DEBUG screen and separated into device and command
+' codes.
+'
+' No key pressed is indicated by code $FFF.
+'
+' Change the KeyDelay value to change the auto-repeat response.  The
+' larger this value, the longer the delay repeats of the same key.
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+' 23 MAR 2001 : Original program developed for IR testing with BS2p
+' 04 JUL 2001 : Improved IR scan routine to 12 bits
+' 06 JUL 2001 : Improved display to show device and command codes
+ 
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+IR_pin	CON	15
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+IsLow		CON	0
+IsHigh	CON	1
+
+NoKey		CON	$FFF				' no IR key
+KeyDelay	CON	5				' loops for "new" key ( >0 )
+
+StartWidth	CON	2700				' width of IR start bit (BS2sx)
+Bit0Width	CON	750				' width of IR zero bit (BS2sx)
+Bit1Width	CON	1500				' widht of IR one bit (BS2sx)
+
+'StartWidth	CON	2880				' width of IR start bit (BS2p)
+'Bit0Width	CON	800				' width of IR zero bit (BS2p)
+'Bit1Width	CON	1600				' widht of IR one bit (BS2p)
+
+BitTest	CON	Bit0Width * 3 / 2		' test width -- look for 1's
+
+LF		CON	10				' linefeed character
+
+
+' -----[ IR Codes ]--------------------------------------------------------
+'
+' Generic Sony IR remote codes (not a complete list)
+'
+IR_1		CON	$080
+IR_2		CON	$081
+IR_3		CON	$082
+IR_4		CON	$083
+IR_5		CON	$084
+IR_6		CON	$085
+IR_7		CON	$086
+IR_8		CON	$087
+IR_9		CON	$088
+IR_0		CON	$089
+IR_Enter	CON	$08B
+
+IR_ChUp	CON	$090
+IR_ChDn	CON	$091
+IR_VolUp	CON	$092	
+IR_VolDn	CON	$093
+IR_Mute	CON	$094
+IR_Power	CON	$095
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+irCode	VAR	Word				' returned code 
+lastCode	VAR	Word				' last returned code
+irStart	VAR	Word				' width or IR start bit
+irBit		VAR	irStart			' width of IR bit
+keyRpts	VAR	Byte				' repeats of current key
+
+device	VAR	Byte				' upper 5 bits of irCode
+command	VAR	Byte				' lower 7 bits of irCode
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Intialize:
+  PAUSE 500
+  DEBUG "BS2sx/BS2p Sony IR Scanner", CR, CR
+  DEBUG "Raw  Device  Command  Rpts", CR
+  DEBUG "---  ------  -------  ----", CR
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Main:
+  GOSUB Scan_IR					' check for IR key
+  IF (irCode = lastCode) THEN Key_Timer	' key is being held
+  keyRpts = 0					' not held, reset timer
+  GOTO Show_Key
+
+Key_Timer:
+  IF (irCode = NoKey) THEN Show_Key		' no key, skip timer
+  keyRpts = keyRpts + 1	// KeyDelay		' update the repeats timer
+	
+Show_Key:
+  lastCode = irCode				' save last key
+ 
+  device = irCode >> 7				' extract device code
+  command = irCode & $7F			' extract command 
+
+  DEBUG Home, LF, LF, LF, LF
+  DEBUG HEX3 irCode,"   "
+  DEBUG BIN5 device,"  ", BIN7 command, "   "
+  DEBUG DEC2 keyRpts, CR
+  DEBUG "         ", HEX2 device, "       ", HEX2 command
+
+Loop_Pad:
+  PAUSE 50						' pad loop timing
+  GOTO Main
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+' Receive and decode Sony IR command
+'
+Scan_IR:
+  irCode = NoKey					' flag value
+
+Wait_For_Start:					' wait for start bit
+  PULSIN IR_pin,IsLow,irStart
+  BRANCH irStart,[IR_Exit]			' exit if no key down
+  BRANCH irStart/StartWidth,[Wait_For_Start]
+
+  ' This code MUST stay inline
+  ' -- will NOT work in a loop
+
+  PULSIN IR_pin,IsLow,irBit			' decode 12 bits
+  irCode.Bit0 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit1 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit2 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit3 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit4 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit5 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit6 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit7 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit8 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit9 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit10 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit11 = irBit/BitTest
+
+IR_Exit:
+  RETURN

@@ -1,0 +1,14 @@
+reentry var nib	'used by page0
+task	var nib	'used by page0
+
+x 	var byte
+y 	var byte
+z 	var word
+
+	branch task, [add, mult]
+
+add:	z = x + y	'operate task 0
+	run 0		'reentry in page0
+	
+mult: z = x * y	'operate task 1
+	run 0		'reentry in page0

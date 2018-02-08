@@ -1,0 +1,29 @@
+'Program reads data from PC *.txt file and places data onto StampMEM board
+'PC must be running stpin.exe file to activate data input
+'After programming BASIC Stamp2 diconnect pin no. 3 to allow data flow
+'from the PC when using BASIC Stamp2 programming serial port (p16)
+'2/14/99
+ 
+x	var	byte(17)	'data string
+n	var	byte		'number data string characters to read
+d1	var	byte		'data I/O, 1 = input & 0 = output
+d2	var	byte		'high byte location, 0 to 255
+d3	var	byte		'low byte location, 0 to 255
+d4	var	byte		'number of data bytes
+
+pause 5				'powerup delay
+d1=0:d2=0:d3=0:d4=16:n=16	'indicate data parameters to output
+serin 16,84,[wait("START")]	'wait for start command from PC
+aa:
+serin 16,84,2000,cc,[str x\n]	'receive data from PC
+serout 0,84,[d1,d2,d3,d4]	'write data to stamp memory board
+serout 0,84,[str x\n]	
+d3=d3+n				'get another n data bytes
+if d3<n then bb
+goto aa
+bb:
+d2=d2+1
+if d2=0 then cc
+goto aa
+cc:
+stop

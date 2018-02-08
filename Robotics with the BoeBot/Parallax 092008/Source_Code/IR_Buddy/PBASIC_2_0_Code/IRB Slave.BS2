@@ -1,0 +1,169 @@
+' ==============================================================================
+'
+'   File...... IRB Slave.BS2
+'   Purpose... Buffered serial comms with IR Buddy
+'   Author.... Parallax, Inc.
+'   E-mail.... stamptech@parallaxinc.com
+'   Started...
+'   Updated... 15 NOV 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' This program waits on an eight-byte packet from a master controller.  The
+' packet is checked and, if valid, the command and data are acted upon.  A
+' corresponding eight-byte packet is returned to the master.
+'
+' Note: For best performance, shield IR Buddy from external interference
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+
+IRbSIO          CON     15                      ' IR Buddy serial I/O
+LEDs            VAR     OutA                    ' LED control outputs
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+IRbDataTx       CON     $44                     ' 8-byte data transmit
+IRbDataRx       CON     $64                     ' 8-byte data receive
+
+IRbMod          CON     38                      ' modulation freq: 30, 38 or 56
+
+IRb96           CON      84 + $8000             ' 9600 baud, open
+IRb48           CON     188 + $8000             ' 4800 baud, open
+IRb24           CON     396 + $8000             ' 2400 baud, open
+IRbBaud         CON     IRb96
+
+CrsrXY          CON      2                      ' DEBUG position command
+ClrEOL          CON     11                      ' Clear DEBUG line to right
+
+STX             CON     $02
+ACK             CON     $06
+NAK             CON     $15
+
+LightLeds       CON     $C0                     ' commands for slave
+LedsOff         CON     $C1
+
+Busy            CON     0                       ' IR Buddy is transmitting
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+buffer          VAR     Byte                    ' rx-tx buffer (8 bytes)
+cmd             VAR     Byte
+data1           VAR     Byte
+data2           VAR     Byte
+data3           VAR     Byte
+data4           VAR     Byte
+data5           VAR     Byte
+chkSum          VAR     Byte
+
+header          VAR     buffer                  ' rx packet
+ackByte         VAR     buffer                  ' ack/nak byte
+rxChkSum        VAR     Byte                    ' comparison checksum
+
+idx             VAR     Nib                     ' loop counter
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Setup:
+  LEDs = %0000                                  ' LEDs off
+  DirA = %1111                                  ' make LED pins outputs
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  GOSUB IR_Buddy_Reset
+  SEROUT IRbSIO, IRbBaud, [IRbDataRx]           ' prep for 8-byte RX
+
+RX_Packet:
+  SERIN IRbSIO, IRbBaud, 2000, TO_Error, [STR buffer\8]
+
+Check_RX_Packet:
+  IF (header <> STX) THEN Packet_Error
+  rxChkSum = chkSum                             ' save rx checksum
+  GOSUB Make_CheckSum                           ' calc checksum of rx packet
+  IF (rxChkSum <> chkSum) THEN Packet_Error     ' compare checksum values
+
+Process_Command:
+  IF (cmd <> LightLEDs) THEN Packet_Error       ' is command valid?
+  LEDs = data1                                  ' yes, move data to LEDs
+
+Good_Packet:                                    ' responsd to good packet
+  header = ACK
+
+  ' change data fields if required by Master
+
+  GOSUB Make_CheckSum
+  GOTO TX_Packet
+
+Packet_Error:                                   ' respond to bad packet
+  header = NAK
+
+TX_Packet:
+  GOSUB IR_Buddy_Reset
+  SEROUT IRbSIO, IRbBaud, [IRbDataTx, IRbMod, STR buffer\8]
+  PAUSE 5                                       ' let IRB grab SIO line
+
+TX_Wait:
+  IF (Ins.LowBit(IRbSIO) = Busy) THEN TX_Wait
+  GOTO Main
+
+TO_Error:
+
+  ' put code here that handles timeout error
+
+  GOTO Main                                     ' reset, look for new packet
+
+  END
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+' Reset the IR Buddy.  This code is useful for clearing data from the RX
+' buffer and prepping to switch modes.  Timing specific; do not change.
+
+IR_Buddy_Reset:
+  LOW IRbSIO                                    ' signal reset
+  PAUSE 5
+  INPUT IRbSIO                                  ' release reset signal
+  PAUSE 50                                      ' allow time for reset actions
+  RETURN
+
+
+Make_CheckSum:                                  ' checksum of bytes 0 to 6
+  chkSum = 0
+  FOR idx = 0 TO 6
+    chkSum = chkSum + buffer(idx)
+  NEXT
+  RETURN

@@ -1,0 +1,50 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 8.1 Twinkle Toes Test.bs2
+' This program tests twinkle toes bumpers
+' {$STAMP BS2}
+' {$PBASIC 2.5} 
+
+' -----[ Constants ]-------------------------------------------------------
+
+ctrlLEDs	CON	%1111		' Define DIRs as constants
+prepBumper	CON	%1001
+
+bothGreen	CON	%0110		' OUTa register
+bothRed		CON	%1001
+rightRed	CON	%0101
+leftRed		CON	%1010
+bothLEDsOff	CON	%1001
+
+' -----[ Main Code ]-------------------------------------------------------
+
+Forward:
+  DIRS = ctrlLEDs
+  OUTS = bothGreen
+  PAUSE 20
+
+Check_Bumpers:
+  DIRS = prepBumper
+  OUTS = bothLEDsOff
+  DEBUG Home, "Right = ", BIN1 IN1, " Left = ", BIN1 IN2 
+  IF (IN1 = 0) AND (IN2 = 0) THEN BothOn
+  IF IN1 = 0 THEN Right
+  IF IN2 = 0 THEN Left
+GOTO Forward
+
+BothOn:
+  DIRS = ctrlLEDs
+  OUTS = bothRed
+  PAUSE 200
+GOTO Forward
+
+Right:
+  DIRS = ctrlLEDs
+  OUTS = rightRed
+  PAUSE 200
+GOTO Forward
+
+Left:
+  DIRS = ctrlLEDs
+  OUTS = leftRed
+  PAUSE 200
+GOTO Forward

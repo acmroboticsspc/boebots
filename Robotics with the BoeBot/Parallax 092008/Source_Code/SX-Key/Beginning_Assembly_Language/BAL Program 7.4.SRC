@@ -1,0 +1,106 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 7.4
+;=======================================================================
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	start_point
+		freq	50000000   		; 50 MHz
+		org	8
+microlow	ds	1
+microhi		ds	1
+millilow	ds	1
+millihi		ds	1
+seconds		ds	1
+minutes		ds	1
+hours		ds	1
+edges		ds	1
+
+		watch	hours,8,udec
+		watch	minutes,8,udec
+		watch	seconds,8,udec
+
+		org	0
+isr		inc	microlow
+		snz
+		inc	microhi
+		cjne	microhi,#$03,iout  	; blink every $03e8 periods
+		cjne	microlow,#$e8,iout
+; 1000 uS already!
+		clr	microlow
+		clr	microhi
+		inc	millilow
+		snz
+		inc	millihi
+		cjne	millihi,#$03,iout
+		cjne	millilow,#$e8,iout
+; 1000 ms!
+		clr	millihi
+		clr	millilow
+		inc	seconds
+		cjne	seconds,#60,iout
+; seconds roll over
+		clr	seconds
+		inc	minutes
+		cjne	minutes,#60,iout
+; minutes roll over
+		clr	minutes
+		inc	hours
+		cjne	hours,#24,iout
+; hour roll over
+		clr	hours
+; could track days if we wanted to
+		
+; reset time
+iout
+		mov	w,#-50   		; interrupt every 1uS
+		retiw
+
+start_point
+		mov     !rb,#$FF    
+areset		clr	microhi
+		clr	microlow
+		clr	seconds
+		clr	hours
+		clr	minutes
+; set RTCC to internal clock 1:1 ratio
+		mov	!option,#$88  		; no prescale
+
+; Turn on port B pull up resistors
+		mode    $E
+		mov	!rb,#$00
+; set port B pin 0 to interrupt on falling edge
+		mode	$A  			; select edge
+		mov	!rb,#$FF
+		mode	$9  			; enable interrupts
+		mov	!rb,#%0  		; clear pending
+; wait for 10 seconds
+wait10		cjne	seconds,#10,wait10
+		mov	!rb,#%0  		; read pending and clear
+		mov	edges,w
+; important: reset mode register
+		mode	$F
+		mov	!rb,#0   		; set to outputs
+; flip sense of edge bits
+		not	edges
+		mov	rb,edges
+
+loop
+; active wait so ticking will occur
+		jmp	loop
+
+
+
+
+
+
+
+
+
+
+	
+
+
+
+

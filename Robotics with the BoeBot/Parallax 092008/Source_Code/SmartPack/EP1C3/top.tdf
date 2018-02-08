@@ -1,0 +1,125 @@
+---------
+-- TOP --
+---------
+
+include "pxl_.inc";
+include "altpll.inc";
+include "altsyncram.inc";
+
+subdesign top
+(
+	jclk		: input;		-- clock socket input
+	pclk		: input;		-- plugboard clock input
+
+	rx			: input;		-- serial receive
+	tx			: output;		-- serial transmit
+
+	btn[2..0]	: input;		-- pushbutton inputs
+	led[7..0]	: output;		-- led outputs
+	spk[1..0]	: output;		-- speaker outputs
+
+	h[31..0]	: bidir;		-- header pins, may be inputs, outputs, or bidirectional
+	p[11..0]	: bidir;		-- plugboard pins, may be inputs, outputs, or bidirectional
+
+	px[2..0]	: input;		-- px loader pins, must be inputs
+)
+
+
+variable
+
+	pll			: altpll with (	-- pll
+					operation_mode = "normal",
+					inclk0_input_frequency = 20000,		-- inclk0 = 20,000ps = 50MHz input
+					clk0_multiply_by = 4,				-- clk0 = 50MHz*4/1 = 200MHz output
+					clk0_divide_by = 1,
+					clk1_multiply_by = 2,				-- clk1 = 50MHz*2/5 = 20MHz output
+					clk1_divide_by = 5);
+
+	clkfast		: node;			-- clocks
+	clkslow		: node;
+
+	cnt[32..0]	: dff;			-- big counter
+
+	htri[31..0]	: tri;			-- tri's for plugboard and header pins
+	ptri[11..0]	: tri;
+
+	tone[1..0]	: node;			-- tone pair
+
+	pxl			: pxl_			-- pxl (512 x 8)
+				  with (
+					a_exp = 9,
+					d_exp = 3);
+
+	ram			: altsyncram	-- ram (512 x 8)
+				  with (
+					operation_mode = "single_port",
+					widthad_a = 9,
+					width_a = 8);
+begin
+
+	-- pll/clocks
+
+	pll.inclk0			= jclk;					-- connect jclk to pll input
+	pll.clkena[]		= b"11";				-- enable both pll outputs
+
+	clkfast				= pll.clk0;				-- assign 200MHz pll output to clkfast
+	clkslow				= pll.clk1;				-- assign 20MHz pll output to clkslow
+
+
+	-- counter
+
+	cnt[].clk			= clkfast;				-- count fast
+	cnt[].d				= cnt[].q + 1;
+
+
+	-- output counter to IO pins
+
+	htri[].oe			= vcc;
+	htri[]				= cnt[31..0];
+	h[]					= htri[];
+
+	ptri[].oe			= vcc;
+	ptri[]				= (clkslow, cnt[10..0]);
+	p[]					= ptri[];
+
+
+	-- use pushbuttons to select tone
+
+	case btn[] is
+		when b"110"		=> tone[] = (cnt[17], !cnt[17]);
+		when b"101"		=> tone[] = (cnt[18], !cnt[18]);
+		when b"011"		=> tone[] = (cnt[19], !cnt[19]);
+		when others		=> tone[] = gnd;
+	end case;
+
+	spk[]				= tone[] & cnt[24].q;
+
+
+	-- echo rx to tx
+
+	tx					= rx;
+
+
+	-- PX Loader example
+
+	pxl.clk				= clkfast;
+	pxl.px[]			= px[];
+
+	ram.clock0			= clkfast;
+
+	case pxl.load is
+		when 0			=> ram.wren_a		= gnd;
+						   ram.address_a[]	= cnt[24+8..24+0].q;
+						   ram.data_a[]		= gnd;
+
+		when 1			=> ram.wren_a		= pxl.w;
+						   ram.address_a[]	= pxl.a[];
+						   ram.data_a[]		= pxl.d[];
+	end case;
+
+
+	-- output ram data to LEDs
+
+	led[] = ram.q_a[];
+
+end;

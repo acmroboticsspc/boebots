@@ -1,0 +1,24 @@
+' Applied Robotics with the SumoBot - LookupExample.bs2
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+LedSpeaker PIN 5
+
+counter  VAR Byte
+note     VAR Word
+
+DEBUG "Counter  Note",CR,
+      "-------  -------", CR
+
+FOR counter = 0 TO 7
+  LOOKUP counter, [1046, 1175, 1319,
+                   1397, 1580, 1760,
+                   1976, 2093], note
+  DEBUG DEC counter, CRSRX, 9, DEC note, CR
+  FREQOUT 5, 500, note
+  PAUSE 25
+NEXT
+
+END
+

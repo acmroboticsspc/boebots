@@ -1,0 +1,55 @@
+;=======================================================================
+;TITLE:         Port_Direction.src
+;
+;PURPOSE:       This SX28 code demonstrates setup of I/O pin direction.
+;
+;AUTHOR:        Parallax, Inc.
+;
+;REVISIONS:
+;  08/12/99 -   Initial release.
+;  09/17/04 -   Updated to support SASM.
+;
+;CONNECTIONS:
+;  None.
+;
+;DETAILS:
+;  This code demonstrates configuring the I/O pin direction (input/output).
+;=======================================================================
+
+
+;-------------------------- DEVICE DIRECTIVES --------------------------
+
+		DEVICE		SX28,OSC4MHZ,TURBO
+
+IFDEF	__SASM  ;SASM Directives
+		DEVICE		STACKX,OPTIONX
+		IRC_CAL		IRC_SLOW
+		
+ELSE		;Parallax Assember Directives
+		DEVICE		STACKX_OPTIONX
+ENDIF
+
+		RESET		Initialize
+
+;---------------------------- DEBUG SETTINGS ---------------------------
+
+		FREQ	4_000_000
+	
+;------------------------ INITIALIZATION ROUTINE -----------------------
+
+Initialize
+		;Port Direction Configuration
+		mov	ra,#%0000		;Set port A low
+		mov	rb,#%11111111		;Set port B high
+		mov	rc,#%11110000		;Set port C bits 4-7 high, 0-3 low
+
+		mov	W,#$1F			;Allow Direction configuration
+		mov	M,W
+		mov	!ra,#%0000		;Set port A bits 0-3 to output
+		mov	!rb,#%11111111		;Set port B bits 0-7 to input
+		mov	!rc,#%00000000		;Set port C bits 0-7 output
+
+;---------------------------- MAIN PROGRAM -----------------------------
+
+Main		
+		jmp	Main

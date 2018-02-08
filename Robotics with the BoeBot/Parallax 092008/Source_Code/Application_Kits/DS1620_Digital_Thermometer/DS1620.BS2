@@ -1,0 +1,92 @@
+' Program: DS1620.BS2 (interface DS1620 digital thermometer)
+ 
+' This program interfaces the DS1620 Digital Thermometer to 
+' the BS2. Input and output routines can be combined to set
+' the '1620 for thermometer or thermostat operation, read 
+' or write nonvolatile temperature setpoints and configuration 
+' data. In addition to using the BS2's new Shiftin and Shiftout
+' instructions to communicate with the 1620, this program uses 
+' new math and display operators that work with signed integers. 
+' This makes it relatively easy to convert between degrees C and 
+' F and to display both positive and negative temperature 
+' readings. Note that after math operations on negative numbers
+' it's necessary to "extend the sign bits." All this means is 
+' setting all of the bits to the left of actual value to 1s. 
+
+' Also note the use of the new */ (pronounced 'star-slash') 
+' operator. This works like multiplying by an integer (0-255)
+' and a fraction (in units of 1/255). For example, to multiply
+' 17 by Pi (approx 3.1416) would be written "17 */ $0324."
+' The second value is written in hex to emphasize that it's being
+' split into bytes: $03 is the integer and $24/$FF is the fraction. 
+' In the C-to-F conversion below, we multiply the C value by 1.8
+' with "*/ $01CC" since $CC/$FF (204/255) = 0.8. 
+
+' ===================== Define Pins and Variables ================
+DQ	con	2	' Pin 2 <=> DQ. 
+CLK	con	1	' Pin 1  => CLK.  
+RST	con	0	' Pin 0  => RST (high = active). 
+DSdata	var	word	' Word variable to hold 9-bit data. 
+Sign	var	DSdata.bit8	' Sign bit of raw temperature data.
+T_sign	var	bit	' Saved sign bit for converted temperature. 
+
+' ===================== Define DS1620 Constants ===================
+' >>> Constants for configuring the DS1620
+Rconfig con	$AC	' Protocol for 'Read Configuration.'
+Wconfig con	$0C	' Protocol for 'Write Configuration.'
+CPU	con	%10	' Config bit: serial thermometer mode. 
+NoCPU	con	%00	' Config bit: standalone thermostat mode.  
+OneShot	con	%01	' Config bit: one conversion per start request. 
+Cont	con	%00	' Config bit: continuous conversions after start.
+' >>> Constants for serial thermometer applications. 
+StartC  con	$EE	' Protocol for 'Start Conversion.'
+StopC   con	$22	' Protocol for 'Stop Conversion.'
+Rtemp   con	$AA	' Protocol for 'Read Temperature.'
+' >>> Constants for programming thermostat functions. 
+RhiT	con	$A1	' Protocol for 'Read High-Temperature Setting.'
+WhiT	con	$01	' Protocol for 'Write High-Temperature Setting.'
+RloT	con	$A2	' Protocol for 'Read Low-Temperature Setting.'
+WloT	con	$02	' Protocol for 'Write Low-Temperature Setting.'
+
+' ===================== Begin Program ============================
+
+low RST			' Deactivate '1620 for now. 
+high CLK		' Put clock in starting state. 
+pause 100		' Let things settle down a moment. 
+
+high RST		' Activate the '1620 and set it for continuous..
+shiftout DQ,CLK,lsbfirst,[Wconfig,CPU+Cont]	' ..temp conversions. 
+low RST			' Done--deactivate. 
+pause 50		' Wait for the EEPROM to self-program.
+high RST		' Now activate it again and send the..
+shiftout DQ,CLK,lsbfirst,[StartC]	' Send start-conversion protocol. 
+low RST			' Done--deactivate. 
+
+' The loop below continuously reads the latest temperature from
+' the DS1620. 
+again:
+  pause 1000				' Wait a second between readings. 
+  high RST				' Activate the '1620. 
+  shiftout DQ,CLK,lsbfirst,[Rtemp]	' Request to read temperature. 
+  shiftin DQ,CLK,lsbpre,[DSdata\9]	' Get the temperature reading. 
+  low RST
+  T_sign = Sign			' Save the sign bit of the reading. 
+  DSdata = DSdata/2		' Scale reading to whole degrees C. 
+  if T_sign = 0 then no_neg1
+    DSdata = DSdata | $FF00	' Extend sign bits for negative temps.
+no_neg1:
+  debug SDEC DSdata," degrees C",cr	' Show signed temperature in C. 
+    DSdata = (DSdata */ $01CC)		' Multiply by 1.8. 
+  if T_sign = 0 then no_neg2		' If negative, extend sign bits.
+    DSdata = DSdata | $FF00		
+no_neg2:
+    DSdata = DSdata + 32		' Complete the conversion. 
+    debug SDEC DSdata," degrees F",cr	' Show signed temperature in F. 
+goto again				' Repeat forever. 
+
+
+
+
+
+
+

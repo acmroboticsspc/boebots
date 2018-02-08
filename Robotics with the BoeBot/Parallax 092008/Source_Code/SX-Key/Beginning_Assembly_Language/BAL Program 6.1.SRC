@@ -1,0 +1,42 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 6.1
+;=======================================================================
+		device  sx28l,oschs3
+		device  turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	start_point
+		freq	50000000   	; 50 Mhz
+
+		org	0
+start_point	mov	fsr,#8     	; shared bank
+		call	clear
+		mov	fsr,#$10
+zloop		call	clear
+		add	fsr,#$11
+		jnc	zloop
+		nop
+		break
+		nop
+		sleep
+
+; subroutine clears from FSR until FSR AND $F is 0
+
+clear		clr	ind
+		inc	fsr
+		mov	w,#$F
+		and	w,fsr
+		jnz	clear
+		dec	fsr     ; back up
+		ret
+
+
+
+
+
+
+	
+
+
+
+

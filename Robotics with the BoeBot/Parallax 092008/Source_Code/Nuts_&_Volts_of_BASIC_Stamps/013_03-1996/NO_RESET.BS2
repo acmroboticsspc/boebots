@@ -1,0 +1,32 @@
+' Program Listing 13.3. EEPROM Flag Locks Out Resets (PBASIC 2)
+' Program: NO_RESET.BS2
+' This program illustrates a method for letting a program detect the
+' fact that the BS2 has reset since programming. This can be helpful
+' in situations in which an unintended reset might cause loss of data,
+' damage to equipment, etc. Note that an actual program should include
+' some method for clearing the EEPROM reset flag other than just the
+' data statement. Otherwise, the reset that occurs when a program is
+' loaded, followed by the reset that occurs when the BS2 is disconnected
+' from its programming cable, would trigger the reset-trapping routine.
+' A button that causes the program to execute "write reset,0" would
+' do the trick. To see the demo work, run the program. Watch the
+' numbers go by on the debug screen, then press the reset button.
+' The screen will display "Reset detected!"
+
+x 	var 	byte 		' Variable for busy work in demo.
+reset 	data 	@0,0 		' Write 0 to EEPROM address 0 as a flag to
+ 				' indicate that the program has not reset.
+Demo:
+  read reset,x 		' Copy the value of reset into x
+  if x = 0 then run 		' If x is 0, the BS2 has not reset, so run.
+  debug cls, "Reset detected!"
+END 				' If x is not 0, then reset occurred, stop.
+
+run:
+  write reset,255 		' Record first startup of BS2
+
+busy_work: 			' Dummy program to show activity:
+  debug ? x 			' Display value of x on PC screen.
+  x = x+1 			' Add 1 to x.
+  pause 500 			' Wait a half second.
+goto busy_work 		' Repeat endlessly.

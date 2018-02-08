@@ -1,0 +1,28 @@
+' -----[ Title ]-----------------------------------------------------------
+' Gripper Program 1.4: Test Closing IR Sensor
+'{$STAMP BS2}
+'{$PBASIC 2.5}
+
+' -----[ Program Description ]---------------------------------------------
+
+' Tests the Gripper's Closing IR sensor.
+
+' Expected Results:  Sensor reads "1" with nothing in gripper.
+'                    Sensor reads "0" with object in gripper.
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+ClosingIRPin   PIN     10                    ' Closing IR detector/emitter
+
+' -----[ Variables ]-------------------------------------------------------
+
+closingIRVal   VAR     Bit                   ' Stores closing IR reading
+
+' -----[ Main Code ]-------------------------------------------------------
+
+DO
+  FREQOUT ClosingIRPin, 1, 38500             ' Send signal to closing IR
+  closingIRVal = ~ClosingIRPin               ' Record return, invert logic
+  DEBUG HOME, "Closing IR Sensor = ", BIN1 closingIRVal, CR  ' Print IR value
+  PAUSE 20
+LOOP

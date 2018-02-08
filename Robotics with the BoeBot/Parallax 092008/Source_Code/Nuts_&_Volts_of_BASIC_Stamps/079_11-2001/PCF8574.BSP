@@ -1,0 +1,112 @@
+' Listing 1
+' Nuts & Volts "Stamp Applications" -- November, 2001
+
+' -----[ Title ]----------------------------------------------------------------
+'
+' File...... PCF8574.BSP
+' Purpose... Demonstrates remote I/O via the Philips PCF8574
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started...
+' Updated... 7 OCT 2001
+
+' {$STAMP BS2p}
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program reads for remote switches and uses this reading as a limit for
+' a counter that is displayed on LEDs connected to the other four bits.
+'
+' Note: Most (not all) I2C devices have multiple internal addresses, so the
+' I2CIN and I2COUT commands support this with an address parameter (this byte
+' comes after the Slave Address byte).  With the PCF8574, replace the address
+' byte with a value that reflects the desired state of the I/O pins, where
+' 1 is an input, 0 is an output.  For example:
+'
+' %11110000 = Bits 0 - 3 are outputs, bits 4 - 7 are inputs
+'
+' For the PCF8574 the syntax becomes:
+'
+'    I2CIN  pin, ddr_value, [in_byte]
+'    I2COUT pin, ddr_value, [out_byte]
+'
+' Special Note: When reading inputs while using the PCF8574 in mixed I/O mode,
+' you must refresh the output bits during the read.  This is easily accomplished
+' by ORing the state of the output pins with the DDR value.
+'
+'    I2CIN  pin, (ddr_value | out_bits), [io_byte]
+'
+' This program uses the bits in mixed mode and will use the syntax described
+' immediately above.
+'
+' I/O Notes:
+'
+' The input bits are pulled up to Vdd (+5) through 10K.  The inputs are
+' connected to Vss (ground) through a N.O. switch.  The inputs will read 1 when
+' the switches are open, 0 when closed.
+'
+' PCF8574 can sink current, but provide almost no source current.  Inputs and
+' outputs for this program are setup as active-low.  The tilde (~) in front of
+' variables inverts the bits since we're using active low inputs and outputs.
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+I2Cpin          CON     0                       ' SDA on 0; SCL on 1
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+DevType         CON     %0100 << 4              ' Device type
+DevAddr         CON     %000 << 1               ' address = %000 -> %111
+Wr8574          CON     DevType | DevAddr       ' write to PCF8574
+Rd8574          CON     Wr8574 | 1              ' read from PCF8574
+
+MixDDR          CON     %00001111               ' 1 = input, 0 = output
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+ioByte          VAR     Byte                    ' i/o byte for PCF8574
+limit           VAR     Nib                     ' counter limit
+cntr            VAR     Nib                     ' counter
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  DEBUG CLS                                     ' let DEBUG open
+  PAUSE 250
+  DEBUG "PCF8574 Demo", CR
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Get_Inputs:
+  I2CIN I2Cpin, Rd8574, (MixDDR | ~cntr), [ioByte]
+  limit = ~ioByte.HighNib                       ' invert limit bits
+  IF (cntr <= limit) THEN Update_LEDs           ' check counter limit
+  cntr = 0                                      ' clear counter if at limit
+
+Update_LEDs:
+  DEBUG Home, 10, 10
+  DEBUG "Limit..... ", BIN4 limit, " (", DEC limit, ") ", CR
+  DEBUG "Counter... ", BIN4 cntr, " (", DEC cntr, ") "
+  I2COUT I2Cpin, Wr8574, MixDDR, [~cntr]        ' send new value
+
+  cntr = cntr + 1 // 16                         ' update counter
+  PAUSE 250
+  GOTO Get_Inputs
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'

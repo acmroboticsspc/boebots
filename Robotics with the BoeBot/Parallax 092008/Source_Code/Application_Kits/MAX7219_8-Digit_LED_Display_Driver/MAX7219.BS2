@@ -1,0 +1,96 @@
+' Program: MAX7219.BS2
+' This program controls the MAX7219 LED display driver. It demonstrates
+' the basics of communicating with the 7219, and shows a convenient
+' method for storing setup data in tables. To demonstrate practical 
+' application of the 7219, the program drives a 5-digit display to 
+' show the current value of a 16-bit counter (0-65535). The subroutines
+' are not specialized for counting; they can display _any_ 16-bit 
+' value on the LCDs. (A specialized counting routine would be faster, 
+' since it would only update the digits necessary to maintain the 
+' count; however, it wouldn't be usable for displaying arbitrary 
+' 16-bit values, like the results of Pot, Pulsin, or an A-to-D
+' conversion). 
+
+' Hardware interface with the 7219:
+DATA_n  con	7	' Bits are shifted out this pin # to 7219.
+CLK     con	5	' Data valid on rising edge of this clock pin.
+Load    con	6	' Tells 7219 to transfer data to LEDs.
+
+' Register addresses for the MAX7219. To control a given attribute
+' of the display, for instance its brightness or the number shown 
+' in a particular digit, you write the register address followed 
+' by the data. For example, to set the brightness, you'd send 
+' 'brite' followed by a number from 0 (off) to 15 (100% bright). 
+decode 	con	9	' Decode register; a 1 turns on BCD decoding. 
+brite	con	10	' "       "   " intensity register.
+scan	con	11	' "       "   " scan-limit register.
+switch	con	12	' "       "   " on/off register.
+test	con	15	' Activates test mode (all digits on, 100% bright)
+
+' Variables used in the program. 
+max_dat	var	word	' Word to be sent to MAX7219. 
+index   var	nib	' Index into setup table. 
+temp	var	nib	' Temporary variable used in outputting digits. 
+nonZ	var	bit	' Flag used in blanking leading zeros. 
+dispVal	var	word	' Value to be displayed on the LEDs. 
+odd	var	index.bit0	' Lsb of index. 
+
+' The program begins by setting up all pins to output low, matching
+' the state established by the pulldown resistors. 
+OUTS = 0		' All output latches low. 
+DIRS = $FFFF		' All pins to output. 
+
+' Next, it initializes the MAX7219. A lookup table is convenient way 
+' to organize the setup data; each register address is paired with 
+' its setting data. The table sets the scan limit to 4 (5 digits, 
+' numbered 0-4); brightness to 3; BCD decoding to the lower 5 digits
+' (the only ones we're displaying), and switches the display on. The 
+' MAX7219 expects data in 16-bit packets, but our lookup table holds
+' a series of 8-bit values. That's why the loop below is designed to 
+' pulse the Load line _every_other_ byte transmitted. 
+for index = 0 to 7		' Retrieve 8 items from table. 
+  lookup index,[scan,4,brite,3,decode,$1F,switch,1],max_dat
+  shiftout DATA_n,CLK,msbfirst,[max_dat]
+  if odd = 0  then noLoad	' If odd is 1, pulse Load line. 
+  pulsout Load,1		
+NoLoad:				' Else, don't pulse. 
+next				' Get next item from table. 
+
+' ====================== MAIN PROGRAM LOOP ==========================
+' Now that the MAX7219 is properly initialized, we're ready to send it
+' data. The loop below increments a 16-bit counter and displays it on 
+' the LEDs connected to the MAX. Subroutines below handle the details
+' of converting binary values to binary-coded decimal (BCD) digits and 
+' sending them to the MAX. 
+Loop: 
+   gosub MaxDisplay
+   dispVal = dispVal+1
+goto loop
+
+' ========================= SUBROUTINES ============================
+' The MAX7219 won't accept a number like "2742" and display it on 
+' the LEDs. Instead, it expects the program to send it individual 
+' digits preceded by their position on the display. For example, 
+' "2742" on a five-digit display would be expressed as: 
+' "digit 5: blank; digit 4: 2; digit 3: 7; digit 2: 4; digit 1: 2"
+' The routine MaxDisplay below does just that, separating a value
+' into individual digits and sending them to the MAX7219. If the
+' lefthand digits are zero (as in a number like "102") the 
+' routine sends blanks, not zeros until it encounters the first 
+' non-zero digit. This is called "leading-zero blanking."
+MaxDisplay:
+nonZ = 0		' Clear flag for 1st non-zero digit. 
+for index = 5 to 1	' Work from digit 5 down to digit 1. 
+  shiftout DATA_n,CLK,msbfirst,[index]	' Send digit position. 
+  temp = dispVal dig (index-1)	' Get decimal digit (0-4) of dispVal.
+  if temp = 0 then skip1	' If digit = 0, don't set nonZ flag.
+  nonZ = 1
+skip1: 
+  if nonZ = 1 OR temp <> 0 OR index = 1 then skip2	' If leading 0..
+  temp = 15			'..write a blank to the display. 
+skip2:
+  shiftout DATA_n,CLK,msbfirst,[temp]	' Send the digit. 
+  pulsout Load,5			' And load the display. 
+next  				' Repeat for all 5 digits. 
+return				' Done? Return. 
+

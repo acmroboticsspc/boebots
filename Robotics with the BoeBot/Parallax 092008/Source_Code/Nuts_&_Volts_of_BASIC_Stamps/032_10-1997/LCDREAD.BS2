@@ -1,0 +1,187 @@
+' Listing 2
+' Stamp Applications: Nuts & Volts, October 1997
+
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... LCDREAD.BS2
+' Purpose... Stamp 2 <-> LCD (4-bit interface)
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' WWW....... http://members.aol.com/jonwms
+' Started... 16 JUL 1994
+' Updated... 27 AUG 1997
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates the ability to use the CGRAM area as external
+' memory for the Stamp 2. When used as external memory, this RAM should not
+' be used for custom characters. The Hitachi HD44780 display driver
+' provides 64 bytes of CGRAM.
+'
+' LCD Connections:
+'
+' LCD        (Function)         Stamp
+' ---------------------         -----
+' pin 1         Vss             Gnd
+' pin 2         Vdd             +5
+' pin 3         Vo              Gnd (or wiper of 10K pot)
+' pin 4         RS              P4
+' pin 5         R/W             P6
+' pin 6         E               P5
+' pin 7         DB0             Gnd
+' pin 8         DB1             Gnd
+' pin 9         DB2             Gnd
+' pin 10        DB3             Gnd
+' pin 11        DB4             P0
+' pin 12        DB5             P1
+' pin 13        DB6             P2
+' pin 14        DB7             P4
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+' 16 JUL 94 : Version 1.0 - compilation of code from last 3 months
+' 08 AUG 96 : Trimmed code to save space -- no performance changes!
+' 27 AUG 97 : Added LCDrd routine
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+RS      CON     4                       ' Register Select    (1 = char)
+E       CON     5                       ' LCD Enable pin     (1 = enabled)
+RW	CON	6			' Read/Write control (0 = write)
+
+' LCD control characters
+'
+ClrLCD  CON     $01                     ' clear the LCD
+CrsrHm  CON     $02                     ' move cursor to home position
+CrsrLf  CON     $10                     ' move cursor left
+CrsrRt  CON     $14                     ' move cursor right
+DispLf  CON     $18                     ' shift displayed chars left
+DispRt  CON     $1C                     ' shift displayed chars right
+DDRam   CON     $80                     ' Display Data RAM control
+CGRam	CON	$40			' Char Gen RAM control
+
+ 
+' -----[ Variables ]-------------------------------------------------------
+'
+char	VAR	Byte			' character sent to LCD
+addr	VAR	Byte			' address to write to / read from
+index	VAR	Byte			' loop counter
+
+rVar	VAR	Word			' for random number
+tVal	VAR	Byte			' test value to write / read
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Init:   DirL = %01111111                ' set pins 0-6 as outputs
+	Outs = $0000                    ' clear the pins
+
+' Initialize the LCD (Hitachi HD44780 controller)
+'
+LCDini: PAUSE 500                       ' let the LCD settle
+	OutA = %0011                    ' 8-bit mode
+	PULSOUT E, 1
+	PAUSE 5
+	PULSOUT E, 1
+	PULSOUT E, 1
+	OutA = %0010                    ' 4-bit mode
+	PULSOUT E, 1
+	char = %00001100                ' disp on, crsr off, blink off
+	GOSUB LCDcmd                     
+	char = %00000110                ' inc crsr, no disp shift
+	GOSUB LCDcmd
+
+	
+' -----[ Main Code ]-------------------------------------------------------
+'
+Start:	char = ClrLCD			' clear the display
+	GOSUB LCDcmd
+
+	RANDOM rVar			' generate random number
+	addr = rVar.LOWBYTE & $3F	' create address (0 to 63)
+	tVal = rVar.HIGHBYTE		' create test value (0 to 255)
+
+	FOR index = 0 TO 3		' put "OUT=" in LCD
+	  LOOKUP index, ["OUT="], char
+	  GOSUB LCDwr
+	NEXT	
+
+	GOSUB WrVal			' write tVal to LCD
+
+	DEBUG "Addr=", DEC2 addr, "  "	' show address in debug window
+	DEBUG "Out=" , DEC3 tVal, "  "	' show outgoing value 
+
+	char = CGRam + addr		' set CGRAM pointer
+	GOSUB LCDcmd
+	char = tVal
+	GOSUB LCDwr			' move the value to CGRAM
+
+	PAUSE 100			' wait a bit, then go get it
+
+	char = CGRam + addr		' set CGRAM pointer
+	GOSUB LCDcmd
+	GOSUB LCDrd
+	tVal = char
+
+	char = DDRam + 8		' move to 9th column
+	GOSUB LCDcmd
+
+	FOR index = 0 TO 2		' put "IN=" in LCD
+	  LOOKUP index, ["IN="], char
+	  GOSUB LCDwr
+	NEXT	
+
+	GOSUB WrVal
+
+	DEBUG "In=", DEC3 tVal, cr 	' display ncoming value
+
+	PAUSE 1000
+	GOTO Start
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+' Write byte value (3 digits) to LCD
+' -- be sure to set DDRAM address before calling
+'
+WrVal:	FOR index = 2 TO 0		' display digits left to right
+	  char = tVal DIG index + 48	' convert digit to ASCII
+	  GOSUB LCDwr
+	NEXT
+	RETURN
+
+' Send command to the LCD
+'
+LCDcmd: LOW RS                          ' enter command mode
+					'  then write the character
+
+' Write ASCII char to LCD 
+'
+LCDwr:  OutA = char.HIGHNIB             ' output high nibble
+	PULSOUT E, 1                    ' strobe the Enable line
+	OutA = char.LOWNIB              ' output low nibble
+	PULSOUT E, 1
+	HIGH RS                         ' return to character mode
+	RETURN
+
+
+LCDrd:	HIGH RS				' data command
+	HIGH RW				' read
+	DirA = %0000			' make data lines inputs
+	HIGH E
+	char.HIGHNIB = InA		' get high nibble
+	LOW E
+	HIGH E
+	char.LOWNIB = InA		' get low nibble
+	LOW E
+	DirA = %1111			' return data lines to outputs
+	LOW RW
+	RETURN

@@ -1,0 +1,154 @@
+; APP011.SRC - A clock timer
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+
+org     $08
+Flags   ds 1
+
+org     $50
+Timers  equ $
+us4     ds 1                    ; 4us counter
+Msec    ds 1                    ; 1/1000 sec counter
+HSec    ds 1                    ; 1/100 sec counter 
+TSec    ds 1                    ; 1/10 sec counter  
+Sec     ds 1                    ; 1 sec counter     
+Sec10   ds 1                    ; 10 sec counter    
+Min     ds 1                    ; 1 min counter     
+Min10   ds 1                    ; 10 min counter    
+Hour    ds 1                    ; 1 hour counter    
+Hour10  ds 1                    ; 10 hour counter   
+
+TickOn MACRO
+  setb Flags.0                  ; Turn ticker on
+ENDM
+
+TickOff MACRO
+  clrb Flags.0                  ; Turn ticker off
+ENDM
+
+SkipIfTick MACRO                ; Skip if ticker is on
+  sb Flags.0
+ENDM
+
+ 
+org     $000
+
+;** Clock VP *********************************************************
+;
+Clock
+
+  Bank Timers
+  mov   w, #250                 ; 4ms * 250 = 1 ms
+  dec   us4
+  snz
+    mov us4, w
+  snz
+    TickOn
+  snz
+    inc Msec                    ; every millisecond
+  mov w, #10
+  mov w, MSec-w                 ; Z if MSec = 10
+  snz
+    clr Msec
+  snz
+    inc Hsec                    ; every 1/100 sec
+  mov w, #10
+  mov w, HSec-w                 ; Z if HSec = 10
+  snz
+    clr Hsec
+  snz 
+    inc Tsec                    ; every 1/10 sec
+  mov w, #10
+  mov w, TSec-w                 ; Z if TSec = 10
+  snz
+    clr Tsec
+  snz
+    inc Sec                     ; every second
+  mov w, #10 
+  mov w, Sec-w                  ; Z if sec = 10
+  snz
+    clr Sec
+  snz
+    inc Sec10                   ; every 10 seconds
+  mov w, #6
+  mov w, Sec10-w                ; Z if Sec10 = 6 
+  snz
+    clr Sec10
+  snz
+    inc Min                     ; every minute
+  mov w, #10
+  mov w, Min-w                  ; Z if  Min = 10
+  snz
+    clr Min
+  snz
+    inc Min10                   ; every 10 minutes
+  mov w, #6
+  mov w, Min10-w
+  snz
+    clr Min10
+  snz
+    inc Hour                    ; every hour
+  mov w, #10
+  mov w, Hour-w
+  snz
+    clr Hour
+  snz
+    inc Hour10                  ; every 10 hours
+  mov w, #3
+  mov w, Hour10-w               ; Z if Hour10 = 3
+  snz
+    clr Hour10                  ; every day
+
+
+  mov   w, #-200                ; Call ISR every 4us
+  retiw
+
+org     $100
+
+;** Main program *****************************************************
+;
+Start
+
+  ; Clear data memory
+  ;
+  clr fsr
+
+:ClearData
+  sb     fsr.4
+    setb fsr.3
+  clr    ind
+  ijnz   fsr, :ClearData
+
+  mov   !rb, #%00110000         ; Set Port B outputs
+  mov   !option, #%10011111     ; Enable RTCC interrupt
+  bank  TimerS                  ; Select timer bank
+
+:Loop
+
+  SkipIfTick                    ; The timer sets the tick flag
+    jmp :Loop                   ; every Millisecond
+
+  ; Output various timer bits for test purposes
+  ;
+  movb rb.0, /Sec.0
+  movb rb.7, /Sec.0             ; Seconds tick to buzzer
+  movb rb.1, /Sec10.0
+  movb rb.2, /Min.0
+  movb rb.3, /Min10.0
+  movb rb.6, Hour.0             ; This LED has positive logic
+
+  TickOff                       ; Clear the tick flag
+  jmp :Loop

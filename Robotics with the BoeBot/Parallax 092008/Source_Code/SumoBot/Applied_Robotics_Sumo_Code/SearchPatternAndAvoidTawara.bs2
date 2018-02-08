@@ -1,0 +1,202 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - SearchPatternAndAvoidTawara.bs2
+' SumoBot searches the sumo ring for opponent and changes direction whenever
+' it encounters the white Tawara line.
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+ServoLeft      PIN     13                    ' Left servo connected to P13
+ServoRight     PIN     12                    ' Right servo connected to P12
+
+qtiPwrLeft     PIN     10                    ' Left QTI on/off pin P10
+qtiSigLeft     PIN     9                     ' Left QTI signal pin P9
+
+qtiPwrRight    PIN     7                     ' Right QTI on/off pin P7
+qtiSigRight    PIN     8                     ' Right QTI signal pin P8
+
+DummyPin       PIN     6                     ' I/O pin for pulse-decay P6
+
+' -----[ Constants ]----------------------------------------------------------
+
+' SumoBot maneuvers
+
+Forward        CON     0                     ' Forward
+Backward       CON     1                     ' Backward
+RotateLeft     CON     2                     ' RotateLeft
+RotateRight    CON     3                     ' RotateRight
+PivotLeft      CON     4                     ' Pivot to the left
+PivotRight     CON     5                     ' Pivot to the right
+CurveLeft      CON     6                     ' Curve to the left
+CurveRight     CON     7                     ' Curve to the right
+
+' Servo pulse width rotations
+
+FS_CCW         CON     850                   ' Full speed counterclockwise
+FS_CW          CON     650                   ' Full speed clockwise
+NO_ROT         CON     750                   ' No rotation
+LS_CCW         CON     770                   ' Low speed counterclockwise
+LS_CW          CON     730                   ' Low speed clockwise
+
+' -----[ Variables ]----------------------------------------------------------
+
+temp           VAR     Word                  ' Temporary variable
+multi          VAR     Word                  ' Multipurpose variable
+counter        VAR     Byte                  ' Loop counting variable.
+
+maneuver       VAR     Nib                   ' SumoBot travel maneuver
+
+sensors        VAR     Byte                  ' Sensor flags byte
+
+qtiLF          VAR     sensors.BIT5          ' Stores snapshot of QtiSigLeft
+qtiRF          VAR     sensors.BIT4          ' Stores snapshot of QtiSigRight
+
+' -----[ EEPROM Data ]--------------------------------------------------------
+
+QtiThresh      DATA    Word 0                ' Word for QTI threshold time
+
+' -----[ Initialization ]-----------------------------------------------------
+
+GOSUB Calibrate_Qtis                         ' Determine b/w threshold
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+DO
+
+  IF qtiLF = 1 THEN                          ' Left qti sees line?
+    FOR counter = 1 TO 15                    ' State = Avoid tawara left
+      maneuver = Backward                    ' Back up
+      GOSUB Servos_And_Sensors
+    NEXT
+    FOR counter = 1 TO 15                    ' Turn right
+      maneuver = RotateRight
+      GOSUB Servos_And_Sensors
+    NEXT
+  ELSEIF qtiRF = 1 THEN                      ' Right qti sees line?
+    FOR counter = 1 TO 15                    ' State = Avoid tawara right
+      maneuver = Backward                    ' Back up
+      GOSUB Servos_And_Sensors
+    NEXT
+    FOR counter = 1 TO 15                    ' Turn left
+      maneuver = RotateLeft
+      GOSUB Servos_And_Sensors
+    NEXT
+  ELSE                                       ' No objects detected?
+    FOR counter = 1 TO 35                    ' State = search pattern
+      maneuver = Forward
+      GOSUB Servos_And_Sensors               ' Forward
+      IF sensors <> 0 THEN GOTO Next_State
+    NEXT
+    FOR counter = 1 TO 12                    ' Look right
+      maneuver = RotateRight
+      GOSUB Servos_And_Sensors
+      IF sensors <> 0 THEN GOTO Next_State
+    NEXT
+    FOR counter = 1 TO 24                    ' Look left
+      maneuver = RotateLeft
+      GOSUB Servos_And_Sensors
+      IF sensors <> 0 THEN GOTO Next_State
+    NEXT
+    FOR counter = 1 TO 12                    ' Re-align to forward
+      maneuver = RotateRight
+      GOSUB Servos_And_Sensors
+      IF sensors <> 0 THEN GOTO Next_State
+    NEXT
+    Next_State:                              ' Exit point of search pattern
+  ENDIF
+
+LOOP
+
+' -----[ Subroutine - Calibrate_Qtis ]----------------------------------------
+
+Calibrate_Qtis:
+
+  HIGH qtiPwrLeft                            ' Turn left QTI on
+  HIGH qtiSigLeft                            ' Discharge capacitor
+  PAUSE 1
+
+  RCTIME qtiSigLeft, 1, temp                 ' Measure charge time
+
+  LOW qtiPwrLeft                             ' Turn left QTI off
+  multi = temp                               ' Free temp for another RCTIME
+
+  HIGH qtiPwrRight                           ' Turn right QTI on
+  HIGH qtiSigRight                           ' Discharge capacitor
+  PAUSE 1
+  RCTIME qtiSigRight, 1, temp                ' Measure charge time
+
+  multi = (multi + temp) / 2                 ' Calculate average
+
+  multi = multi / 4                          ' Take 1/4 average
+
+  IF multi > 220 THEN                        ' Account for code overhead
+    multi = multi - 220
+  ELSE
+    multi = 0
+  ENDIF
+
+  WRITE QtiThresh, Word multi                ' Threshold to EEPROM
+
+  RETURN
+
+' -----[ Subroutine - Servos_And_Sensors ]------------------------------------
+
+Servos_And_Sensors:
+
+  GOSUB Pulse_Servos                         ' Call Pulse_Servos subroutine
+
+  ' Call sensor subroutine(s).
+
+  sensors = 0                                ' Clear previous sensor values
+
+'  GOSUB Read_Object_Detectors                ' Call Read_Object_Detectors
+  GOSUB Read_Line_Sensors                    ' Look for lines
+
+  RETURN
+
+' -----[ Subroutine - Pulse_Servos ]------------------------------------------
+
+Pulse_Servos:
+
+  ' Pulse to left servo
+  LOOKUP maneuver, [ FS_CCW, FS_CW, FS_CW, FS_CCW,
+                     NO_ROT, FS_CCW, LS_CCW, FS_CCW ], temp
+  PULSOUT ServoLeft, temp
+
+  ' Pulse to right servo
+  LOOKUP maneuver, [ FS_CW, FS_CCW, FS_CW, FS_CCW,
+                     FS_CW, NO_ROT, FS_CW, LS_CW ], temp
+  PULSOUT ServoRight, temp
+
+  ' Pause between pulses (remove when using IR object detectors + QTIs).
+  PAUSE 20
+
+  RETURN
+
+' -----[ Subroutine - Read_Line_Sensors ]-------------------------------------
+
+Read_Line_Sensors:
+
+  HIGH qtiPwrLeft                            ' Turn on QTIs
+  HIGH qtiPwrRight
+  HIGH qtiSigLeft                            ' Push signal voltages to 5 V
+  HIGH qtiSigRight
+  PAUSE 1                                    ' Wait 1 ms for capacitors
+
+  READ QtiThresh, Word temp                  ' Get threshold time
+
+  INPUT qtiSigLeft                           ' Start the decays
+  INPUT qtiSigRight
+
+  PULSOUT DummyPin, temp                     ' Wait threshold time
+
+  qtiLF  = ~qtiSigLeft                       ' Snapshot of QTI signal states
+  qtiRF = ~qtiSigRight
+
+  LOW qtiPwrLeft                             ' Turn off QTIS
+  LOW qtiPwrRight
+
+  RETURN
+

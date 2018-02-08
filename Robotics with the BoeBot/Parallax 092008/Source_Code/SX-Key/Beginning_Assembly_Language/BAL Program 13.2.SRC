@@ -1,0 +1,195 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 13.2
+;=======================================================================
+
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	start_point
+		freq	50000000   		; 50 Mhz
+
+BAUDRATE	EQU	9600  			; baud rate to stamp
+; Port Assignment: Bit variables
+;
+tx_pin		EQU	rb.3
+
+		org	8
+; Head/tail pointer 
+byte            ds      1                       ;temporary UART byte
+vallow	    	ds	1
+valhigh	    	ds	1
+number_low	ds	1
+temp		ds	1
+
+
+
+		org     10h                     
+serial          =       $                       ;UART bank
+;
+tx_high	ds	1				;tx
+tx_low	ds	1
+tx_count	ds	1
+tx_divide	ds	1
+
+IF BAUDRATE=9600
+txdivisor	=	32   
+ENDIF
+
+int_period      =	163	
+
+
+		org 	$30
+delaybank	equ	$ 	
+dly		ds	1
+dly1		ds	1
+
+		watch 	dly,16,uhex
+
+
+
+		org	0
+; Interrupt service routine
+isr		
+		bank  	delaybank
+		inc	dly
+		snz
+		inc	dly1
+
+		bank    serial                  
+
+; transmitter
+		bank	serial
+		dec	tx_divide
+		jnz     end_int
+		mov	tx_divide,#txdivisor   		; ready for next		
+		test	tx_count			;busy?
+		jz 	end_int				; no byte being sent
+		stc                           		; ready stop bit
+		rr	tx_high			
+		rr	tx_low			
+		dec	tx_count		
+		movb	tx_pin,/tx_low.6		;output next bit
+
+
+
+
+end_int
+		mov     w,#-int_period        
+		retiw                           	;exit interrupt
+
+
+
+
+start_point
+		mov     ra,#%0011           	;initialize port RA
+		mov     !ra,#%0000              ;Set RA in/out directions
+		mov	rb,#%11110111
+		mov	!rb,#%11110111
+
+		CLR     FSR               	;reset all ram starting at 08h
+:zero_ram       SB      FSR.4         		;are we on low half of bank?
+		SETB    FSR.3             	;If so, don't touch regs 0-7
+		CLR     IND               	;clear using indirect addressing
+		IJNZ    FSR,:zero_ram           ;repeat until done
+
+		mov     !option,#%10011111      ;enable rtcc interrupt
+		clr 	rb
+
+; Set Schmitt trigger input
+  		mov 	m,#$C
+		mov 	!rb,#%11111110
+		mov 	m,#$F
+
+
+; Here is where the action is!
+mainloop
+		call 	read_rc
+		mov 	w,valhigh
+		call 	send_hex
+		mov 	w,vallow
+		call 	send_hex
+		mov 	w,#$D
+		call 	send_byte
+		jmp 	mainloop
+	
+
+read_rc	
+		clrb 	rb.0
+		mov 	!rb,#%11110110  	; bit 0 to output
+; pause a bit to let capacitor discharge
+		call 	pause
+		mov 	dly,#$FF
+		mov 	dly1,#$FF
+:zwait
+		test 	dly   			; synchronize with ISR
+		jnz 	:zwait
+		mov 	!rb,#%11110111  	; back to input
+captest
+		jnb  	rb.0,captest
+		break
+		mov 	vallow,dly
+		mov 	valhigh,dly1	
+		ret
+
+pause	
+:p1
+		rept 	5
+		call 	pausems
+		endr
+	
+		ret
+
+; pause about 1mS
+; (each int tick is 3.26uS
+; 1000uS/3.26=307
+; 307=$133 and -$133 = $FECD
+pausems
+		bank 	delaybank
+		mov 	dly1,#$FE
+		mov 	dly,#$CD
+:p1		mov 	w,dly1
+		or  	w,dly
+		jnz 	:p1
+		ret
+
+
+; required to output HEX numbers
+_hex            dw      '0123456789ABCDEF'
+;
+;
+
+;* Subroutines *
+
+; Send hex byte (2 digits)
+;
+send_hex
+                mov     number_low,w            ; save W
+                mov     w,<>number_low          ;send first digit
+                call    :digit
+
+                mov     w,number_low            ;send second digit
+
+:digit  and     w,#$F                   	;read hex chr
+                mov     temp,w
+                mov     w,#_hex
+                clc
+                add     w,temp
+                mov     m,#0
+                iread             		; read from program mem!
+                mov     m,#$F
+
+; fall into send byte
+
+send_byte	bank	serial
+
+:wait		test	tx_count		;wait for not busy
+		jnz	:wait
+
+		mov	tx_high,w
+		clrb    tx_low.7   		; set start bit
+
+
+		mov	tx_count,#10		;1 start + 8 data + 1 stop bit
+
+		ret

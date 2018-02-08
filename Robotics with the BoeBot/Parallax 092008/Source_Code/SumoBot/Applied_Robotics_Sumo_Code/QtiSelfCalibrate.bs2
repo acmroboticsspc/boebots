@@ -1,0 +1,81 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - QtiSelfCalibrate.bs2
+' This program sets a threshold between black and white, and then displays
+' whether the QTI sees black or white.
+
+' Important: You must start with the QTIs seeing black.
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+qtiPwrLeft     PIN     10                    ' Left QTI on/off pin
+qtiSigLeft     PIN     9                     ' Left QTI signal pin
+
+qtiPwrRight    PIN     7                     ' Right QTI on/off pin
+qtiSigRight    PIN     8                     ' Right QTI signal pin
+
+' -----[ Variables ]----------------------------------------------------------
+
+qtiLeft        VAR     Word                  ' Stores left QTI time
+qtiRight       VAR     Word                  ' Stores right QTI time
+qtiThreshold   VAR     Word                  ' Stores black/white threshold
+
+' -----[ Initialization ]-----------------------------------------------------
+
+GOSUB Read_Line_Sensors                      ' Get reflection values
+qtiThreshold = (qtiLeft + qtiRight) / 2      ' Calculate average
+qtiThreshold = qtiThreshold / 4              ' Take 1/4 average
+
+DEBUG CLS, "Threshold = ",DEC qtiThreshold   ' Display threshold
+
+DEBUG CR, CR, "FRONT QTI Sensors", CR,       ' Display column headings
+              "Left    Right", CR,
+              "-----   -----", CR
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+DO                                           ' DO...LOOP repeats indefinitely
+
+  GOSUB Read_Line_Sensors                    ' Get reflection values
+
+  DEBUG CRSRXY, 0, 5,
+        DEC5 qtiLeft, CRSRX, 8,              ' Display reflection values
+        DEC5 qtiRight, CR
+
+  IF qtiLeft < qtiThreshold THEN             ' Indicate what left QTI sees
+    DEBUG "White"
+  ELSE
+    DEBUG "Black"
+  ENDIF
+
+  DEBUG CRSRX, 8
+
+  IF qtiRight < qtiThreshold THEN            ' Indicate what right QTI sees
+    DEBUG "White"
+  ELSE
+    DEBUG "Black"
+  ENDIF
+
+  PAUSE 100                                  ' Delay for slower PCs
+
+LOOP
+
+' -----[ Subroutine - Read_Line_Sensors ]-------------------------------------
+
+Read_Line_Sensors:
+
+  HIGH qtiPwrLeft                            ' Turn left QTI on
+  HIGH qtiSigLeft                            ' Discharge capacitor
+  PAUSE 1
+  RCTIME qtiSigLeft, 1, qtiLeft              ' Measure charge time
+  LOW qtiPwrLeft                             ' Turn left QTI off
+
+  HIGH qtiPwrRight                           ' Turn right QTI on
+  HIGH qtiSigRight                           ' Discharge capacitor
+  PAUSE 1
+  RCTIME qtiSigRight, 1, qtiRight            ' Measure charge time
+
+  RETURN
+

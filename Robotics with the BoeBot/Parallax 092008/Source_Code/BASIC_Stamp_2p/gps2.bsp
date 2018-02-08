@@ -1,0 +1,39 @@
+'Setup for TRIPMATE GPS system @4800 baud and BS2p24
+'reads 61 bytes of data each time via the $GPRMC mode
+'data display on a Scott Edwards serial lcd
+'places data in ram memory
+'4/1/01
+
+r       var byte(16)
+x       var byte
+t       var byte
+
+serout 15,17405,[254,1]
+serout 15,17405,["Starting Data"]
+start:
+'read GPS and place 61 characters in ram memory
+serin 8,16884,10000,nodata,[wait("$GPRMC"),spstr 61]
+for t=0 to 6
+get t,r(t)
+next
+debug str r\7,cr
+serout 15,17405,[254,148,"Time ",r(1),r(2),":",r(3),r(4),":",r(5),r(6)]
+for t=0 to 11
+get t+9,r(t)
+next
+debug str r\12,cr
+serout 15,17405,[254,128,"Latitude ",r(1),r(2),223,r(3),r(4),39,r(11)]
+for t=0 to 12
+get t+21,r(t)
+next
+debug str r\13,cr
+serout 15,17405,[254,192,"Longitude ",r(1),r(2),r(3),223,r(4),r(5),39,r(12)]
+for t=0 to 6
+get t+44,r(t)
+next
+debug str r\7,cr
+serout 15,17405,[254,212,"Date ",r(3),r(4),"/",r(1),r(2),"/",r(5),r(6)]
+goto start
+nodata:
+debug "bad connection?",cr
+goto start

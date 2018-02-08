@@ -1,0 +1,32 @@
+'{$STAMP BS2}
+'*********************************************************************************************************
+'* Program:  Simple_Rx_app.BS2       Author:   Gabriel Duran, Parallax, Inc.                             *
+'* Date:     7/3/02                  Revision: 1.0                                                       *
+'*                                                                                                       *
+'* Description:                                                                                          *
+'* This BS2-IC code demonstrates simple receiving with the Parallax RF Receiver.                         *
+'*                                                                                                       *
+'* This code must be run on a BASIC Stamp 2, interfaced to an RF Receiver Part#27998 or an               *
+'* RF Transceiver Part#28000.  This code is meant to interface with a second Stamp 2 running             *
+'* Simple_Tx_app.BS2.                                                                                    *
+'*                                                                                                       *
+'* Wiring: The RF App Mod plugs directly into the X-1 Header.       					 * 								   *
+'* 													 * 
+'*********************************************************************************************************
+
+'---Set up Variables---
+Value 	VAR BYTE							'Holds data value being transmitted
+
+'---Set up Constants---
+Rx	 	CON 2
+Rxt		CON 3
+N9600		CON $4054						'Baud mode value for 9600 baud, 8,N,1
+
+
+'---------------------------------------- Main Routine -------------------------------------------
+
+'Receive data
+ReceiverMain:
+  SERIN Rx\Rxt,N9600,[Value]						'Receive one byte
+  DEBUG "Receiving: ",DEC3 Value,CR
+GOTO ReceiverMain							'Then start over again	

@@ -1,0 +1,49 @@
+' Applied Robotics with the SumoBot - ServoControlExample.bs2
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+counter VAR Byte
+
+' SumoBot goes forward 3 seconds.
+FOR counter = 1 TO 122
+  PULSOUT 13, 850
+  PULSOUT 12, 650
+  PAUSE 20
+NEXT
+
+' SumoBot goes backward 3 seconds.
+FOR counter = 1 TO 122
+  PULSOUT 13, 650
+  PULSOUT 12, 850
+  PAUSE 20
+NEXT
+
+' SumoBot rotates left .75 seconds.
+FOR counter = 1 TO 30
+  PULSOUT 13, 650
+  PULSOUT 12, 650
+  PAUSE 20
+NEXT
+
+' SumoBot rotates right .75 seconds.
+FOR counter = 1 TO 30
+  PULSOUT 13, 850
+  PULSOUT 12, 850
+  PAUSE 20
+NEXT
+
+' SumoBot pivots right 1.5 seconds.
+FOR counter = 1 TO 61
+  PULSOUT 13, 850
+  PULSOUT 12, 750
+  PAUSE 20
+NEXT
+
+' SumoBot curves left 1.5 seconds.
+FOR counter = 1 TO 61
+  PULSOUT 13, 765
+  PULSOUT 12, 650
+  PAUSE 20
+NEXT
+

@@ -1,0 +1,177 @@
+' =========================================================================
+'
+'   File...... GP2D12.BS2
+'   Purpose... Read voltage from GP2D12 and estimate object distance
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallax.com
+'   Started...
+'   Updated... 16 AUG 2004
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Uses ADC0831 ADC to read voltage output from GP2D12 range sensor.  Note
+' that the Vref input of the ADC0831 is set to 2.55 vdc, giving 0.01 volts
+' per count.
+'
+' Output is to a SEETRON serial LCD set at 9600 baud.
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Lcd             PIN     0                       ' serial out to LCD
+
+AdcDta          PIN     15                      ' ADC data line
+AdcClk          PIN     14                      ' ADC clock
+AdcCS           PIN     13                      ' ADC chip select
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+Xspan           CON     5                       ' 5 cm per data point
+
+LcdI            CON     $FE                     ' lcd command instruction
+LcdCls          CON     $01                     ' clear the LCD
+LcdHome         CON     $02                     ' move cursor home
+LcdDDRam        CON     $80                     ' Display Data RAM control
+LcdCGRam        CON     $40                     ' Character Generator RAM
+LcdLine1        CON     $80                     ' DDRAM address of line 1
+LcdLine2        CON     $C0                     ' DDRAM address of line 2
+
+
+#SELECT $STAMP
+  #CASE BS2, BS2E, BS2PE
+    T1200       CON     813
+    T2400       CON     396
+    T4800       CON     188
+    T9600       CON     84
+    T19K2       CON     32
+    T38K4       CON     6
+  #CASE BS2SX, BS2P
+    T1200       CON     2063
+    T2400       CON     1021
+    T4800       CON     500
+    T9600       CON     240
+    T19K2       CON     110
+    T38K4       CON     45
+#ENDSELECT
+
+Inverted        CON     $4000
+Open            CON     $8000
+
+LcdBaud         CON     T9600 + Inverted        ' for SEETRON LCD
+
+#DEFINE __Has_LCD = 1                           ' set to 0 for DEBUG
+
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+result          VAR     Byte                    ' adc result
+cVolts          VAR     Word                    ' 0.01 volts
+cm              VAR     Byte                    ' centimeters
+idx             VAR     Nib
+
+test1           VAR     Byte                    ' test values for
+test2           VAR     Byte                    '   interpolation
+slope           VAR     Word                    ' mV/cm between test points
+
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+Vout            DATA    251, 179, 139, 114,  97
+                DATA     85,  76,  67,  62,  57
+                DATA     53,  50,  48,  46,  43
+                DATA      0
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  HIGH AdcCS
+  #IF __Has_LCD #THEN
+    PAUSE 500
+    SEROUT Lcd, LcdBaud, [LcdI, LcdCls]
+    PAUSE 1
+    SEROUT Lcd, LcdBaud, [LcdI, LcdLine1+3, "* GP2D12 *"]
+    PAUSE 3000
+    SEROUT Lcd, LcdBaud, [LcdI, LcdCls]
+    PAUSE 1
+  #ELSE
+    DEBUG CLS, "GP2D12 Demo"
+  #ENDIF
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  GOSUB Read_GP2D12                             ' read sensor
+  GOSUB Estimate_Cm                             ' estimate distance
+
+  #IF __Has_LCD #THEN
+    SEROUT Lcd, LcdBaud, [LcdI, LcdHome]
+    PAUSE 1
+    SEROUT Lcd, LcdBaud, [DEC cVolts / 100, ".", DEC2 cVolts]
+    SEROUT Lcd, LcdBaud, [LcdI, LcdLine2, DEC cm, " cm"]
+  #ELSE
+    DEBUG CRSRXY, 0, 2,
+          DEC cVolts / 100, ".", DEC2 cVolts,
+          TAB, "volts", CR,
+          DEC cm, TAB, "cm"
+  #ENDIF
+
+  PAUSE 100
+  GOTO Main
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Read_0831:
+  LOW AdcCS                                     ' enable ADC0831
+  SHIFTIN AdcDta, AdcClk, MSBPOST, [result\9]   ' read the voltage
+  HIGH AdcCS                                    ' disconnect ADC0831
+  RETURN
+
+
+Read_GP2D12:
+  cVolts = 0                                    ' reset reading
+  FOR idx = 0 TO 2                              ' three reads (to filter)
+    GOSUB Read_0831                             ' get the voltage
+    cVolts = cVolts + result                    ' accumulate
+    PAUSE 30
+  NEXT
+  cVolts = cVolts / 3                           ' average the readings
+  RETURN
+
+
+Estimate_Cm:
+  FOR idx = 0 TO 15                             ' search table for location
+    READ (Vout + idx), test2                    ' read table value
+    IF (test2 <= cVolts) THEN EXIT              ' found position
+  NEXT
+
+  SELECT idx
+    CASE 0
+      cm = 10                                   ' fix to minimum range
+
+    CASE 1 TO 14                                ' calculate range
+      cm = 10 + (5 * idx)
+      IF (test2 < cVolts) THEN                  ' estimate through interpolation
+        READ (Vout + idx - 1), test1            ' get other border value
+        slope = (test1 - test2) * 10 / Xspan    ' determine slope between points
+        cm = cm - ((cvolts - test2) * 10 / slope)
+      ENDIF
+
+    CASE 15
+      cm = 80                                   ' fix to maximum range
+  ENDSELECT
+  RETURN

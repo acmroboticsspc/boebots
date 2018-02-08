@@ -1,0 +1,53 @@
+' -----[ Title ]---------------------------------------------------
+'
+' File......  COMM_M.BAS
+' Purpose...  Communication between two BASIC Stamps
+' Author....  Claus Kühnel
+' Started...  30.09.94
+' Updated...  24.09.01
+'
+' -----[ Program Description ]--------------------------------------
+'
+' Two BASIC Stamps are connected over RS232.
+' The master stamp sends a command to switch an output of the slave.
+' After switching the slave reads this output an gives the state
+' back to the master.
+' -----[ Revision History ]-----------------------------------------
+'
+' 30.09.94: Version 1.0 for BS1
+' 24.09.01: Version 2.0 for BS2
+'
+' -----[ Directives ]----------------------------------------------
+'
+'{$STAMP BS2p} 			'specifies a BS2p
+' 
+' -----[ Constants ]------------------------------------------------
+'
+RxD 		con 8
+TxD 		con 9
+
+baud 		con 396		'T2400 for BS2
+'
+' -----[ Variables ]------------------------------------------------
+'
+retval	var byte		'return byte from the slave
+command 	var byte		'command byte for the slave
+'     	     	
+' -----[ Initialization ]-------------------------------------------
+'
+' -----[ Main Code ]------------------------------------------------
+'
+		pause 100
+start:	command = "1"     'send command byte
+		gosub send
+		command = "0"   	'send another command byte
+		gosub send
+		goto start        'repeat endless
+'
+' -----[ Subroutines ]----------------------------------------------
+'
+send: serout TxD, baud, [command]   'send the command to the slave
+	serin  RxD, baud, [retval] 	'look for return byte
+	'debug  ? retval
+	pause 1000     	         	'wait a little bit
+	return

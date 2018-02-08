@@ -1,0 +1,68 @@
+' -----[ Title ]---------------------------------------------------
+'
+' File......  MASTER.BS2
+' Purpose...  Demonstration of a BASIC Stamp network
+' Author....  Claus Kühnel
+' Started...   8.10.94
+' Updated...  24.09.01
+'
+' -----[ Program Description ]-------------------------------------
+'
+' In this demonstration three BASIC Stamps build a network.
+' The master sends commands to the two slaves named A_Node and
+' B_Node. After execution the required function the slave sends a
+' return value back to the master. This return value is displayed
+' by DEBUG in this demonstration.
+'
+' -----[ Revision History ]----------------------------------------
+'
+'  8.10.94: Version 1.0 for BS1
+' 24.09.01: Version 2.0 for BS2
+'
+' -----[ Directives ]----------------------------------------------
+'
+'{$STAMP BS2} 			'specifies a BS2
+' 
+' -----[ Constants ]-----------------------------------------------
+'
+RxD 	con 8
+TxD 	con 9
+LED 	con 10
+
+baud 	con 396			'T2400
+tout	con 1000			'Timeout 1 sec
+'
+' -----[ Variables ]-----------------------------------------------
+'
+retval 	var byte
+command 	var byte
+'
+' -----[ Initialization ]------------------------------------------
+'
+' -----[ Main Code ]-----------------------------------------------
+'
+start:
+	command = "1"
+      serout TxD,baud, ["A_Node",command]'send "1" to A_Node
+      serin RxD, baud, tout,tlabel, [retval] 'wait for return value
+      debug ? retval
+      pause 500
+      serout TxD, baud, ["B_Node",command]'send "1" to B_Node
+      serin RxD, baud, tout,tlabel, [retval] 'wait for return value
+      debug ? retval
+      command = "0"
+      serout TxD, baud, ["A_Node",command]'send "0" to A_Node
+	serin RxD, baud, tout,tlabel, [retval] 'wait for return value
+      debug ? retval
+      serout TxD, baud, ["B_Node",command]'send "0" to B_Node
+      serin RxD, baud, tout,tlabel, [retval] 'wait for return value
+      debug ? retval
+      debug ">"
+      goto start					'repeat endless
+
+tlabel:
+	debug "Timeout - no answer from any slave!", CR
+	goto start
+'
+' -----[ Subroutines ]---------------------------------------------
+'

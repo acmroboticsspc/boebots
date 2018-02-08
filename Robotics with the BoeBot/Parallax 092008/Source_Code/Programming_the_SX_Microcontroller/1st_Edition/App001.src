@@ -1,0 +1,26 @@
+; APP001.SRC - Ramp Generator
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28, OSCHS2, STACKX_OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+
+org     $000
+
+Start
+  clr rc
+  mov !rc, #0
+
+Loop
+  inc rc          ; 1
+  jmp Loop        ; 3

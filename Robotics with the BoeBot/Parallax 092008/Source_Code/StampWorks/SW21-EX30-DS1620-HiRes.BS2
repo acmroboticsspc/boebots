@@ -1,0 +1,136 @@
+' =========================================================================
+'
+'   File....... SW21-EX30-DS1620-HiRes.BS2
+'   Purpose.... Simple temperature measurement with the DS1620
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program measures temperature using the Dallas Semiconductor DS1620
+' temperature sensor. Resolution is <0.05 degrees Celsius.
+'
+' NOTE: After downloading program, power must be cycled for proper
+'       operation.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+DQ              CON     0                       ' DS1620.1 (data I/O)
+Clock           CON     1                       ' DS1620.2
+Reset           CON     2                       ' DS1620.3
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+RdTmp           CON     $AA                     ' read temperature
+WrHi            CON     $01                     ' write TH (high temp)
+WrLo            CON     $02                     ' write TL (low temp)
+RdHi            CON     $A1                     ' read TH
+RdLo            CON     $A2                     ' read TL
+RdCntr          CON     $A0                     ' read counter
+RdSlope         CON     $A9                     ' read slope
+StartC          CON     $EE                     ' start conversion
+StopC           CON     $22                     ' stop conversion
+WrCfg           CON     $0C                     ' write config register
+RdCfg           CON     $AC                     ' read config register
+
+DegSym          CON     186                     ' degrees symbol
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+tempIn          VAR     Word                    ' raw temperature
+config          VAR     Byte                    ' configuration register
+done            VAR     config.BIT7             ' 1 when conversion done
+tHiFlag         VAR     config.BIT6             ' 1 when temp >= THi
+tLoFlag         VAR     config.BIT5             ' 1 when temp <= TLo
+busy            VAR     config.BIT4             ' 1 when EE update writing
+cRem            VAR     Word                    ' count remaining
+slope           VAR     Word                    ' slope (counts per degree)
+
+tC              VAR     Word                    ' Celsius
+tF              VAR     Word                    ' Fahrenheit
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Setup:
+  HIGH Reset                                    ' alert DS1620
+  SHIFTOUT DQ, Clock, LSBFIRST, [WrCfg, %11]    ' with CPU, one-shot mode
+  LOW Reset                                     ' release DS1620
+  PAUSE 10
+
+  DEBUG CLS,
+        "DS1620  HR", CR,
+        "----------"
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Read_DS1620_HR                        ' get hi-res temperature
+
+Display_C:
+    DEBUG CRSRXY, 0, 2,
+          (tC.BIT15 * 13 + " "),
+          DEC (ABS tC / 100), ".", DEC2 (ABS tC),
+          DegSym, " C", CLREOL
+
+Display_F:
+    DEBUG CRSRXY, 0, 3,
+          (tF.BIT15 * 13 + " "),
+          DEC (ABS tF / 100), ".", DEC2 (ABS tF),
+          DegSym, " F", CLREOL
+
+  LOOP
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Read_DS1620_HR:                                 ' get hi-resolution temp
+  HIGH Reset                                    ' alert the DS1620
+  SHIFTOUT DQ, Clock, LSBFIRST, [StartC]        ' start conversion
+  LOW Reset                                     ' release the DS1620
+  DO
+    HIGH Reset
+    SHIFTOUT DQ, Clock, LSBFIRST, [RdCfg]       ' read config register
+    SHIFTIN DQ, Clock, LSBPRE, [config\8]
+    LOW Reset
+  LOOP UNTIL (done = 1)                         ' wait for conversion
+
+  HIGH Reset
+  SHIFTOUT DQ, Clock, LSBFIRST, [RdTmp]         ' read raw temperature
+  SHIFTIN DQ, Clock, LSBPRE, [tempIn\9]
+  LOW Reset
+
+  HIGH Reset
+  SHIFTOUT DQ, Clock, LSBFIRST, [RdCntr]        ' read counter
+  SHIFTIN DQ, Clock, LSBPRE, [cRem\9]
+  LOW Reset
+
+  HIGH Reset
+  SHIFTOUT DQ, Clock, LSBFIRST, [RdSlope]       ' read slope
+  SHIFTIN DQ, Clock, LSBPRE, [slope\9]
+  LOW Reset
+
+  tempIn = tempIn >> 1                          ' remove half degree bit
+  tempIn.BYTE1 = -tempIn.BIT7                   ' extend sign bit
+  tC = tempIn * 100                             ' convert to 100ths
+  tC = tC - 25 + (slope - cRem * 100 / slope)   ' fix fractional temp
+
+  IF (tC.BIT15 = 0) THEN
+    tF = tC */ $01CC + 3200                     ' convert pos C to Fahr
+  ELSE
+    tF = 3200 - ((ABS tC) */ $01CC)             ' convert neg C to Fahr
+  ENDIF
+  RETURN

@@ -1,0 +1,42 @@
+'********************************************************************************************
+'{$STAMP BS2E}										LEDtest.bse
+'												   05/23/00
+'	This program exercises all of the LED segments on the LED Terminal AppMod
+'	using the BS2E. Pressing the pushbuttons will latch a discrete LED.
+'********************************************************************************************
+'2400 Baud = 396
+'4800 Baud = 188
+'9600 Baud = 84
+'19K2 Baud = 32
+'38K4 Baud = 6
+
+Baud	con	6+$8000
+
+
+BigNum	var	word
+NumLo		var	BigNum.lowbyte
+NumHi		var	BigNum.highbyte
+LEDa		var	nib
+LEDb		var	byte
+datain	var	byte(5)
+
+
+Init:		pause  800
+Start:	gosub  GetButtons
+		serout 6,Baud,["!LT0ASC0000",LEDb<<4|LEDa,2]
+		gosub  GetButtons
+		serout 6,Baud,["!LT0ASC++++",LEDb<<4|LEDa,1]
+		gosub  GetButtons
+		serout 6,Baud,["!LT0ASCXXXX",LEDb<<4|LEDa,3]
+		goto   Start
+GetButtons
+		pause  200
+		serout 6,Baud,["!LT0PBR"]
+		serin  6,Baud,[datain]
+		if datain = 0 then DoLEDs
+		LEDb = datain
+DoLEDs:	LEDa = LEDa << 1
+		if LEDa > 0 then GBend
+		LEDa = 1
+GBend:	return
+

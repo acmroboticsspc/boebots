@@ -1,0 +1,109 @@
+' Listing 3
+' Nuts & Volts - Stamp Applications, April 2001
+
+' {$STAMP BS2p}
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... DSNAMES.BSP
+' Purpose... Stores string names of DalSemi 1-Wire devices
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 01 MAR 2001
+' Updated... 05 MAR 2001
+ 
+
+' -----[ Program Description ]---------------------------------------------
+'
+' There is no actual code in this module. This program stores the names
+' of various Dallas Semiconductor 1-Wire devices.  The device family code
+' is used to map the strings in EEPROM.  The pointer to a device's string
+' discription is stored at the location determined by this formula:
+'
+'    pointer = device_id * 2 + $600
+'
+' "pointer" is actually the low-byte of the address location.  The high
+' byte is at pointer+1.
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+PntrBase		CON	$600
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+' Store strings first so labels can be used in address pointer table
+'
+Unknown		DATA	"Unknown device",0
+
+' shared family codes
+
+FCode01		DATA	"DS1990 iButton or DS2401",0
+FCode04		DATA	"DS1994 iButton or DS2404",0
+FCode10		DATA	"DS1920 iButton or DS18S20",0
+FCode14		DATA	"DS1971 iButton or DS2430",0
+FCode23		DATA	"DS1973 iButton or DS2433",0
+
+' iButtons
+
+DS1920		DATA	"DS1920 Temperature iButton",0
+DS1921		DATA	"DS1921 Thermochron iButton",0
+DS1963		DATA	"DS1963 4-kBit Monetary iButton",0
+DS1971		DATA	"DS1971 256-bit EEPROM iButton",0
+DS1973		DATA	"DS1973 4-kBit EEPROM iButton",0
+DS1982		DATA	"DS1982 1-kBit Add-Only iButton",0
+DS1985		DATA	"DS1985 16-kBit Add-Only iButton",0
+DS1986		DATA	"DS1986 64-kBit Add-Only iButton",0
+DS1990		DATA	"DS1990 Serial Number iButton",0
+DS1991		DATA	"DS1991 MultiKey iButton",0
+DS1992		DATA	"DS1992 1-kBit Memory iButton",0
+DS1993		DATA	"DS1993 4-kBit Memory iButton",0
+DS1994		DATA	"DS1994 4-kBit Plus Time Memory iButton",0
+DS1995		DATA	"DS1995 16-kBit Memory iButton",0
+DS1996		DATA	"DS1996 64-kBit Memory iButton",0
+
+' 1-Wire chips
+
+DS1822		DATA	"DS1822 Econo-MicroLAN Digital Thermometer",0
+DS18B20		DATA	"DS18B20 Programmable Resolution Digital Thermometer",0
+DS18S20		DATA	"DS18S20 High Precision Digital Thermometer",0
+DS2401		DATA	"DS2401 Silicon Serial Number",0
+DS2404		DATA	"DS2404 EconoRAM Time Chip",0
+DS2405		DATA	"DS2405 Addressable Switch",0
+DS2406		DATA	"DS2406 Addressable Switch Plus 1-kBit Memory",0
+DS2417		DATA	"DS2417 Time Chip With Interrupt",0
+DS2430		DATA	"DS2430 256-bit EEPROM",0
+DS2433		DATA	"DS2433 4-kBit EEPROM",0
+DS2450		DATA	"DS2450 Quad A/D Converter",0
+DS2505		DATA	"DS2505 16-kBit Add-Only Memory",0
+DS2506		DATA	"DS2506 64-kBit Add-Only Memory",0
+DS2890		DATA	"DS2890 Digital Pot",0
+
+
+' string pointers
+
+Pointers	DATA	@$01*2+PntrBase,Word FCode01
+		DATA	@$04*2+PntrBase,Word FCode04
+		DATA	@$10*2+PntrBase,Word FCode10
+		DATA	@$14*2+PntrBase,Word FCode14
+		DATA	@$23*2+PntrBase,Word FCode23
+
+		DATA	@$02*2+PntrBase,Word DS1991
+		DATA	@$06*2+PntrBase,Word DS1993
+		DATA	@$08*2+PntrBase,Word DS1992
+		DATA	@$09*2+PntrBase,Word DS1982
+		DATA	@$0A*2+PntrBase,Word DS1995
+		DATA	@$0C*2+PntrBase,Word DS1996
+		DATA	@$1A*2+PntrBase,Word DS1963
+		DATA	@$21*2+PntrBase,Word DS1921
+
+		DATA	@$05*2+PntrBase,Word DS2405
+		DATA	@$0B*2+PntrBase,Word DS2505
+		DATA	@$0F*2+PntrBase,Word DS2506
+		DATA	@$12*2+PntrBase,Word DS2406
+		DATA	@$20*2+PntrBase,Word DS2450
+		DATA	@$22*2+PntrBase,Word DS1822
+		DATA	@$27*2+PntrBase,Word DS2417
+		DATA	@$28*2+PntrBase,Word DS18B20
+		DATA	@$2C*2+PntrBase,Word DS2890 

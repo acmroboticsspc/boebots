@@ -1,0 +1,206 @@
+' Supplemental Listing
+' Nuts & Volts, August 2001
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... IR_NUMBER12.BSX
+' Purpose... Input Number from Sony IR remote
+' Author.... Jon Williams (based on work by Andy Lindsay)
+' E-mail.... jwilliams@parallaxinc.com
+' Started... 04 JUL 2001
+' Updated... 06 JUL 2001 
+
+' { $STAMP BS2sx }
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program accepts numeric input from a Sony IR remote.
+'
+' Digits are entered from remote keypad.  The Volume-down [Vol-] key acts
+' like a backspace key to correct mistakes.  Pressing [Enter] accepts the
+' value.
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+' 05 JUL 2001 : Version 1 tested and working
+' 06 JUL 2001 : Added backspace editing
+ 
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+IR_pin	CON	15
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+IsLow		CON	0
+IsHigh	CON	1
+
+NoKey		CON	$FFF				' no IR key
+KeyDelay	CON	50				' loops for "new" key ( >0 )
+
+StartWidth	CON	2700				' width of IR start bit (BS2sx)
+Bit0Width	CON	750				' width of IR zero bit (BS2sx)
+Bit1Width	CON	1500				' widht of IR one bit (BS2sx)
+
+'StartWidth	CON	2880				' width of IR start bit (BS2p)
+'Bit0Width	CON	800				' width of IR zero bit (BS2p)
+'Bit1Width	CON	1600				' widht of IR one bit (BS2p)
+
+BitTest	CON	Bit0Width * 3 / 2		' test width -- look for 1's
+
+BS		CON	8				' backspace character
+MaxDigits	CON	4				' width of input field
+TV		CON	$01				' take input from TV only
+
+
+' -----[ IR Codes ]--------------------------------------------------------
+'
+' Generic Sony IR remote codes (12-bit; not a complete list)
+'
+IR_1		CON	$080
+IR_2		CON	$081
+IR_3		CON	$082
+IR_4		CON	$083
+IR_5		CON	$084
+IR_6		CON	$085
+IR_7		CON	$086
+IR_8		CON	$087
+IR_9		CON	$088
+IR_0		CON	$089
+IR_Enter	CON	$08B
+
+IR_ChUp	CON	$090
+IR_ChDn	CON	$091
+IR_VolUp	CON	$092
+IR_VolDn	CON	$093
+IR_Mute	CON	$094
+IR_Power	CON	$095
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+irCode	VAR	Word				' returned code 
+lastCode	VAR	Word				' last returned code
+irStart	VAR	Word				' width or IR start bit
+irBit		VAR	irStart			' width of IR bit
+keyRpts	VAR	Byte				' repeats of current key
+
+device	VAR	Byte				' device code
+
+numDigits	VAR	Nib				' digits entered
+usrValue	VAR	Word				' entered value
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Initialize:
+  numDigits = 0					' reset digits entered
+  usrValue = 0					' clear old value
+
+  PAUSE 500
+  DEBUG CLS, "Press digits (up to ",DEC MaxDigits,"), then [Enter]: "
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Main:
+  GOSUB Scan_IR					' check for IR key
+  IF (irCode = lastCode) THEN Key_Timer	' key is being held
+  keyRpts = 0					' not held, reset timer
+  GOTO Check_Key
+
+Key_Timer:
+  IF (irCode = NoKey) THEN Check_Key	' no key, skip timer
+  keyRpts = keyRpts + 1	// KeyDelay		' update the repeats timer
+	
+Check_Key:
+  lastCode = irCode				' save last key
+  device = irCode >> 7				' get device bits
+  IF (device <> TV) THEN Main			' use only the TV keys
+  IF (irCode = NoKey) THEN Main		' no key, go get one
+  IF (keyRpts > 0) THEN Main			' in repeat delay
+
+Check_BS:
+  IF (irCode <> IR_VolDn) THEN Check_Digit
+  IF (numDigits = 0) THEN Main		' nothing to clear
+  DEBUG BS," ",BS					' clear screen digit
+  usrValue = usrValue / 10			' update user value
+  numDigits = numDigits - 1			' update digit count
+  GOTO Loop_Pad
+
+Check_Digit:
+  IF (irCode = IR_Enter) THEN Show_Value
+  IF (numDigits = MaxDigits) THEN Main	' no space for another
+  irCode = irCode & $7F				' mask out upper bits
+  IF (irCode > 9) THEN Main			' not a digit
+
+  irCode = irCode + 1 // 10			' correct digit value
+  DEBUG DEC1 irCode				' show digit on screen
+  usrValue = usrValue * 10 + irCode		' update user value 
+  numDigits = numDigits + 1			' update digit count
+    
+Loop_Pad:
+  PAUSE 100						' pad loop timing
+  GOTO Main
+
+Show_Value:
+  IF (numDigits > 0) THEN Has_Value		' check for actual entry
+  DEBUG CR, CR, "No value entered."
+  PAUSE 1500
+  GOTO Initialize
+
+Has_Value:
+  DEBUG CR, CR, "Your value was ", DEC usrValue
+  PAUSE 2500
+  GOTO Initialize
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+' Receive and decode Sony IR command
+'
+Scan_IR:
+  irCode = NoKey					' flag value
+
+Wait_For_Start:					' wait for start bit
+  PULSIN IR_pin,IsLow,irStart
+  BRANCH irStart,[IR_Exit]			' exit if no key down
+  BRANCH irStart/StartWidth,[Wait_For_Start]
+
+  ' This code MUST stay inline
+  ' -- will NOT work in a loop
+
+  PULSIN IR_pin,IsLow,irBit			' decode 12 bits
+  irCode.Bit0 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit1 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit2 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit3 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit4 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit5 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit6 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit7 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit8 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit9 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit10 = irBit/BitTest
+  PULSIN IR_pin,IsLow,irBit
+  irCode.Bit11 = irBit/BitTest
+
+IR_Exit:
+  RETURN

@@ -1,0 +1,58 @@
+;=======================================================================
+;TITLE:         comparator.src
+;
+;PURPOSE:       This SX28 code demonstrates setup of the on-board
+;               comparator.
+;
+;AUTHOR:        Parallax, Inc.
+;
+;REVISIONS:
+;  08/12/99 -   Initial release.
+;  09/17/04 -   Updated to support SASM.
+;
+;CONNECTIONS:
+;  RB.0 outputs 1 or 0 indicating "comparative" state of RB.1 and RB.2.
+;  RB.1 and RB.2 are inputs.  Connect to external 0 to 5 volt signals.
+;
+;DETAILS:
+;  See the SX Chip Datasheet for detailed information on the built-in
+;  comparator.
+;=======================================================================
+
+
+;-------------------------- DEVICE DIRECTIVES --------------------------
+
+		DEVICE		SX28,OSC4MHZ,TURBO
+
+IFDEF	__SASM  ;SASM Directives
+		DEVICE		STACKX,OPTIONX
+		IRC_CAL		IRC_SLOW
+		
+ELSE		;Parallax Assember Directives
+		DEVICE		STACKX_OPTIONX
+ENDIF
+
+		RESET		Initialize
+
+;---------------------------- DEBUG SETTINGS ---------------------------
+
+		FREQ	4_000_000
+	
+;------------------------ INITIALIZATION ROUTINE -----------------------
+
+Initialize
+		;Comparator Configuration
+		mov	W,#$18			;Allow Comparator configuration
+		mov	M,W				
+		mov	!rb,#%00000000		;Comparator on and result-output enabled
+		mov	W,#$1F			;Allow Direction configuration
+		mov	M,W				
+		mov	!rb,#%11111110		;Port B bit 0 output, bits 1-7 to input
+
+;---------------------------- MAIN PROGRAM -----------------------------
+
+Main
+		mode	$08
+		mov	!rb,#$00
+		jmp	Main			;At this point, W bit 0 holds result of comparator
+						;and port B bit 0 outputs the result as well.

@@ -1,0 +1,137 @@
+' =========================================================================
+'
+'   File...... Coffee_Caddy.BS2
+'   Purpose... To prevents coffee spills while driving
+'   Author.... Parallax, Inc.
+'   E-mail.... jwilliams@parallax.com
+'   Started...
+'   Updated... 15 JUL 2004
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Xpin            CON     0                       ' x output from Memsic
+Ypin            CON     1                       ' y output
+
+Coils           VAR     OUTB                    ' stepper coils
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+#SELECT $stamp
+  #CASE BS2, BS2E
+    Scale       CON     $200                    ' 2.0 us per unit
+  #CASE BS2SX
+    Scale       CON     $0CC                    ' 0.8 us per unit
+  #CASE BS2P
+    Scale       CON     $0C0                    ' 0.75 us per unit
+  #CASE BS2PE
+    Scale       CON     $1E1                    ' 1.88 us per unit
+#ENDSELECT
+
+RevSteps        CON     100                     ' steps per revolution
+HalfRev         CON     RevSteps / 2            ' half revolution
+MoveTime        CON     500                     ' move time (pos --> angle)
+
+StepCycle       CON     4                       ' 4 full-steps in cycle
+MCW             CON     1                       ' point to next table item
+MCCW            CON     StepCycle - 1           ' point to previous
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+xG              VAR     Word                    ' x axis g-force input
+yG              VAR     Word                    ' y axis g-force input
+angle           VAR     Byte                    ' direct to point at
+pos             VAR     Byte                    ' current spout pos
+span            VAR     Byte                    ' ABS (
+stpIdx          VAR     Nib                     ' pointer to phase table
+stpDir          VAR     Nib                     ' direction of move
+stpNum          VAR     Byte                    ' number of steps
+stpDelay        VAR     Byte                    ' delay between steps
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+Steps           DATA    %0011, %0110, %1100, %1001
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  DIRB = %1111                                  ' stepper pins are outputs
+  pos = 0
+  PAUSE 100                                     ' let Memsic get ready
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  GOSUB Get_Memsic                              ' read g-forces
+  angle = 100 - ((xG ATN yG) */ 100) // 100     ' scale angle 0 - 99
+  IF (angle <> pos) THEN                        ' angle change?
+    GOSUB Move_Spout                            ' yes, adjust
+  ENDIF
+  GOTO Main
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' Read Memsic 2125
+' -- scale output to -50 to +50
+
+Get_Memsic:
+  PULSIN XPin, 1, xG                            ' read Memsic 2125
+  PULSIN YPin, 1, yG
+  xG = xG */ Scale + 50 / 100 - 50
+  yG = yG */ Scale + 50 / 100 - 50
+  RETURN
+
+
+' Determine shortest path to new angle
+' -- move in "MoveTime" period
+
+Move_Spout:
+  IF (angle > pos) THEN
+    span = angle - pos
+    IF (span < HalfRev) THEN
+      stpDir = MCW
+    ELSE
+      stpDir = MCCW
+      span = RevSteps - span                    ' adjust for short route
+    ENDIF
+  ELSE
+    span = pos - angle
+    IF (span > HalfRev) THEN
+      stpDir = MCW
+      span = RevSteps - span
+    ELSE
+      stpDir = MCCW
+    ENDIF
+  ENDIF
+
+  stpDelay = MoveTime / span                    ' delay between steps
+
+  DO
+    stpIdx = stpIdx + stpDir // 4               ' update step pointer
+    READ (Steps + stpIdx), Coils                ' output new step data
+    PAUSE stpDelay
+    span = span - 1
+  LOOP WHILE (span > 0)
+
+  pos = angle                                   ' update position
+
+  RETURN

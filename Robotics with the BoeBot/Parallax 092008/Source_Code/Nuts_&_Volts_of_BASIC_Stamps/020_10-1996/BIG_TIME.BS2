@@ -1,0 +1,207 @@
+' Program Listing 20.3. Program Demonstrating Big Numerals on Serial LCD
+' Program: BIG_TIME.BS2
+' This program demonstrates a method for using a 4-line by
+' 20 character serial LCD module to display 1-inch high
+' numerals. In this demo, the BS2 displays the current time
+' (HH:MM) in 1" digits, thanks to the assistance of an NJU6355
+' clock chip, connected as shown in the accompanying article.
+' (Owners of the Data Collection Proto Board can run this
+' program without modification as the pin assignments for the
+' clock are the same. Use the unswitched +5V supply for the
+' LCD.)
+
+'=====================================================================
+' PIN ASSIGNMENTS, SYSTEM CONSTANTS, TEMPORARY VARIABLES
+'=====================================================================
+ 
+CLK 	con 15 		' Clock line for all serial peripherals.
+DATA_ 	con 14 		' Data line for all serial peripherals.
+NJU_CE 	con 11 		' Chip-enable for NJU6355 clock/calendar.
+NJU_IO 	con 10 		' IO (read/write) for NJU6355; 1=write.
+temp 	var byte 	' Temporary variable used in several routines.
+nbl 	var nib 	' Temporary nibble.
+
+'=====================================================================
+' NJU6355 CLOCK/CALENDAR CONSTANTS AND VARIABLES
+'=====================================================================
+' The NJU6355ED clock/calendar chip maintains a 13-digit BCD account
+' of the current year, month, day, day of week, hour, minute, and
+' second. The clock subroutines transfer this data to/from a 13-nibble
+' array in the BS2's RAM called "DTG" for "date-time group." The
+' constants below allow you to refer to the digits by name; e.g.,
+' "Y10s" is the tens digit of the year. Note that there's no "am/pm"
+' indicator--the NJU6355 uses the 24-hour clock. For instance, 2:00 pm
+' is written or read as 14:00 (without the colon, of course).
+Y10s 	con 1 		' Array position of year 10s digit.
+Y1s 	con 0 		' " " " year 1s "
+Mo10s 	con 3 		' " " " month 10s "
+Mo1s 	con 2 		' " " " month 1s "
+D10s 	con 5 		' " " " day 10s "
+D1s 	con 4 		' " " " day 1s "
+H10s 	con 8 		' " " " hour 10s "
+H1s 	con 7 		' " " " hour 1s "
+M10s 	con 10 		' " " " minute 10s "
+M1s 	con 9 		' " " " minute 1s "
+S10s 	con 12 		' " " " second 10s "
+S1s 	con 11 		' " " " second 1s "
+day 	con 6 		' " " " day-of-week (1-7) digit.
+digit 	var nib 	' Number of 4-bit BCD digits read/written.
+DTG 	var nib(13) 	' Array to hold "date/time group" BCD digits.
+
+'=====================================================================
+' LCD SERIAL BACKPACK CONSTANTS/VARIABLES
+'=====================================================================
+' The display for this application is a 4x20 alphanumeric LCD
+' equipped with a Backpack daughterboard to convert it to a serial
+' device. Newer Backpacks (sold July 96 and after) have the big-
+' character building-block symbols preprogrammed; older units require
+' that they be downloaded. If you're unsure, program the BS2 with
+' just the line "serout 0,$4054,[0,1,2,3,4,5,6,7]" You should see
+' an orderly row of ramp- and block-shaped symbols if the characters
+' are built in. Otherwise, you'll see random patterns of dots. If
+' that's the case, remove the comment marks from the sections of
+' code indicated below.
+
+I 	con 254 	' Instruction prefix.
+ClrLCD 	con 1 		' Clear-LCD instruction.
+N96N 	con $4054 	' 9600 baud, inverted, no parity.
+cgRAM 	con 64 		' Address 0 of CG RAM.
+EEptr 	var word 	' Pointer into EEPROM.
+pat 	var EEptr 	' Alias for EEptr.
+line 	var nib 	' LCD line
+
+' If the 4x20 serial LCD module you're using was purchased after July
+' 1996, you may omit this code. Otherwise, remove the comment marks
+' (') from the beginning of the lines below to activate this code.
+'bitPat0 DATA 0,0,0,1,3,7,15,31 	' Left-right up-ramp
+'bitPat1 DATA 0,0,0,16,24,28,30,31 	' Right-left " "
+'bitPat2 DATA 31,15,7,3,1,0,0,0 	' Left-right down ramp.
+'bitPat3 DATA 31,30,28,24,16,0,0,0 	' Right-left " "
+'bitPat4 DATA 0,0,0,0,31,31,31,31 	' Lower block.
+'bitPat5 DATA 31,31,31,31,0,0,0,0 	' Upper block.
+'bitPat6 DATA 31,31,31,31,31,31,31,31	' Full block.
+'bitPat7 DATA 0,0,0,0,0,0,0,0 	' Full blank
+
+'=====================================================================
+' DEMONSTRATION PROGRAM
+'=====================================================================
+DIRS = $FFFF ' Write 1s to all direction bits.
+
+' setup =============
+' Set the clock.
+
+DTG(Y10s)=9: DTG(Y1s)=6 		' Year = 96.
+DTG(Mo10s)=0: DTG(Mo1s)=7 		' Month = 07.
+DTG(D10s)=0: DTG(D1s)=5 		' Day = 05.
+DTG(day) = 2 				' Day of week (1-7) = 2 (Tuesday).
+DTG(H10s)=1: DTG(H1s)=2 		' Hour = 12.
+DTG(M10s)=5: DTG(M1s)=1 		' Minute = 50.
+gosub write_clock 			' Write data to clock.
+
+low 0 					' Make the serial output low
+pause 1000 				' Let the LCD wake up.
+
+' ========================================================================
+' Define Symbols in CG RAM
+' ========================================================================
+' If the 4x20 serial LCD module you're using was purchased after July
+' 1996, you may omit this code. Otherwise, remove the comment marks
+' (') from the beginning of the lines below to activate this code.
+' serout 0,N96N,[I,cgRAM] ' Enter CG RAM.
+' for EEptr = 0 to 63 ' Write the bit patterns..
+' Read EEptr,temp ' ..to the LCD.
+' serout 0,N96N,[temp]
+' next
+
+
+serout 0,N96N,[I,ClrLCD] 		' Clear the LCD.
+pause 1
+
+' demo =============
+' Continuously display the current date and time to the debug screen.
+demo:
+  gosub read_clock 			' Update DTG data.
+  gosub bigClock 			' Display on LCD.
+  serout 0,N96N,[I,201,5,I,157,4]
+  pause 1000 				' Wait a second.
+goto demo 				' Do it again.
+
+' ==================================================================
+' NJU6355 CLOCK/CALENDAR SUBROUTINES
+' ==================================================================
+' read_clock =============
+' Get the current date/time group from the NJU6355 clock and store
+' it in the array DTG(n).
+read_clock:
+  low NJU_IO 				' Set for read.
+  high NJU_CE 				' Select the chip.
+  for digit = 0 to 12 			' Get 13 digits.
+   shiftin DATA_,CLK,lsbpre,[DTG(digit)\4] ' Shift in a digit.
+  next 					' Next digit.
+  low NJU_CE 				' Deselect the chip.
+return 					' Return to program.
+
+' write_clock =============
+' Get the time stored in DTG(n) and write it to the NJU6355 clock.
+' Note that the NJU6355 does not allow you to write the seconds digits.
+' If clears the seconds digits when written, so if you set it for
+' 08:30 (hh:mm), when the write is complete, the NJU6355 starts at
+' 08:30:00 (hh:mm:ss).
+
+write_clock:
+  high NJU_IO 				' Set for write.
+  high NJU_CE 				' Select the chip.
+  for digit = 0 to 10 			' Write 11 digits.
+   shiftout DATA_,CLK,lsbfirst,[DTG(digit)\4] ' Shift out a digit.
+  next 					' Next digit.
+  low NJU_CE 				' Deselect the chip.
+return 					' Return to program.
+
+' ========================================================================
+' Subroutine Displaying Large Numbers
+' ========================================================================
+bigClock:
+  for line = 0 to 3 			' Four lines to display.
+  lookup line,[128,192,148,212],temp 	' Get start address of line.
+  serout 0,N96N,[I,temp] 		' Position the cursor on line.
+  for digit = 3 to 0 			' For each digit:
+   lookup digit,[9,10,7,8],nbl 	' Get clock data.
+    nbl = DTG(nbl)
+    gosub getPattern 			' Get symbols for line/digit.
+    serout 0,N96N,[pat.nib3,pat.nib2,pat.nib1,pat.nib0] ' Send to LCD.
+    if digit <> 2 then skip1 		' Make space for colon..
+    serout 0,N96N,[32,32,32] 		' ..after 2nd digit.
+    skip1:
+   next ' next digit.
+  next ' next line.
+Return
+
+' ========================================================================
+' Subroutines Defining Big-Character Patterns
+' ========================================================================
+' Each digit is represented by four lines of four symbols. The branch
+' instruction below picks the appropriate lookup table for the current
+' line. The lookup table then returns the corresponding four symbols
+' packed into a single word (16-bit) variable.
+
+getPattern:
+branch line,[first,second,third,fourth]
+
+ 
+' 0 1 2 3 4 5 6 7 8 9
+' --- --- --- --- --- --- --- --- --- ---
+first:
+lookup nbl,[$0551,$7067,$0551,$0551,$6776,$6555,$0557,$2556,$0551,$0551],pat
+return
+
+second:
+lookup nbl,[$6776,$7767,$7743,$7743,$6776,$2441,$6041,$7703,$2443,$6776],pat
+return
+
+third:
+lookup nbl,[$6776,$7767,$0577,$7751,$2556,$7776,$6776,$7767,$0551,$2536],pat
+return
+
+fourth:
+lookup nbl,[$2443,$7464,$6444,$2443,$7776,$2443,$2443,$7767,$2443,$7443],pat
+return

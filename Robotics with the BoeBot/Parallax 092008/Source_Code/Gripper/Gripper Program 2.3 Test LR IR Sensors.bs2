@@ -1,0 +1,35 @@
+' -----[ Title ]-----------------------------------------------------------
+' Gripper Program 2.3: Test LR IR Sensors
+'{$STAMP BS2}
+'{$PBASIC 2.5}
+
+' -----[ Program Description ]---------------------------------------------
+' Tests the Gripper's Left and Right IR Sensors
+' Point Boe-Bot Gripper at the ceiling for best results
+'
+' Expected Results:  Both left and right sensors read "1" until
+' an object is detected.  Object detected = "0".
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+LeftIRPin      PIN     11                    ' Left IR detector/emitter
+RightIRPin     PIN     9                     ' Right IR detector/emitter
+
+' -----[ Variables ]-------------------------------------------------------
+
+leftIRVal      VAR     Bit                   ' Stores left IR reading
+rightIRVal     VAR     Bit                   ' Stores right IR reading
+
+' -----[ Main Code ]-------------------------------------------------------
+DO
+  FREQOUT LeftIRPin, 1, 38500                ' Send signal to left IR
+  leftIRVal = LeftIRPin                      ' Record return
+
+  FREQOUT RightIRPin, 1, 38500               ' Send signal to right IR
+  rightIRVal = RightIRPin                    ' Record return
+
+  DEBUG HOME, "Left Sensor  = ", BIN1 leftIRVal, CR  ' Print sensor values
+  DEBUG       "Right Sensor = ", BIN1 rightIRVal, CR
+  PAUSE 20
+
+LOOP

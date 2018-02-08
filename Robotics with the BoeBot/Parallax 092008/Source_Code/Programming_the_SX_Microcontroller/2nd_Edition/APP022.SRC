@@ -1,0 +1,29 @@
+; APP022.SRC - An "Artificial" Schmitt Trigger Input
+;
+; ---------------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller", 2nd Edition by Guenther Daubach
+; Copyright (c) by Parallax Inc. 2004
+; ---------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET   Main
+
+TRIS    = $0f
+LVL     = $0d
+
+org     $100
+
+Main
+  mode LVL
+  mov  !ra, #%11111110          ; Set CMOS for ra.0
+  mode TRIS
+  mov  !ra, #%11111101          ; ra.1 is output for "Mr. Schmitt"
+  mov  !rc, #%11111110          ; rc.0 is output for LED
+Loop
+  movb ra.1, ra.0               ; Copy input to output
+  movb rc.0, /ra.0              ; Copy the inverted input level
+                                ;  to the LED output
+  jmp Loop                      ; Do it again as long as VDD is
+                                ;  there...
+END

@@ -1,0 +1,120 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' BS2p Plus Pack
+'
+' File...... PP_DS2405.BSP
+' Purpose... Simple DS2405 addressable switch demo
+' Author.... Parallax
+' E-mail.... stamptech@parallaxinc.com
+' Started...
+' Updated... 26 SEP 2001
+
+' {$STAMP BS2p}
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' Flashes an LED with a DS2405 addressable switch.  In this demo, the LED
+' status follows a bit in a randomly generated variable.
+
+' Note that the sink capability of the DS2405 is only 4 mA.  Use at least 1K
+' in series with the LED.
+'
+' Note: The DS2405 is toggled.  Its current status is available only after
+' addressing the device -- which also toggles it.  Status (0 = on) of the
+' device is read in bit mode after addressing it with Match ROM.
+'
+' Refer to PP_DS1822-2.BSP for an example of dealing with multiple 1-Wire
+' devices on the same pin.
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+OWpin           CON     15                      ' 1-Wire bus
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+On              CON     0                       ' pull cathode to ground
+Off             CON     1
+
+' 1-Wire Support
+'
+OW_FERst        CON     %0001                   ' Front-End Reset
+OW_BERst        CON     %0010                   ' Back-End Reset
+OW_BitMode      CON     %0100
+OW_HighSpd      CON     %1000
+
+ReadROM         CON     $33                     ' read ID, serial num, CRC
+MatchROM        CON     $55                     ' look for specific device
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+romData         VAR     Byte(8)                 ' ROM data from device
+idx             VAR     Nib
+rndValue        VAR     Word                    ' random value
+flags           VAR     rndValue.LowByte        ' flags byte
+ledFlag         VAR     flags.Bit7              ' LED flag
+status          VAR     bit
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Get_SN:
+  DEBUG CLS
+  PAUSE 250                                     ' let debug window open
+  DEBUG "DS2405 - Reading serial number"
+  OWOUT OWpin,OW_FERst,[ReadROM]                ' send Read ROM command
+  OWIN  OWpin,OW_BERst,[STR romData\8]          ' read serial number & CRC
+  DEBUG CR, "         "
+  FOR idx = 6 TO 1                              ' display serial number
+    DEBUG HEX2 romData(idx)
+  NEXT
+  PAUSE 1000
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  DEBUG CLS
+  DEBUG "DS2405 Digital Switch Demo (LED = flags.Bit7)"
+
+Show_Flags
+  PAUSE 1000                                    ' delay between tests
+  GOSUB Shake_Flags                             ' randomize output
+  DEBUG Home, CR, CR, "Flags... ", BIN8 flags, CR
+  IF (ledFlag) THEN LED_On
+
+LED_Off:
+  DEBUG "LED..... Off"
+  IF (status = Off) THEN Show_Flags             ' if off, shake flags
+  GOTO Toggle_LED                               ' otherwise, turn off
+
+LED_On:
+  DEBUG "LED..... On "
+  IF (status = On) THEN Show_Flags              ' if on, shake flags
+  GOTO Toggle_LED                               ' otherwise, turn on
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'
+Shake_Flags:
+  FOR idx = 0 TO 15                             ' let all bits change
+    RANDOM rndValue
+  NEXT
+  RETURN
+
+
+Toggle_LED:
+  OWOUT OWpin, OW_FERst, [MatchROM, STR romData\8]
+  OWIN OWpin, OW_BitMode + OW_BERst, [status]   ' get new status
+  GOTO Show_Flags

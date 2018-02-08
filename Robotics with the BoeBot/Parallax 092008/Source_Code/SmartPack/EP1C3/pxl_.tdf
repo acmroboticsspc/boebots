@@ -1,0 +1,47 @@
+---------
+-- PXL --
+---------
+
+parameters (a_exp = 8, d_exp = 3);		-- default 256 words x 8 bits
+
+subdesign pxl_
+(
+	clk						: input;	-- clock, must be at least 10MHz
+
+	px		[2..0]			: input;	-- px loader signals
+
+	load					: output;	-- load/run mode indicator
+	w						: output;	-- write	(high for one clock)
+	a		[a_exp-1..0]	: output;	-- address	(valid with w)
+	d		[2^d_exp-1..0]	: output;	-- data		(valid with w)
+)
+
+variable
+
+	c		[1..0]			: dff;
+	d		[2^d_exp-1..0]	: dffe;
+	n		[d_exp..0]		: dffe;
+	a		[a_exp-1..0]	: dffe;
+
+begin
+
+	c[].clk				= clk;
+	c[]					= (c[0], px[1]);
+
+	d[].clk				= clk;
+	d[].ena				= c[0] & !c[1];
+	d[]					= (px[0], d[2^d_exp-1..1]);
+
+	n[].clk				= clk;
+	n[].ena				= c[0] & !c[1] # w;
+	n[]					= n[] + 1 & !w;
+
+	a[].clk				= clk;
+	a[].ena				= w;
+	a[]					= a[] + 1;
+
+	w					= n[d_exp];
+
+	load				= !px[2];
+
+end;

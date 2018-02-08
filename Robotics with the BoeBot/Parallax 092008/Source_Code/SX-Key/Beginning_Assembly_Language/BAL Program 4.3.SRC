@@ -1,0 +1,24 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 4.3
+;=======================================================================
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	start_point
+		freq	500000   	; 500 kHz
+
+		org	8		; data start
+counter		ds	2
+
+		org	0	    	; code start
+
+start_point	clr	counter
+		clr	counter+1	; clear both bytes
+again
+					; do a 16-bit add	
+		add	counter,#1
+		addb	counter+1,status.0
+		jmp	again
+
+

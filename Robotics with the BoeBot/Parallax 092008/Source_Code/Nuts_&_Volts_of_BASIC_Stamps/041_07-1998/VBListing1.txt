@@ -1,0 +1,67 @@
+' Listing 41.1
+Private Sub mnuPortConnect_Click()
+  If mnuPortConnect.Caption = "&Connect" Then
+    ' connect
+    ' trap comm port error
+    On Error GoTo NoConnect
+    MSComm1.PortOpen = True
+    ' connected - remove error trapping
+    On Error GoTo 0
+    frmMain.Caption = "PC <-> BSAB/BS2 (Connected)"
+    ' update Port menu
+    mnuPortConnect.Caption = "&Disconnect"
+    ' disable comm port selection while connnected
+    mnuPortCom1.Enabled = False
+    mnuPortCom2.Enabled = False
+    SetButtons (True)
+  Else
+    ' disconnect
+    MSComm1.PortOpen = False
+    frmMain.Caption = "PC <-> BSAB/BS2"
+    mnuPortConnect.Caption = "&Connect"
+    mnuPortCom1.Enabled = True
+    mnuPortCom2.Enabled = True
+    SetButtons (False)
+  End If
+Exit Sub
+  
+NoConnect:
+  ' display port connection problem
+  lblTransmit.Caption = "Error: Could not connect"
+  On Error GoTo 0
+End Sub
+
+Public Sub SendMsg(addr As Byte, msg As Byte, data As Byte)
+  Dim msgQueue As String * 4
+  Dim msgData As String
+  Dim x As Byte
+  Dim temp As Byte
+  
+  ' disable buttons while sending message)
+  SetButtons (False)
+  
+  ' build message string
+  msgQueue = Chr$(&H55) & Chr$(addr) & Chr$(msg) & Chr$(data)
+
+  ' display transmit message (in hex)
+  msgData = "TX: "
+  For x = 1 To 4
+    temp = Asc(Mid$(msgQueue, x, 1))
+    msgData = msgData & HexStr(temp)
+  Next
+  lblTransmit.Caption = msgData
+    
+  ' send message to Stamp
+  MSComm1.Output = msgQueue
+  ' wait until output buffer is empty
+  Do
+    DoEvents
+  Loop Until MSComm1.OutBufferCount = 0
+  ' clear the input buffer
+  MSComm1.InBufferCount = 0
+  ' save the message number
+  lastMsg = msg
+  
+  ' re-enable buttons
+  SetButtons (True)
+End Sub

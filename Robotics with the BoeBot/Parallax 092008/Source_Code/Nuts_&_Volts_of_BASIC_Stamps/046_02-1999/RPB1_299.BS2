@@ -1,0 +1,71 @@
+' Program Listing 48.1. RPB1_299.BS2 ASCII Loop Program
+' RPB1_299.BS2 - ASCII Loop Program: this Basic Stamp2 program writes part 
+' of the ASCII character set to the RAMPack B at 4800 baud. It then reads 
+' the data back in reverse order at 2400 baud. This data is displayed 
+' using the Debug command. Finally, the data is read back at 9600 baud in 
+' the order in which it was stored, this data is also displayed via the 
+' Debug command.
+'
+'********************************************************************
+'Program Variables
+'
+Address	VAR	Word		
+'Stores address in RAM to write or read from
+Addr_lo	VAR 	Address.lowbyte 
+'Address is broken into bytes for sending to the RPB
+Addr_hi	VAR	Address.highbyte	
+'Address is broken into bytes for sending to the RPB
+Baud	VAR	Word		
+'A word variable is used to store the data rate
+DataByte	VAR	Byte		
+'Used to hold data to be sent or received 
+A	VAR	Byte		
+'For…Next variable
+'********************************************************************
+'Program Constants
+'
+FMBS2	CON	14	'From Master pin: sends data/commands to the RPB	
+TMBS2	CON	12	'To Master pin: receives data from the RPB 
+B_Write	CON	$00	'Write command for the RPB
+B_Read	CON	$01	'Byte read command for the RPB
+'********************************************************************
+'Initialization of registers
+  Pause	100			'Allow some time for RPB to power up
+  Address = 0			'Default address is 0
+  DataByte = 33		'Start data at ASCII "!"
+'********************************************************************
+MainProgram:
+'Write data to RPB at 4800 baud
+'
+  Baud	= 188			'Write data at 4800 baud
+  For	A = 1 to 58		'Send ASCII "!" through "Z"
+    Serout FMBS2,Baud,[$55,B_Write,Addr_hi,Addr_lo,DataByte]
+    Pause 	20		'Allow time for WRITE to end
+    DataByte = DataByte +1  	'Point to next ASCII character
+    Address = Address +1    	'Point to next address
+  Next					
+'
+'Read data from RPB at 2400 baud, reads data in reverse order of how 
+'data was written to RAM
+Baud	= 396			'Read data at 2400 baud
+For	A = 1 to 58
+Address = Address - 1			
+'Read starting at last byte written
+  Serout FMBS2,Baud,[$55,B_Read,Addr_hi,Addr_lo]
+  Serin	TMBS2,Baud,[DataByte]		
+  Debug	DataByte, " "		'Display byte received
+Next
+'
+'Read data from RPB at 9600 baud, reads data in the same order as data was 
+'written to RAM
+
+Baud = 84			'Read data at 9600 baud
+Debug CR,CR			'Place a blank line between data sets
+For A = 1 to 58			
+Serout	FMBS2,Baud,[$55, B_Read,Addr_hi,Addr_lo]
+Serin	TMBS2,Baud,[DataByte]
+Debug	DataByte, " "		'Display byte received
+Address = Address + 1		'Read data start at first byte written 
+	
+Next
+END:				'End of program

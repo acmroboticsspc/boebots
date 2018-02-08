@@ -1,0 +1,61 @@
+'************************************************************************
+'*  Basic Stamp Activity Board Sample Program                   DS1620  *
+'*  9 September, 1997                                           (BS-2)  *
+'*                                                                      *
+'*  This program demonstrates the use of the Dallas DS1620 Digital      *
+'*  Thermometer/Thermostat chip.  Simply place the DS1620 in the B      *
+'*  Socket and remove all jumpers on 'X4'.  Please see the diagram      *
+'*  provided in the Basic Stamp Activity Board Notes for connection     *
+'*  information regarding the thermostat outputs.                       *
+'************************************************************************
+DQ	con	15
+CLK	con	14
+RST	con	13
+Rconfig	con	$AC
+Wconfig	con	$0C
+CPU	con	%10
+NoCPU	con	%00
+OneShot	con	%01
+Cont	con	%00
+StartC	con	$EE
+StopC	con	$22
+Rtemp	con	$AA
+Rhit	con	$A1
+Whit	con	$01
+Rlot	con	$A2
+Wlot	con	$02
+DSdata	var	word
+Sign	var	DSdata.bit8
+T_sign	var	bit
+
+INIT
+	low RST
+	high CLK
+	pause 100
+	high RST
+	shiftout DQ,CLK,lsbfirst,[Wconfig,CPU+Cont]
+	low RST
+	pause 50
+	high RST
+	shiftout DQ,CLK,lsbfirst,[StartC]
+	low RST
+START
+	pause 1000
+	high RST
+	shiftout DQ,CLK,lsbfirst,[Rtemp]
+	shiftin  DQ,CLK,lsbpre,[DSdata\9]
+	low RST
+	T_Sign = Sign
+	DSdata = DSdata/2
+	if T_Sign = 0 then no_neg1
+	DSdata = DSdata | $FF00
+no_neg1
+	debug "TEMP: ",SDEC DSdata," C"
+	DSdata = DSdata */ $01CC
+	if T_Sign = 0 then no_neg2
+	DSdata = DSdata | $FF00
+no_neg2
+	DSdata = DSdata + 32
+	debug "  ",SDEC DSdata," F",CR
+	goto START
+'************************************************************************

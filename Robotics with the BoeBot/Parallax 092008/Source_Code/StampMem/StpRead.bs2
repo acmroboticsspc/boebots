@@ -1,0 +1,18 @@
+'This BS2-IC program reads all data stored on StampMEM board.
+'I/O pin 0 should be connected to StampMem's SER pin.
+'2/22/99
+ 
+x	VAR	BYTE(16)	'data string
+Addr	VAR	WORD		'memory address
+
+PAUSE 500			'powerup delay
+
+Loop:			
+  SEROUT 0,84,[1,Addr.HIGHBYTE,Addr.LOWBYTE,16]	'transmit data parameters
+  SERIN 0,84,[STR x\16]				'receive read data
+  DEBUG STR x			'read data on PC screen
+  PAUSE 200	
+Addr =Addr + 16
+IF Addr <> 0 THEN Loop
+
+DEBUG "FINISHED READING ALL EEPROM DATA"

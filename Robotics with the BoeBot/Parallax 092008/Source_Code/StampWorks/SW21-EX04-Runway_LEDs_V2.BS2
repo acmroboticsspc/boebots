@@ -1,0 +1,47 @@
+' =========================================================================
+'
+'   File....... SW21-EX04-Runway_LEDs_V2.BS2
+'   Purpose.... Advanced LED Flasher
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Strobe one of eight LEDs to behave like airport runway landing lights.
+' This program will work, unmodified, on any BS2-family module.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+LEDs            VAR     OUTL                    ' LEDs on P0 - P7
+LEDsDirs        VAR     DIRL                    ' DIRS control for LEDs
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+DelayTm         CON     100                     ' delay time for LEDs
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  LEDsDirs = %11111111                          ' make LEDs outputs
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  LEDs = %00000001                              ' start with right LED on
+  DO UNTIL (LEDs = %00000000)                   ' loop until bit shifts out
+    PAUSE DelayTm                               ' on-time for lit LED
+    LEDs = LEDs << 1                            ' shift LED left
+  LOOP
+  GOTO Main

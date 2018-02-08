@@ -1,0 +1,97 @@
+; TUT013.SRC
+;
+; --------------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" 2nd Edition by Guenther Daubach
+; Copyright (c), by Parallax Inc. 2004
+; --------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET   Main
+
+org     $10
+BankA   equ $
+org     $30
+BankB   equ $
+org     $50
+BankC   equ $
+org     $70
+BankD   equ $
+org     $90
+BankE   equ $
+org     $b0
+BankF   equ $
+org     $d0
+BankG   equ $
+
+;---------------------------------------------------
+; Bank for the FSR Stack
+;---------------------------------------------------
+org     $f0
+Stack   equ $
+CurrFSR ds  1
+SP      ds  1
+ST      ds  7
+
+org     $000
+
+;---------------------------------------------------
+; Save the FSR to the stack
+;---------------------------------------------------
+PushFSR
+  mov   w, FSR
+  bank  Stack
+  mov   CurrFSR, w
+  mov   w, #ST
+  add   w, SP
+  mov   fsr, w
+  mov   w, CurrFSR
+  mov   ind, w
+  inc   sp
+  mov   w, CurrFSR
+  mov   fsr, w
+ret
+
+;---------------------------------------------------
+; Restore the FSR from the stack
+;---------------------------------------------------
+PopFSR
+  bank  Stack
+  dec   SP
+  mov   w, #ST
+  add   w, SP
+  mov   fsr, w
+  mov   w, ind
+  mov   fsr, w
+ret
+
+SR1
+  call PushFSR
+  bank BankC
+  call SR2
+  call PopFSR
+ret
+
+SR2
+  call PushFSR
+  bank BankD
+  call SR3
+  call PopFSR
+ret
+
+SR3
+  call PushFSR
+  bank BankE
+  ;
+  ; some instructions
+  ;
+  call PopFSR
+ret
+
+Main
+  bank Stack
+  clr  SP
+
+  bank BankB
+  call SR1
+  jmp  $

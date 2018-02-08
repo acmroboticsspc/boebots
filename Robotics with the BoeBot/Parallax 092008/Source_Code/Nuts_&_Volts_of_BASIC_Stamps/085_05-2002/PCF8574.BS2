@@ -1,0 +1,189 @@
+' ==============================================================================
+'
+'   File...... PCF8574.BS2
+'   Purpose... PCF8574 control via I2C
+'   Author.... Jon Williams
+'   E-mail.... jonwms@aol.com
+'   Started... 20 MAR 2002
+'   Updated... 29 MAR 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' This program demonstrates essential I2C routines and communication with the
+' Philips PCF8574 port expander.  The expander is a quasi-bidirectional device;
+' you can write to outputs or read from inputs no data direction register.
+'
+' Inputs and outputs are active low.  When writing to the device, a "1"
+' should be written to any pin that is used an input.
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+'
+SDA             CON     8                       ' I2C serial data line
+SCL             CON     9                       ' I2C serial clock line
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+DevType         CON     %0100 << 4              ' device type
+DevAddr         CON     %000 << 1               ' address = %000 -> %111
+Wr8574          CON     DevType | DevAddr | 0   ' write to PCF8574
+Rd8574          CON     DevType | DevAddr | 1   ' read from PCF8574
+
+ACK             CON     0                       ' acknowledge bit
+NAK             CON     1                       ' no ack bit
+
+MixDDR          CON     %11110000               ' 1 = input for mixed I/O
+
+Yes             CON     0
+No              CON     1
+
+CrsrXY          CON     2                       ' DEBUG Position Control
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+i2cSDA          VAR     Nib                     ' I2C serial data pin
+i2cData         VAR     Byte                    ' data to/from I2C device
+i2cWork         VAR     Byte                    ' work byte for I2C TX code
+i2cAck          VAR     Bit                     ' ACK bit from device
+
+counter         VAR     Nib
+switches        VAR     i2cData.HighNib         ' from PCF8574
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Initialize:
+  PAUSE 250                                     ' let DEBUG open
+  DEBUG CLS, "PCF8574 Demo"
+  DEBUG CrsrXY, 0, 2, "Counter:  ", BIN4 counter
+  DEBUG CrsrXY, 0, 3, "Switches: ", BIN4 switches
+
+  i2cSDA = SDA                                  ' define SDA pin
+  i2cData = %11111111                           ' clear outputs
+  GOSUB Write_PCF8574
+  IF (i2cAck = ACK) THEN Main                   ' device is present
+
+  DEBUG CLS, "Error: No ACK from PCF8574"
+  END
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  FOR counter = 0 TO 15
+    DEBUG CrsrXY, 10, 2, BIN4 counter           ' display counter on screen
+    i2cData = MixDDR | ~counter                 ' mask inputs
+    GOSUB Write_PCF8574                         ' display counter on LEDs
+    GOSUB Read_PCF8574                          ' get data from PCF8574
+    DEBUG CrsrXY, 10, 3, BIN4 switches          ' display switch inputs
+    PAUSE 100
+  NEXT
+  GOTO Main
+
+  END
+
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+' Data to be sent is passed in i2cData
+
+Write_PCF8574:
+  GOSUB I2C_Start                               ' send Start
+  i2cWork = Wr8574                              ' send address
+  GOSUB I2C_TX_Byte
+  i2cWork = i2cData
+  GOSUB I2C_TX_Byte                             ' send i2cData to device
+  GOSUB I2C_TX_Byte                             ' force to pins
+  GOSUB I2C_Stop                                ' send Stop
+  RETURN
+
+
+' Data received is returned in i2cData
+
+Read_PCF8574:
+  GOSUB I2C_Start                               ' send Start
+  i2cWork = Rd8574                              ' send address
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_RX_Byte_Nak                         ' get byte from device
+  i2cData = i2cWork
+  GOSUB I2C_Stop                                ' send Stop
+  RETURN
+
+
+' ------------------------------------------------------------------------------
+' Low Level I2C Subroutines
+' ------------------------------------------------------------------------------
+
+' --- Start ---
+
+I2C_Start:                                      ' I2C start bit sequence
+  INPUT i2cSDA
+  INPUT SCL
+  LOW i2cSDA                                    ' SDA -> low while SCL high
+
+Clock_Hold:
+  IF (Ins.LowBit(SCL) = 0) THEN Clock_Hold      ' device ready?
+  RETURN
+
+
+' --- Transmit ---
+
+I2C_TX_Byte:
+  SHIFTOUT i2cSDA,SCL,MSBFIRST,[i2cWork\8]      ' send byte to device
+  SHIFTIN i2cSDA,SCL,MSBPRE,[i2cAck\1]          ' get acknowledge bit
+  RETURN
+
+
+' --- Receive ---
+
+I2C_RX_Byte_Nak:
+  i2cAck = NAK                                  ' no ACK = high
+  GOTO I2C_RX
+
+I2C_RX_Byte:
+  i2cAck = ACK                                  ' ACK = low
+
+I2C_RX:
+  SHIFTIN i2cSDA,SCL,MSBPRE,[i2cWork\8]         ' get byte from device
+  SHIFTOUT i2cSDA,SCL,LSBFIRST,[i2cAck\1]       ' send ack or nak
+  RETURN
+
+
+' --- Stop ---
+
+I2C_Stop:                                       ' I2C stop bit sequence
+  LOW i2cSDA
+  INPUT SCL
+  INPUT i2cSDA                                  ' SDA --> high while SCL high
+  RETURN

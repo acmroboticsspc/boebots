@@ -1,0 +1,181 @@
+' ==============================================================================
+'
+'   File...... Sequencer.BS2
+'   Purpose... Records and plays back a button sequence
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallaxinc.com
+'   Started... 21 AUG 2002
+'   Updated... 30 AUG 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' This program allows the user to write a sequence to memory.  The outputs for
+' each step in the sequence with SPST switches, then stored in memory with a
+' press of the Load button.  When play is pressed, the sequence will be re-
+' played on the output LEDs.
+'
+' The Load/Limit LED will blink on the acceptance of new step and will stay
+' on solid if the sequence limit is reached.
+'
+' Connections:
+'
+' Channel 1     P0      SPST                    ' inputs are active low
+' Channel 2     P1      SPST
+' Channel 3     P2      SPST
+' Channel 4     P3      SPST
+' Channel 5     P4      SPST
+' Channel 6     P5      SPST    
+' Load          P6      Push button             ' load new step data
+' Play          P7      Push button             ' play sequence
+'
+' Output 1      P8                              ' outputs are active high
+' Output 2      P9
+' Output 3      P10
+' Output 4      P11
+' Output 5      P12
+' Output 6      P13
+
+' Load/Limit    P14                             ' step loaded (blink) / limit
+' Step Time     P15                             ' POT input for step timing
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+
+Inputs          VAR     InL                     ' switches and buttons
+LEDs            VAR     OutH                    ' channel LEDs
+
+LoadLED         VAR     Out14                   ' shows step loaded / hit limit
+StepTime        CON     15                      ' RCTIME input for play speed
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+Yes             CON     1
+No              CON     0
+
+On              CON     1
+Off             CON     0
+
+MaxChannels     CON     6                       ' max simultaneous outputs
+maxSteps        CON     30                      ' max events in sequence
+                                                '  - absolute maximum is 255
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+swInputs        VAR     Byte                    ' switches/button inputs
+load            VAR     swInputs.Bit6           ' isolate load button
+play            VAR     swInputs.Bit7           ' isolate play button
+idx             VAR     Byte                    ' loop counter
+numSteps        VAR     Byte                    ' steps in sequence
+numChans        VAR     Nib                     ' channels in step
+stepDelay       VAR     Word                    ' timer for step playback
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+SeqLen          DATA    0                       ' events in sequence
+Sequence        DATA    0 (255)                 ' sequence data
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Initialize:
+  DirL = %00000000                              ' switches & buttons are inputs
+  DirH = %01111111                              ' LEDs are outputs
+
+  numSteps = 0                                  ' reset steps counter
+  LEDs = 0                                      ' clear outputs
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  GOSUB Scan_Inputs                             ' check switches & buttons
+  IF (play = Yes) THEN Play_Back                ' play current sequence
+  IF (load = No) THEN Main                      ' nothing to do, scan again
+
+Check_Limit:
+  IF (numSteps < maxSteps) THEN Record_Input    ' room for this step?
+  LoadLED = On                                  '  - no Load LED on solid
+  GOTO Main
+
+Record_Input:
+  numSteps = numSteps + 1                       ' update count
+  WRITE SeqLen, numSteps                        ' write events count to EEPROM
+  swInputs = swInputs & %00111111               ' mask out Load & Play buttons
+  WRITE (Sequence + numSteps - 1), swInputs     ' write step data to EEPROM
+
+  LoadLED = On                                  ' show good load
+  PAUSE 50
+  LoadLED = Off
+
+Wait_For_Clear:
+  GOSUB Scan_Inputs
+  IF (Load = Yes) THEN Wait_For_Clear           ' force release of Load button
+  GOTO Main
+
+Play_Back:
+  READ SeqLen, numSteps                         ' get length of sequence
+  IF (numSteps = 0) THEN Main                   ' nothing to play back
+  FOR idx = 0 TO (numSteps - 1)
+    READ (Sequence + idx), LEDs                 ' put step data on LEDs
+    GOSUB Play_Delay                            ' delay between steps
+  NEXT
+
+  GOTO Initialize                               ' reset everything
+
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+Scan_Inputs:
+  swInputs = %11111111                          ' assume all are active
+  FOR idx = 1 TO 10
+    swInputs = swInputs & ~Inputs               ' get current inputs
+    PAUSE 5                                     ' delay between readings
+  NEXT
+
+Check_Channel_Count:
+  numChans = 0
+  FOR idx = 0 TO 5
+    numChans = numChans + swInputs.LowBit(idx)  ' add channel value
+  NEXT
+  IF (numChans <= MaxChannels) THEN Scan_Exit   ' count okay
+  swInputs = swInputs & %11000000               ' mask out channel inputs
+
+Scan_Exit:
+  RETURN
+
+
+Play_Delay:
+  HIGH StepTime                                 ' discharge RCTIME cap
+  PAUSE 1
+  RCTIME StepTime, 1, stepDelay                 ' read pot value
+  stepDelay = (stepDelay */ $013C) + 100        ' convert to 100 - 1000
+  PAUSE stepDelay
+  RETURN

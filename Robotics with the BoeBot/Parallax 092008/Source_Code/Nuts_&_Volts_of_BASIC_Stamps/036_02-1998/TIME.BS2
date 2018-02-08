@@ -1,0 +1,44 @@
+' Program Listing 36.1
+' TIME.BS2
+' John Barrowman, Parallax Technical Support Engineer
+' Stamp Applications: Nuts and Volts February 1998
+' This program demonstrates how to implement a real-time clock on BASIC
+' Stamp. Time is metered using the PAUSE command. Seconds, minutes, hours,
+' and the AM/PM status are stored in discreet registers.  This program 
+' uses a 2x16 Scott Edwards LCD Display to show the formatted time. 
+
+Baud	con	$4054			' 9600, N,8,1 (Inverted Data)
+hrs	var	byte			' Holds the Hours part of time
+mns	var	byte			' Holds the Minutes part of time
+sec	var	byte			' Holds the Seconds part of time
+ampm	var	bit			' Keeps track of night and day.
+
+INIT
+	pause 500			' Must wait for display to power up
+	serout 0,Baud,[254,2,"  Current Time"]	' Write header
+
+START
+	pause 985			' Adjust this to 'tune' the clock.
+	serout 0,Baud,[254,175,"  ",dec2 hrs,":",dec2 mns,":",dec2 sec]
+	if ampm = 1 then PRN_AM	' After writing the time determine
+	serout 0,Baud,["  pm"]		' AM/PM status and write to display.
+	goto INC_TIME
+PRN_AM
+	serout 0,Baud,["  am"]
+
+INC_TIME
+					' Every iteration of the loop should
+	sec = sec + 1			' take exactly one second.  So, we'll
+	if sec < 60 then START		' increment the seconds register each
+	sec = 0				' iteration.  If the seconds register
+	mns = mns + 1			' overflows (>59), we must: clear it,
+	if mns < 60 then START		' increment the minutes register, and
+	mns = 0				' check the minutes register for over
+	hrs = hrs + 1			' flow. If the minutes register over-
+	if hrs <> 12 then ROLL		' flows, we must clear it then incre-
+	ampm = ampm ^ 1		' ment the hours register. And so on.
+
+ROLL
+	if hrs < 13 then START
+	hrs = 1
+	goto START

@@ -1,0 +1,185 @@
+' =========================================================================
+'
+'   File....... SW21-EX13-LCD_Read.BS2
+'   Purpose.... Read data from LCD
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 16 AUG 2006
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates how to read data from the LCD's display RAM
+' (DDRAM) or character RAM (CGRAM).
+'
+' The connections for this program conform to the BS2p-family LCDCMD,
+' LCDIN, and LCDOUT instructions.  Use this program for the BS2, BS2e,
+' or BS2sx.  There is a separate program for the BS2p, BS2pe, and BS2px.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+E               PIN     1                       ' Enable pin
+RW              PIN     2                       ' Read/Write
+RS              CON     3                       ' Register Select
+LcdDirs         VAR     DIRB                    ' bus DDR
+LcdBusOut       VAR     OUTB                    ' 4-bit LCD data bus
+LcdBusIn        VAR     INB
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+LcdCls          CON     $01                     ' clear the LCD
+LcdHome         CON     $02                     ' move cursor home
+LcdCrsrL        CON     $10                     ' move cursor left
+LcdCrsrR        CON     $14                     ' move cursor right
+LcdDispL        CON     $18                     ' shift chars left
+LcdDispR        CON     $1C                     ' shift chars right
+LcdDDRam        CON     $80                     ' Display Data RAM control
+LcdCGRam        CON     $40                     ' Character Generator RAM
+LcdLine1        CON     $80                     ' DDRAM address of line 1
+LcdLine2        CON     $C0                     ' DDRAM address of line 2
+
+
+#DEFINE _LcdReady = ($STAMP >= BS2P)
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+char            VAR     Byte                    ' character sent to LCD
+idx             VAR     Byte                    ' loop counter
+rndVal          VAR     Word                    ' random value
+addr            VAR     Byte                    ' address to write/read
+tOut            VAR     Byte                    ' test value - out to LCD
+tIn             VAR     Byte                    ' test value - in from LCD
+temp            VAR     Word                    ' use for formatting
+width           VAR     Nib                     ' width of value to display
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  #IF _LcdReady #THEN
+    #ERROR "Please use BS2p version: SW21-EX13-LCD_Read.BSP"
+  #ENDIF
+
+  DIRL = %11111110                              ' setup pins for LCD
+  PAUSE 100                                     ' let the LCD settle
+
+Lcd_Setup:
+  LcdBusOut = %0011                             ' 8-bit mode
+  PULSOUT E, 3
+  PAUSE 5
+  PULSOUT E, 3
+  PULSOUT E, 3
+  LcdBusOut = %0010                             ' 4-bit mode
+  PULSOUT E, 1
+  char = %00101000                              ' multi-line mode
+  GOSUB LCD_Cmd
+  char = %00001100                              ' disp on, no crsr or blink
+  GOSUB LCD_Cmd
+  char = %00000110                              ' inc crsr, no disp shift
+  GOSUB LCD_Cmd
+
+Display:
+  char = LcdHome
+  GOSUB LCD_Cmd
+  PAUSE 2
+  FOR idx = 0 TO 15
+    LOOKUP idx, ["ADDR=??  OUT:???"], char
+    GOSUB LCD_Out
+  NEXT
+
+  char = LcdLine2
+  GOSUB LCD_Cmd
+  PAUSE 2
+  FOR idx = 0 TO 15
+    LOOKUP idx, ["          IN:???"], char
+    GOSUB LCD_Out
+  NEXT
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  RANDOM rndVal                                 ' generate random number
+  addr = rndVal.LOWBYTE & $3F                   ' create address (0 to 63)
+  tOut = rndVal.HIGHBYTE                        ' create test value
+
+  char = LcdCGRam + addr                        ' set CGRAM pointer
+  GOSUB LCD_Cmd
+  char = tOut
+  GOSUB LCD_Out                                 ' move the value to CGRAM
+  PAUSE 100
+
+  char = LcdCGRam + addr                        ' reset CGRAM pointer
+  GOSUB LCD_Cmd
+  GOSUB LCD_In                                  ' read value from LCD
+  tIn = char
+
+  ' display results
+
+  char = LcdLine1 + 5                           ' show address @ L1/C5
+  GOSUB LCD_Cmd
+  temp = addr
+  width = 2
+  GOSUB Put_Val
+
+  char = LcdLine1 + 13                          ' show output @ L1/C13
+  GOSUB LCD_cmd
+  temp = tOut
+  width = 3
+  GOSUB Put_Val
+
+  char = LcdLine2 + 13                          ' show output @ L2/C13
+  GOSUB LCD_Cmd
+  temp = tIn
+  width = 3
+  GOSUB Put_Val
+  PAUSE 1000
+
+  GOTO Main                                     ' do it again
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+LCD_Cmd:
+  LOW RS                                        ' enter command mode
+
+
+LCD_Out:
+  LcdBusOut = char.HIGHNIB                      ' output high nibble
+  PULSOUT E, 3                                  ' strobe the Enable line
+  LcdBusOut = char.LOWNIB                       ' output low nibble
+  PULSOUT E, 3
+  HIGH RS                                       ' return to character mode
+  RETURN
+
+
+LCD_In:
+  HIGH RS                                       ' data command
+  HIGH RW                                       ' read
+  LcdDirs = %0000                               ' make data lines inputs
+  HIGH E
+  char.HIGHNIB = LcdBusIn                       ' get high nibble
+  LOW E
+  HIGH E
+  char.LOWNIB = LcdBusIn                        ' get low nibble
+  LOW E
+  LcdDirs = %1111                               ' make buss lines outputs
+  LOW RW                                        ' return to write mode
+  RETURN
+
+
+Put_Val:
+  FOR idx = (width - 1) TO 0                    ' display digits l-to-r
+    char = (temp DIG idx) + "0"                 ' convert digit to ASCII
+    GOSUB LCD_Out                               ' write to LCD
+  NEXT
+  RETURN

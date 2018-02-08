@@ -1,0 +1,265 @@
+' Nuts & Volts - Stamp Applications
+' October 2000 (Listing 1)
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... ISD_LAB.BS2
+' Purpose... ISD2560 ChipCorder Lab
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 04 SEP 2000
+' Updated... 08 SEP 2000
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program facilitates experimenting with the ISD2560 ChipCorder.
+' 
+' Program Modes:
+'
+' 0 - Record one or more messages to the ISD
+' 1 - Play messages, one at a time, in order
+' 2 - Play a specific message
+' 3 - Play sound clip from specific address - auto stop at EOM
+' 4 - Play sound from address for number of milliseconds
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+AddrL	VAR	OutL			' low bits of ISD address (0..7)
+AddrH	VAR	OutC			' high bits of ISD address (8..9)
+
+CE_	CON	10			' ISD chip enable
+PR	CON	11			' ISD play/record (play = 1)
+PD	CON	12			' ISD power down (reset = 1)
+EOM_	VAR	In13			' ISD end of message indicator
+EOMpin	CON	13			' EOM pin number
+
+BtnIn	VAR	In14			' button input
+LED_	CON	15			' LED output (active low)
+
+
+' -----[ Constants ]------------------------------------------------------
+'
+MaxAddr	CON	599			' last address in ISD25xx
+
+MRec	CON	0			' record
+MPSeq	CON	1			' play back messages in order
+MPMsg	CON	2			' play specific message
+MPAddr	CON	3			' play sound from address
+MPTime	CON	4			' play for n milliseconds
+
+Mode	CON	 MPSeq			' default to sequential play
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+btn	VAR	Bit			' pushbutton input
+x	VAR	Byte			' loop counter
+msgNum	VAR	Byte			' message number
+msgAddr	VAR	Word			' clip segment address (0 - 599)
+msgLen	VAR	Word			' clip length in milliseconds
+waste	VAR	Word			' workspace for PULSIN
+opMode	VAR	Nib			' for use with SetModeBit
+cntr	VAR	Byte			' loop counter
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Init_IO_Pins:
+  AddrL = %00000000			' clear message address bus
+  AddrH = %1100				' play, CE_ high, clear A9 & A8
+
+  DirL = %11111111			' low bits of address
+  DirC = %1111				' PR, CE_, A9, A8
+  DirD = %1001				' LED_, Btn, EOM_, PD
+
+ISD_Setup:
+  GOSUB ResetISD
+  PAUSE 25				' let ISD settle (Tpud)
+
+LED_Off:
+  HIGH LED_
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Main:
+  GOSUB GetBtn
+  IF btn = 1 THEN Main			' wait for release
+
+CheckMode:
+  BRANCH Mode,[Record,P_Seq,P_Msg,P_Addr,P_Time]
+  GOTO Main
+
+' ===============
+' Record messages
+' ===============
+
+Record:
+  AddrL = 0				' clear old mode bits
+  opMode = 6
+  GOSUB SetModeBit			' record in pushbutton mode
+  LOW PR				' record mode
+
+R_Hold:
+  GOSUB GetBtn
+  IF btn = 0 THEN R_Hold		' wait for button
+
+  PAUSE 250				' time to get voice ready
+  PULSOUT CE_,50			' initiate recording
+
+R_Wait:
+  IF EOM_ = 0 THEN R_Wait		' wait for recording indicator
+  LOW LED_				' record LED on
+
+R_Loop:
+  GOSUB GetBtn
+  IF btn = 1 THEN R_Loop		' record until button release
+  PULSOUT CE_,50			' mark end of message
+  HIGH PR				' back to play (for safety)
+  GOTO LED_off				' clear LED
+
+' ======================
+' Play messages in order
+' ======================
+
+P_Seq:  
+  AddrL = 0				' clear old mode bits
+  opMode = 6
+  GOSUB SetModeBit			' play with pushbutton mode
+
+PS_Hold:
+  GOSUB GetBtn
+  IF btn = 0 THEN PS_Hold		' wait for button
+
+  PULSOUT CE_,50			' start message
+  PAUSE 50				' let EOM go HIGH
+
+PS_Wait:
+  IF EOM_ = 1 THEN PS_Wait		' wait for message to end
+
+  GOTO PS_Hold				' get ready for next
+
+' ======================
+' Play specified message
+' ======================
+
+P_Msg:
+  GOSUB GetBtn
+  IF btn = 0 THEN P_Msg			' wait for button
+
+  FOR cntr = 5 TO 1			' say 5 messages backward
+    msgNum = cntr
+    GOSUB PlayMessage
+  NEXT
+
+  GOTO P_Msg
+
+' =================================
+' Play message at specified address
+' =================================
+
+P_Addr:
+  GOSUB GetBtn
+  IF btn = 0 THEN P_Addr		' wait for button
+
+  msgAddr = 107				' set address
+  GOSUB PlayClip			' play to EOM marker
+  
+  GOTO P_Addr
+
+' ===================================
+' Play message for specified duration
+' ===================================
+
+P_Time:
+  GOSUB GetBtn
+  IF btn = 0 THEN P_Time		' wait for button
+
+  msgAddr = 95				' set address
+  msgLen = 850				' set length (milliseconds)
+  GOSUB PlayLength			' play for specific length
+  
+  GOTO P_Time
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+ResetISD:
+  HIGH PD				' reset the ISD
+  PAUSE 13
+  LOW PD
+  RETURN
+
+
+' scan and debounce button input
+' - button must stay pushed for 25 ms and not change during routine
+'
+GetBtn:
+  btn = 1				' assume pressed
+  FOR x = 1 TO 5
+    btn = btn & ~BtnIn			' test input
+    PAUSE 5				' delay between tests
+  NEXT
+  RETURN
+
+
+PlayMessage:				' skip to specific message
+  GOSUB ResetISD
+  AddrL = %00010001			' consecutive messages with cueing
+  AddrH = %1111				' play, CE_ high, enable mode bits
+  PAUSE 25				' wait Tpud
+
+  IF (msgNum < 2) THEN PM_Play_It	' play first if 0 or 1
+
+PM_Fast_Forward:
+  msgNum = msgNum - 1			' don't skip selected message
+  FOR x = 1 TO msgNum			' fast forward to it
+    PULSOUT CE_,3			' start FF
+    PULSIN EOMpin,0,waste		' wait for EOM of current message
+  NEXT
+
+PM_Play_It:
+  AddrL = %00010000			' remove cueing bit
+  PULSOUT CE_,50			' start the message
+  PAUSE 50				' let EOM set
+
+PM_Wait:
+  IF EOM_ = 1 THEN PM_Wait		' wait for EOM to pulse low
+  RETURN
+
+
+PlayClip:				' play until EOM hit
+  GOSUB ResetISD
+  GOSUB SetAddress			' set address of message
+  PAUSE 25
+  PULSOUT CE_,50			' start play
+  PAUSE 50				' allow EOM to get set
+
+PC_Wait:
+  IF EOM_ = 1 THEN PC_Wait		' wait for EOM to pulse low
+  RETURN
+
+
+PlayLength:				' play for msgLen milliseconds
+  GOSUB ResetISD
+  GOSUB SetAddress			' set address of message
+  PAUSE 25				' wat Tpud
+  PULSOUT CE_,50			' start play
+  PAUSE msgLen				' wait for message to end
+  HIGH PD				' stop
+  RETURN
+
+
+SetAddress:
+  msgAddr = msgAddr MAX MaxAddr		' limit address to chip
+  AddrL = msgAddr.LowByte		' set A0..A7
+  AddrH = %1100 | (msgAddr >> 8)	' set play, CE_ high, A8..A9
+  RETURN
+
+
+SetModeBit:
+  AddrL = AddrL | (DCD opMode)		' add operational mode bit
+  AddrH = %1111				' set play, CE_ high, enable mode
+  RETURN  

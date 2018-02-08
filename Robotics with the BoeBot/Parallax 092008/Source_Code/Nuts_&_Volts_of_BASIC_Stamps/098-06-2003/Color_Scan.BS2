@@ -1,0 +1,266 @@
+' =========================================================================
+'
+'   File....... Color_Scan.BS2
+'   Purpose.... Color Scanner with TAOS TCS230
+'   Author..... Jon Williams
+'   E-mail..... jwilliams@parallax.com
+'   Started.... 
+'   Updated.... 18 APR 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Simple color scanner using the TAOS TCS230 color sensor. This program
+' uses a direct connection; the TCS dual-sensor adaptor (which is docu-
+' mented with the sensor) is not used.
+'
+' NOTE: OE\ must be tied low to enable TCS230 output and allow control 
+'       over LEDs.
+'
+' NOTE: To prevent sensor damage, download the program and run it before
+'       connecting the TCS230.
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+TcsLeds         PIN     0                       ' LEDs enable - active low
+TcsFreq         PIN     1                       ' freq from TCS230
+TcsS2           PIN     2                       ' color filter control
+TcsS3           PIN     3
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+Red             CON     0                       ' TCS230 filter selection
+Green           CON     1
+Blue            CON     2
+Clear           CON     3
+
+ScanTime        CON     10                      ' scan time in millisecs
+ScaleMax        CON     100                     ' max for scaled values
+
+IsOn            CON     0                       ' LED control is active low
+IsOff           CON     1
+
+NumColors       CON     7                       ' seven M&M colors
+ColorThresh     CON     5                       ' allowable variance
+
+TermChar        CON     0                       ' terminater for strings
+StrLen          CON     12                      ' max length of names
+
+' -----[ Variables ]-------------------------------------------------------
+
+filter          VAR     Nib                     ' filter selection
+rawColor        VAR     Word                    ' raw return from TCS230
+
+calRed          VAR     Word                    ' red calibration
+calGrn          VAR     Word                    ' green calibration
+calBlu          VAR     Word                    ' blue calibration
+
+redVal          VAR     Byte                    ' red value
+grnVal          VAR     Byte                    ' green value
+bluVal          VAR     Byte                    ' blue value
+rgb             VAR     redVal                  ' colors array
+
+inKey           VAR     Byte                    ' input from user
+colIdx          VAR     Nib                     ' color index
+rgbIdx          VAR     Nib                     ' rgb index
+testVal         VAR     Byte                    ' test value
+eePntr          VAR     Word                    ' data table pointer
+char            VAR     inKey                   ' char to print
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+' RGB data
+
+Colors          DATA    008, 005, 004           ' brown
+                DATA    038, 007, 005           ' red
+                DATA    075, 022, 008           ' orange
+                DATA    086, 060, 011           ' yellow
+                DATA    019, 044, 020           ' green
+                DATA    005, 009, 023           ' blue
+                DATA    021, 017, 031           ' violet
+
+' Color Names
+
+CN0             DATA    "Brown", 0 
+CN1             DATA    "Red", 0
+CN2             DATA    "Orange", 0
+CN3             DATA    "Yellow", 0
+CN4             DATA    "Green", 0
+CN5             DATA    "Blue", 0
+CN6             DATA    "Violet", 0
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Setup:
+  TcsLeds = IsOff                               ' start off
+  OUTPUT TcSLeds                                ' allow direct control
+  GOSUB Calibrate_White                         ' white balance sensor
+  GOSUB Calibrate_Colors                        ' calibrate color table
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Read_RGB                              ' scan color
+    DEBUG "RGB = ",                             ' display components
+          DEC3 redVal, ", ", 
+          DEC3 grnVal, ", ", 
+          DEC3 bluVal, "  "
+
+    GOSUB Match_Color                           ' compare scan to table
+    IF (colIdx < NumColors) THEN                ' match was found
+      GOSUB Print_Color
+      DEBUG CR
+    ELSE
+      DEBUG "No match", CR
+    ENDIF 
+
+    PAUSE 1000                                  ' delay between scans
+  LOOP
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' Calibrates "white" to ambient conditions
+
+Calibrate_White:
+  DEBUG CLS, "TCS230 White Balance"
+  DEBUG CR, CR, "Insert white sample.  Press a key to scan..."
+  DEBUGIN inKey
+  GOSUB White_Balance
+  DEBUG CR, CR, "White balance complete."
+  PAUSE 1000
+  DEBUG CLS
+  RETURN
+
+
+' Reads "white" and calculates calibration values
+
+White_Balance:
+  filter = Red
+  GOSUB Read_Color                              ' read raw red
+  calRed = ScaleMax * 256 / rawColor            ' calculate red cal
+  filter = Green
+  GOSUB Read_Color                              ' read raw green
+  calGrn = ScaleMax * 256 / rawColor            ' calculate green scale
+  filter = Blue
+  GOSUB Read_Color                              ' read raw blue
+  calBlu = ScaleMax * 256 / rawColor            ' calculate blue scale
+  RETURN
+
+
+' Calibrates color table to ambient conditions
+
+Calibrate_Colors:
+  FOR colIdx = 0 TO (NumColors - 1)             ' loop through all colors
+    DEBUG CLS, "TCS230 Color Calibration: "
+    GOSUB Print_Color
+    DEBUG CR, CR, "Insert sample.  Press a key to scan..."
+    TcsLeds = IsOn                              ' light up scan area
+    DEBUGIN inKey
+    GOSUB Read_RGB                              ' scan sample item
+    eePntr = Colors + (3 * colIdx)              ' point to table entry
+    WRITE eePntr, redVal, grnVal, bluVal        ' save new data
+  NEXT
+  DEBUG CLS
+  RETURN
+
+
+' Reads selected color from TCS230
+' -- takes "filter" as input
+' -- returns "rawColor" as output (unscaled color value)
+
+Read_Color: 
+  SELECT filter
+    CASE Red
+      LOW TcsS2
+      LOW TcsS3
+  
+    CASE Green
+      HIGH TcsS2
+      HIGH TcsS3
+
+    CASE Blue
+      LOW TcsS2
+      HIGH TcsS3
+
+    CASE ELSE                                   ' clear -- no filter
+      HIGH TcsS2
+      LOW TcsS3
+  ENDSELECT
+
+  TcsLeds = IsOn                                ' light sample
+  COUNT TcsFreq, ScanTime, rawColor             ' return unscaled value
+  TcsLeds = IsOff
+  RETURN
+
+
+' Reads and scales RGB colors
+
+Read_RGB:
+  filter = Red
+  GOSUB Read_Color
+  redVal = rawColor */ calRed MAX ScaleMax
+  filter = Green
+  GOSUB Read_Color
+  grnVal = rawColor */ calGrn MAX ScaleMax
+  filter = Blue
+  GOSUB Read_Color
+  bluVal = rawColor */ calBlu MAX ScaleMax
+  RETURN
+
+
+' Compares current color scan with known values in
+' table. If match is found, the value of "colIdx"
+' will be less than "NumColors"
+
+Match_Color:
+  colIdx = 0
+  DO WHILE (colIdx < NumColors)                 ' check known colors
+    rgbIdx = 0
+    DO WHILE (rgbIdx < 3)                       ' compare rgb components
+      eePntr = Colors + (colIdx * 3) + rgbIdx   ' point to color table
+      READ eePntr, testVal                      ' read known r, g or b
+      testVal = ABS(testVal - rgb(rgbIdx))      ' calculate variance
+      IF (testVal > ColorThresh) THEN EXIT      ' if out-of-range, next
+      rgbIdx = rgbIdx + 1                       ' test next component
+    LOOP
+    IF (rgbIdx = 3) THEN EXIT                   ' match found  
+    colIdx = colIdx + 1                         ' try next color
+  LOOP
+  RETURN
+
+
+' Print color name 
+' -- takes "colIdx" as input
+' -- allow this to fall through to Print_String
+
+Print_Color:
+  LOOKUP colIdx, [CN0, CN1, CN2, 
+                  CN3, CN4, CN5, CN6], eePntr
+
+' Print a string stored in DATA table
+' -- point to first character with "eePntr"
+
+Print_String:
+  DO
+    READ eePntr, char                           ' reach character
+    IF (char = TermChar) THEN EXIT              ' end of string?
+    DEBUG char                                  ' no -- print char
+    eePntr = eePntr + 1                         ' point to next
+  LOOP
+  RETURN

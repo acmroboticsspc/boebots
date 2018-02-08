@@ -1,0 +1,256 @@
+'  CW Keyboard using BS2 and PAK6
+
+pakout con 15
+pakin con 14
+baud con 84
+fpin con 13
+ptt con 0
+key con 1
+
+' debug
+freq con 1000
+
+dot var word
+dash var word
+notx var bit
+keyin var byte
+taddr var word
+maddr var word
+len var byte
+didah var byte
+
+notx=0
+dot=100
+dash=300
+dotmin con 10
+dotmax con 1000
+
+
+high fpin
+low ptt
+low key
+
+serout pakout,baud,[$FF]
+pause 500
+top:
+' read character
+serin pakin\fpin,baud,[keyin]
+
+debug hex2 keyin
+' check for commands (Del=Rx,up=speed+,dn=speed-)
+if keyin=$CA then setcall
+if keyin=$CB then setmac
+if keyin=$91 then speedup
+if keyin=$97 then speeddn
+if keyin=$9A then rx
+
+high ptt   ' ptt on
+gosub charproc
+goto top
+
+rx:
+  low ptt
+  goto top
+
+speedup:
+  dot=dot-1
+  goto speed
+speeddn:
+  dot=dot+1
+speed:
+  if dot>=dotmin then minok
+  dot=dotmin
+minok:
+  if dot<=dotmax then maxok
+  dot=dotmax
+maxok:
+  dash=dot*3
+  debug ?dot
+  goto top
+
+
+charproc:
+if keyin<"a" or keyin>"z" then nouc
+keyin = keyin & $5F  ' force upper case
+nouc:
+taddr=keyin+ltbl
+Read taddr,len
+if len=0 then ret
+if len=$FF then cspace
+if len=$FE then wspace
+if len>=$80 then macro
+' ordinary char
+taddr=keyin+ctbl
+Read taddr,didah
+cloop:
+  gosub element
+  didah=didah<<1
+  len=len-1
+  if len<>0 then cloop
+cspace:
+  pause dash' element space
+  return
+
+wspace:
+  pause dash*2
+  return
+
+element:
+  if notx then nokey0
+  high key
+nokey0:
+  if (didah & $80)=$80 then dah
+  freqout 6,dot,freq
+  debug "."
+  goto elspace
+dah:
+  freqout 6,dash,freq
+  debug "-"
+elspace:
+  if notx then nokey1
+  low key
+nokey1:
+  pause dot
+ret:
+  return
+ 
+macro: 
+  maddr=2*(keyin-$80)+macrotbl
+  read maddr,taddr
+  read maddr+1,maddr
+  maddr=maddr*256+taddr
+mloop:
+  read maddr,keyin
+  debug "Macro: ",keyin,cr
+  if keyin=0 then ret
+  if keyin<>$FF then norm
+  gosub sendcs
+  goto nextm
+norm:
+  gosub charproc
+nextm:
+  maddr=maddr+1
+  goto mloop  
+
+csmacro:
+  maddr=csmac
+  goto mloop
+
+csaddr var word
+sendcs:
+  csaddr = csmac
+scsloop:
+  read csaddr,keyin
+  if keyin=0 then ret
+  gosub charproc
+  csaddr=csaddr+1
+  goto scsloop
+
+
+setcall:
+  notx=1
+  csaddr = csmac
+scl:
+  if csaddr=csmac+8 then scfin
+  serin pakin\fpin,baud,[keyin]
+  if keyin<>8 then nobs
+  if csaddr=csmac then scl
+  csaddr=csaddr-1
+  goto scl
+nobs:
+  if keyin<>13 then nocecho
+scfin:
+  write csaddr,0
+  gosub sendcs
+  notx=0
+  goto top
+nocecho:
+  write csaddr,keyin
+  csaddr=csaddr+1
+  gosub charproc
+  goto scl
+
+setmac:
+  notx=1
+  csaddr = umacro
+sumac:
+  if csaddr=umacro+50 then smfin
+  serin pakin\fpin,baud,[keyin]
+  if keyin<>8 then mnobs
+  if csaddr=umacro then sumac
+  csaddr=csaddr+1
+  goto sumac
+mnobs:
+  if keyin<>13 then mnocecho
+
+smfin:
+  write csaddr,0
+  notx=0
+Debug "done",cr
+  goto top
+mnocecho:
+  write csaddr,keyin
+  csaddr=csaddr+1
+  gosub charproc
+  goto sumac
+
+
+ltbl  data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$05,$00,$05,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $FE,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$06,$00,$06,$05
+	data $05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$00,$00,$00,$05,$00,$06
+	data $00,$02,$04,$04,$03,$01,$04,$03,$04,$02,$04,$03,$04,$02,$02,$03
+	data $04,$04,$03,$03,$01,$03,$04,$03,$04,$04,$04,$00,$06,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $80,$81,$82,$83,$84,$85,$86,$87,$88,$89,$8A,$8B,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+
+ctbl  data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$B0,$00,$50,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$CC,$00,$54,$90
+	data $F8,$78,$38,$18,$08,$00,$80,$C0,$E0,$F0,$00,$00,$00,$88,$00,$30
+	data $00,$40,$80,$A0,$80,$00,$20,$C0,$00,$00,$70,$A0,$40,$C0,$80,$E0
+	data $60,$D0,$40,$00,$80,$20,$10,$60,$90,$B0,$C0,$00,$14,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	data $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+
+macrotbl  data macro0&$FF,macro0>>8,macro1&$FF,macro1>>8
+	    data macro2&$FF,macro2>>8,macro3&$FF,macro3>>8
+	    data macro4&$FF,macro4>>8,macro5&$FF,macro5>>8
+	    data macro6&$FF,macro6>>8,macro7&$FF,macro7>>8
+	    data macro8&$FF,macro8>>8,macro9&$FF,macro9>>8
+	    data csmac&$FF,csmac>>8,umacro&$FF,umacro>>8
+
+
+csmac   data "NOCALL/0",0
+macro0  data "CQ CQ CQ DE ",$FF," ",$FF," ",$FF,0
+macro1  data "DE ",$FF,0
+macro2  data "QRZ? DE ",$FF,0
+macro3  data "TNX UR 599",0
+macro4  data "73 AND TNX DE ",$FF,0
+macro5  data 0
+macro6  data 0
+macro7  data 0
+macro8  data 0
+macro9  data 0
+umacro  data 0
+
+
+

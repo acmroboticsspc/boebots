@@ -1,0 +1,12 @@
+'{$STAMP BS2p}
+
+pointer VAR BYTE
+
+STORE 5		' READ/WRITE in Slot #5
+
+GET 127, pointer	' Read Slot Pointer in ScratchPad
+
+DEBUG CR, "Running Program in Slot #", DEC pointer & $0F
+DEBUG CR, "READ/WRITE      in Slot #", DEC pointer >> 4
+
+END

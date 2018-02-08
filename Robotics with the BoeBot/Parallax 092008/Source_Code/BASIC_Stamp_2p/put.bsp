@@ -1,0 +1,15 @@
+'{$STAMP BS2p}
+
+scr_addr con 123 		'sratchpad pad address
+pattern  con $abcd	'bit pattern
+a 	var word 		'general purpose variables
+b 	var byte
+
+	a = pattern
+	debug hex2 scr_addr, ":", hex4 a, cr
+	put scr_addr, a.byte0	'save the byte
+	get scr_addr, b	'fetch the value
+	debug hex2 scr_addr, ":", hex4 b, cr
+	
+				 
+ 

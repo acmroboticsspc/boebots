@@ -1,0 +1,25 @@
+'{$STAMP BS2p, store1}
+
+lang	var nib
+char	var nib
+value var byte
+addr	var word
+
+value = 7
+lang = 1
+
+lookup lang, [0,1], value
+store value
+debug ? value, cr
+
+ 	addr = text2
+start:read addr, value
+	if value = 0 then exit
+	debug value
+	addr = addr + 1
+	GOTO start
+exit: end
+
+Text1	DATA "Textzeile 1 in Deutsch",0
+Text2 DATA "Textzeile 2 in Deutsch",0
+Text3 DATA "Textzeile 3 in Deutsch",0

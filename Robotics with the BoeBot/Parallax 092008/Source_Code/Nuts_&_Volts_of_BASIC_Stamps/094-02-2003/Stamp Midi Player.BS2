@@ -1,0 +1,154 @@
+' =========================================================================
+'
+'   File...... Stamp Midi Player.BS2
+'   Purpose... Midi demo with BASIC Stamp 2
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallax.com
+'   Started... 22 DEC 2002
+'   Updated... 24 DEC 2002
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates a very simple mechanism for storing songs in
+' EEPROM and playing them through a connected midi instrument.  The song
+' is played to the channel 1 of the instrument.
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+MidiOut         PIN     15                      ' midi serial output
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+MidiBaud        CON     $8000 + 12              ' 31.25 kBaud -- open
+
+Channel         CON     0
+NN              CON     $90 | Channel           ' note on
+NX              CON     $80 | Channel           ' note off
+
+N01             CON     1600                    ' whole note
+ND2             CON     N01 / 4 * 3             ' dotted half
+N02             CON     N01 / 2                 ' half note
+N04             CON     N01 / 4                 ' quarter note
+N08             CON     N01 / 8                 ' eighth note
+N12             CON     N04 / 3                 ' quarter note triplet
+N16             CON     N01 / 16
+N32             CON     N01 / 32
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+eePntr          VAR     Word                    ' pointer to EE table
+cmd             VAR     Byte                    ' command (on or off)
+notes           VAR     Nib                     ' number of notes to play
+nTime           VAR     Word                    ' note timing
+midi            VAR     Byte(6)                 ' up to 3 notes at once
+
+idx             VAR     Nib
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+' Record format
+' Command, Notes, Timing, Note1, Volume1 {, Note2, Volume2, Note3, Volume3}
+
+Mystery         DATA    NN, 1, Word N12, 069, 100
+                DATA    NX, 1, Word 000, 069, 000
+                DATA    NN, 1, Word N12, 072, 060
+                DATA    NX, 1, Word 000, 072, 000
+                DATA    NN, 1, Word N12, 076, 060
+                DATA    NX, 1, Word 000, 076, 000
+                DATA    NN, 1, Word N12, 077, 072
+                DATA    NX, 1, Word 000, 077, 072
+                DATA    NN, 1, Word N12, 072, 060
+                DATA    NX, 1, Word 000, 072, 000
+                DATA    NN, 1, Word N12, 076, 060
+                DATA    NX, 1, Word 000, 076, 000
+                DATA    NN, 1, Word N12, 077, 072
+                DATA    NX, 1, Word 000, 077, 072
+                DATA    NN, 1, Word N12, 072, 060
+                DATA    NX, 1, Word 000, 072, 000
+                DATA    NN, 1, Word N12, 076, 060
+                DATA    NX, 1, Word 000, 076, 000
+                DATA    NN, 1, Word N04, 083, 074
+                DATA    NX, 1, Word 000, 083, 000
+                DATA    NN, 1, Word N04, 083, 074
+                DATA    NX, 1, Word 000, 083, 000
+                DATA    NN, 2, Word N04, 083, 074, 081, 080
+                DATA    NX, 2, Word 000, 083, 000, 081, 000
+                DATA    NN, 2, Word N04, 083, 074, 088, 080
+                DATA    NX, 2, Word 000, 083, 000, 088, 000
+                DATA    NN, 2, Word N12, 069, 100, 086, 100
+                DATA    NX, 1, Word 000, 069, 000
+                DATA    NN, 1, Word N12, 072, 060
+                DATA    NX, 1, Word 000, 072, 000
+                DATA    NN, 1, Word N12, 076, 060
+                DATA    NX, 2, Word 000, 076, 000, 086, 000
+                DATA    NN, 2, Word N12, 077, 072, 088, 100
+                DATA    NX, 1, Word 000, 077, 000
+                DATA    NN, 1, Word N12, 072, 060
+                DATA    NX, 1, Word 000, 072, 000
+                DATA    NN, 1, Word N12, 076, 060
+                DATA    NX, 2, Word 000, 076, 000, 088, 000
+                DATA    NN, 2, Word N12, 077, 060, 091, 100
+                DATA    NX, 1, Word 000, 077, 000
+                DATA    NN, 1, Word N12, 072, 060
+                DATA    NX, 1, Word 000, 072, 000
+                DATA    NN, 1, Word N12, 076, 060
+                DATA    NX, 2, Word 000, 076, 000, 091, 000
+                DATA    NN, 2, Word N12, 077, 060, 088, 100
+                DATA    NX, 1, Word 000, 077, 000
+                DATA    NN, 1, Word N12, 072, 060
+                DATA    NX, 1, Word 000, 072, 000
+                DATA    NN, 1, Word N12, 076, 060
+                DATA    NX, 1, Word ND2, 076, 000
+                DATA    NX, 1, Word 000, 088, 000
+                DATA    $FF
+
+Chords          DATA    NN, 3, Word N01, 060, 100, 064, 100, 067, 100
+                DATA    NX, 3, Word 000, 060, 000, 064, 000, 067, 000
+                DATA    NN, 3, Word N01, 060, 100, 063, 100, 067, 100
+                DATA    NX, 3, Word 000, 060, 000, 063, 000, 067, 000
+                DATA    NN, 3, Word N01, 072, 100, 076, 100, 079, 100
+                DATA    NX, 1, Word N01, 000, 000
+                DATA    NX, 3, Word 000, 072, 000, 076, 000, 079, 000
+                DATA    $FF
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  eePntr = Mystery
+  GOSUB Play_Song
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Play_Song:
+  READ eePntr, cmd                              ' get command
+  IF (cmd < $FF) THEN                           ' if valid, play on
+    READ (eePntr + 1), notes                    ' get number of notes
+    READ (eePntr + 2), Word nTime               ' get note timing
+    FOR idx = 0 TO (notes * 2 - 1)              ' read notes/velocities
+      READ (eePntr + 4 + idx), midi(idx)
+    NEXT
+    SEROUT MidiOut, MidiBaud, [cmd, STR midi\(notes * 2)]
+    PAUSE nTime                                 ' wait
+    eePntr = eePntr + 6 + ((notes - 1) * 2)     ' point to next record
+    GOTO Play_Song                              ' keep going
+  ENDIF
+  RETURN

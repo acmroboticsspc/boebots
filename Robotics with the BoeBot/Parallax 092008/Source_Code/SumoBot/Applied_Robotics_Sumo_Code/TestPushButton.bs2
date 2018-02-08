@@ -1,0 +1,26 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - TestPushButton.bs2
+' Displays the state of the pushbutton sensed by P6 in the Debug Terminal.
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+pbSense        PIN     6                     ' Pushbutton connected to P6
+
+' -----[ Initialization ]-----------------------------------------------------
+
+DEBUG CLS, "Press/hold/release" , CR,       ' PROMPT press/release pushbutton
+           "pushbutton on", CR,
+           "breadboard...", CR
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+DO                                           ' DO...LOOP repeats indefinitely
+
+  DEBUG BIN1 pbSense                         ' Display state of pbSense (IN6)
+  PAUSE 100                                  ' Delay for slower PCs
+
+LOOP
+

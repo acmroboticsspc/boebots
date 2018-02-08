@@ -1,0 +1,12 @@
+' Test of Program Selection with BS2p-24 and Stamp Activity Board 
+
+'{$STAMP BS2p, pg1, pg2, pg3}
+
+BRANCH (INS.NIB2 & $03),[prg0, prg1, prg2, prg3]
+
+prg0: DEBUG CR, "Page 0"
+prg1: RUN 1
+prg2: RUN 2
+prg3: RUN 3
+
+END

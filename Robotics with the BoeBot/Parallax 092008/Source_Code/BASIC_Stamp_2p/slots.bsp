@@ -1,0 +1,26 @@
+'{$STAMP BS2p, slot1}
+
+'The main program calls subroutines (tasks) in another
+'program slot. The point for reentry must be defined 
+'before the subroutine call.
+
+reentry var nib	'reentry points are _1 and _2
+task	var nib
+
+x 	var byte
+y 	var byte
+z 	var word
+
+	branch reentry, [start, _1, _2]
+
+start:x = 170
+	y = 85
+
+	'access task 0 on program slot 1
+	reentry = 1 : task = 0 : run 1	
+_1:	debug dec5 z, cr 
+
+	'access task 1 on program slot 1
+	reentry = 2 : task = 1 : run 1	
+_2:	debug dec5 z, cr
+	end

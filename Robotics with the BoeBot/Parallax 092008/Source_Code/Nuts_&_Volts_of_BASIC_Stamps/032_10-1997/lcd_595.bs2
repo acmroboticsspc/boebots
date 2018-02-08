@@ -1,0 +1,217 @@
+' Listing 4
+' Stamp Applications: Nuts & Volts, October 1997
+
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... LCD_595.BS2
+' Purpose... Stamp 2 -> 74HC595 -> LCD (4-bit interface)
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' WWW....... http://members.aol.com/jonwms
+' Started... 16 JUL 1994
+' Updated... 27 AUG 1997
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates the various standard features of a 1x16 LCD
+' display that uses the Hitachi HD44780 controller. The LCD is connected
+' to the Stamp 2 through a 74HC595 shift register.
+'
+' Connections:
+'   NC = Not Connected
+'   PU = Pulled Up to +5V through 10K resistor
+'
+' Stamp 2   74HC595   LCD       Notes
+' -------   -------   -------   ---------------- 
+'            1 NC
+'            2         6 (E)
+'            3         4 (RS)
+'            4        11 (D4)
+'            5        12 (D5)
+'            6        13 (D6)
+'            7        14 (D7)
+'            8 GND 
+'            9 NC 
+'           10 PU
+' P1        11                  Shift clock
+' P2        12                  Output latch
+'           13 GND 
+' P0        14                  Shift data 
+'           15 NC
+'           16 Vcc
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+' 25 AUG 97 : Modified standard LCD demo to use 74HC595
+' 27 AUG 97 : Added custom character
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+SData	CON	0			' 74HC595 serial data  (14)
+Clk	CON	1			' 74HC595 shift clock  (11)
+Latch	CON	2			' 74HC595 output latch (12) 
+
+' LCD control characters
+'
+ClrLCD  CON     $01                     ' clear the LCD
+CrsrHm  CON     $02                     ' move cursor to home position
+CrsrLf  CON     $10                     ' move cursor left
+CrsrRt  CON     $14                     ' move cursor right
+DispLf  CON     $18                     ' shift displayed chars left
+DispRt  CON     $1C                     ' shift displayed chars right
+DDRam   CON     $80                     ' Display Data RAM control
+CGRam	CON	$40			' Char Gen RAM control
+
+ 
+' -----[ Variables ]-------------------------------------------------------
+'
+char    VAR     Byte                    ' character sent to LCD
+temp	VAR	Byte			' work variable for LCD routines
+index   VAR     Byte                    ' loop counter
+
+lcd_E	VAR	temp.Bit2               ' LCD Enable pin
+lcd_RS	VAR     temp.Bit3               ' Register Select (1 = char)
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+Msg     DATA    0," NUTS & VOLTS ",0	' preload EEPROM with message
+
+	' custom character map
+	' character code will be 0
+
+Grin0	DATA	%00000000		' . . . . . . . .
+Grin1	DATA	%00001010		' . . . . * . * .
+Grin2	DATA	%00001010		' . . . . * . * .
+Grin3	DATA	%00000000		' . . . . . . . .
+Grin4	DATA	%00010001		' . . . * . . . *
+Grin5	DATA	%00001110		' . . . . * * * .
+Grin6	DATA	%00000110		' . . . . . * * .
+Grin7	DATA	%00000000		' . . . . . . . .
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+
+' Initialize the LCD (Hitachi HD44780 controller)
+'
+LCDini: PAUSE 500                       ' let the LCD settle
+	char = %0011                    ' 8-bit mode
+	GOSUB LCDcmd
+	PAUSE 5
+	GOSUB LCDcmd
+	GOSUB LCDcmd
+	char = %0010                    ' put in 4-bit mode
+	GOSUB LCDcmd
+	char = %00001100                ' disp on, crsr off, blink off
+	GOSUB LCDcmd                     
+	char = %00000110                ' inc crsr, no disp shift
+	GOSUB LCDcmd
+
+	' download custom character map to LCD
+
+	char = CGRam			' point to CG RAM
+	GOSUB LCDcmd                    ' prepare to write CG data
+	FOR index = Grin0 TO Grin7
+	  READ index, char		' get byte from EEPROM
+	  GOSUB LCDwr			' put into LCD CG RAM
+	NEXT
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Start:  char = ClrLCD
+	GOSUB LCDcmd
+
+	FOR index = 0 TO 15
+	  READ Msg + index, char        ' get character from EEPROM
+	  GOSUB LCDwr                   ' write it
+	  PAUSE 50                      ' delay between chars
+	NEXT
+	PAUSE 2000                      ' wait 2 seconds
+
+	char = CrsrHm                   ' move the cursor home
+	GOSUB LCDcmd
+
+	char = %00001110                ' turn the cursor on
+	GOSUB LCDcmd
+	PAUSE 500
+
+	char = CrsrRt
+	FOR index = 1 TO 15             ' move the cursor accross display
+	  GOSUB LCDcmd
+	  PAUSE 100
+	NEXT
+
+	FOR index = 14 TO 0             ' go backward by moving to
+	  char = DDRam + index          '  a specific address
+	  GOSUB LCDcmd
+	  PAUSE 100
+	NEXT
+
+	char = %00001101                ' cursor off, blink on
+	GOSUB LCDcmd
+	PAUSE 2000
+	
+	char = %00001100                ' blink off
+	GOSUB LCDcmd
+
+	FOR index = 1 TO 10             ' flash display
+	  char = char ^ %00000100       ' toggle display bit
+	  GOSUB LCDcmd
+	  PAUSE 250       
+	NEXT
+	PAUSE 1000
+
+	FOR index = 1 TO 16             ' shift display
+	  char = DispRt
+	  GOSUB LCDcmd
+	  PAUSE 100
+	NEXT
+	PAUSE 1000
+
+	FOR index = 1 TO 16             ' shift display back
+	  char = DispLf
+	  GOSUB LCDcmd
+	  PAUSE 100
+	NEXT
+	PAUSE 1000
+
+	char = ClrLCD                   ' clear the LCD
+	GOSUB LCDcmd
+	PAUSE 500
+
+	GOTO Start                      ' do it all over
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+' Send command to the LCD
+'
+LCDcmd: lcd_RS = 0			' command mode
+	GOTO LCDout
+
+' Write ASCII char to LCD 
+'
+LCDwr:	lcd_RS = 1			' character mode
+	GOTO LCDout
+
+LCDout:	temp.HIGHNIB = char.HIGHNIB	' get high nibble
+	lcd_E = 1
+	SHIFTOUT SData, Clk, MSBFIRST, [temp]
+	PULSOUT Latch, 1
+	lcd_E = 0			' drop Enable line low
+	SHIFTOUT SData, Clk, MSBFIRST, [temp]
+	PULSOUT Latch, 1
+	temp.HIGHNIB = char.LOWNIB	' get low nibble
+	lcd_E = 1
+	SHIFTOUT SData, Clk, MSBFIRST, [temp]
+	PULSOUT Latch, 1
+	lcd_E = 0
+	SHIFTOUT SData, Clk, MSBFIRST, [temp]
+	PULSOUT Latch, 1
+	RETURN

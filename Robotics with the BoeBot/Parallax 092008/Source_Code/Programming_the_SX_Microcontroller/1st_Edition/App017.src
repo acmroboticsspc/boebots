@@ -1,0 +1,37 @@
+; APP017.SRC - A simple voltage converter
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+
+org     $08
+Timer   ds 1
+
+org     $000
+
+ISR
+  xor   rc, #%10000000          ; Toggle rc.7
+
+  mov   w, #-100                ; Call the ISR every 1 us
+  retiw
+org     $100
+
+Start
+  mov   Timer, #250
+  clr   rc
+  mov   !rc, #%01111111
+  mov   !option,#%10011111      ; Enable the RTCC interrupt
+
+Loop
+  jmp Loop

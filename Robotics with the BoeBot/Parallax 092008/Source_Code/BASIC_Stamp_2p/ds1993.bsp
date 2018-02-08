@@ -1,0 +1,92 @@
+' -----[ Title ]------------------------------------------------------
+'
+' File...... ds1993.bsp
+' Purpose... Storing data in DS1993 iButton 
+' Author.... Claus Kuehnel  
+' Started... 2001-08-11 
+' Updated... 
+
+' -----[ Program Description ]----------------------------------------
+'
+' 
+
+' -----[ Revision History ]-------------------------------------------
+'
+' 2001-08-11
+
+' -----[ Directives ]-------------------------------------------------
+'
+'{$STAMP BS2p} 			'specifies a BS2p
+
+' -----[ Constants ]--------------------------------------------------
+'
+OWpin		con 15	'1-wire device pin
+LED		con 12	'Pin for LED
+
+OW_FERst	con %0001	'Front-End Reset
+OW_BERst	con %0010	'Back-End reset
+OW_BitMode	con %0100	
+
+SkipROM	con $CC	'Skip ROM Command
+WriteScratch con $0F	'Write ScratchPad
+ReadScratch con $AA	'Read ScratchPad
+
+cTargetAddr	con $0026	'Target Adress in iButton ScratchPad RAM
+
+     
+' -----[ Variables ]--------------------------------------------------
+'
+TargetAddr 	var word
+TA1 		var TargetAddr.LowByte
+TA2		var TargetAddr.HighByte
+EndingAddr	var byte
+
+temp 		var byte(8)
+idx 		var nib
+    
+
+' -----[ Initialization ]---------------------------------------------
+'
+init:	pause 1000		'open debug window
+	low LED		'LED off
+	TargetAddr = cTargetAddr
+	debug cls
+
+' -----[ Main Code ]--------------------------------------------------
+'
+Start:'Initialize array
+	for idx = 0 to 7
+		temp(idx) = idx +$30
+	next
+	debug "Array contains ", str temp\8, cr
+	
+	'Write array to ScratchPad RAM
+	high LED
+	debug "Write to ScratchPad RAM...",cr
+	OWOUT OWpin, OW_FERst, [SkipROM, WriteScratch, TA1, TA2, str temp\8 ]
+	low LED
+
+	'Clear array
+	debug "Clear ScrachPad RAM...",cr
+	for idx = 0 to 7
+		temp(idx) = 0
+	next
+	debug "Array contains ", str temp\8, cr
+
+	'Read scratchpad RAM and save back in array
+	debug "Read ScratchPad RAM...",cr
+	OWOUT OWpin, OW_FERst, [SkipROM, ReadScratch]
+	OWIN OWpin, OW_BERst, [TA1, TA2, EndingAddr, str temp\8 ]
+
+	debug "TA:   ", hex2 TA2, hex2 TA1, cr
+	debug "EA:   ", hex2 EndingAddr, cr
+	debug "Data: ", str temp\8
+
+	pause 5000
+	goto start
+
+	end
+
+' -----[ Subroutines ]------------------------------------------------
+
+' -----[ Data ]-------------------------------------------------------

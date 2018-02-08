@@ -1,0 +1,99 @@
+; APP003.SRC - Generating a Triangular Waveform
+;
+; ---------------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller", 2nd Edition by Guenther Daubach
+; Copyright (c) by Parallax Inc. 2004
+; ---------------------------------------------------------------------
+
+include "Setup28.inc"
+id          'TriGen'                             
+reset       Main
+
+             org    $10
+flags0       ds 1
+flags1       ds 1
+localTemp0   ds 1
+localTemp1   ds 1
+localTemp2   ds 1
+isrTemp      ds 1
+
+dacSlope     equ    flags0.0
+
+             org    $10
+bank0        =      $
+
+dacOutVal    ds     1
+
+;***********************************************************************
+; Port Assignment
+;***********************************************************************
+
+RC_latch     equ    %00000000   ; Port C latch init
+RC_DDIR      equ    %00000000   ; Port C DDIR value 
+      
+;***********************************************************************
+; Port and pin definitions
+;***********************************************************************
+
+DAC_PORT     equ   rc
+
+;***********************************************************************
+; Program constants
+;***********************************************************************
+
+int_period   equ   100          ; RTCC Interrupt rate
+
+DDIR_W       equ   $0F          ; Write Port Direction
+
+ 
+       org    $000
+         
+;***********************************************************************
+ISR
+;***********************************************************************
+
+      snb   dacSlope            ; If Flags.0 set, negative slope
+        jmp :Down
+      inc   dacOutVal           ; Generate positive slope
+      cjb   dacOutVal, #250, isrOut     ; Continue if less than 250,
+      dec   dacOutVal           ;  else reset to 249    
+      setb  dacSlope            ; Set flag for negative slope
+:Down                           ; Generate negative slope   
+      dec   dacOutVal
+      sz                        ; Continue is greater than 0,
+        jmp isrOut              ;  else
+      clrb  dacSlope            ;  clear the slope direction flag
+          
+isrOut
+      mov   w, #-int_period
+      retiw
+                                    
+      org   $1fb
+Main    
+      page  _Main
+      jmp   _Main
+
+      org   $600
+_Main
+      mov   w, #RC_latch        ; Initialize RC data latch
+      mov   rc, w      
+      mode  DDIR_W               ; point MODE to write DDIR register
+      mov   w, #RC_DDIR         ; Setup RC Direction register
+      mov   !rc, w       
+
+include "Clr2x.inc"
+
+RTCC_ON      =  %10000000       ; Enables RTCC at address $01 (RTW high)
+                                ; *WREG at address $01 (RTW low) by
+                                ; default
+RTCC_PS_OFF  =  %00001000       ; Assigns prescaler to RTCC (PSA low)
+PS_111       =  %00000111       ; RTCC = 1:256, WDT = 1:128
+
+OPTIONSETUP  equ RTCC_ON | RTCC_PS_OFF | PS_111
+
+      mov   !option, #OPTIONSETUP
+      bank  localTemp0
+mainLoop
+      jmp   mainLoop  
+END

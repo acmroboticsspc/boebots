@@ -1,0 +1,64 @@
+; APP018.SRC - A regulated voltage converter
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+
+LVL      = $0d
+TRIS     = $0f
+SensePin = rc.6                         ; Port pin for sense voltage
+
+org     $08
+PwmAcc  ds 1                            ; Current PWM value
+PwmVal  ds 1                            ; Contents defines pulse width
+rcBuff  ds 1                            ; Buffer for port C output
+
+org     $000
+
+Stabilization
+  sb  SensePin                          ; Read the divided voltage
+    jmp :TooLow                         ; -> too low
+  dec PwmVal                            ; Too high, reduce pulse width
+  snz                                   ; If PwmVal is 0, force it
+    inc PwmVal                          ; to 1
+  jmp PWM
+
+:TooLow                                 ; Voltage too low,
+  inc PwmVal                            ; increase pulse width
+  clrb PwmVal.7                         ; Don't allow values above 127 for
+                                        ; a maximum duty cycle of 50%
+
+PWM
+  clrb  rcBuff.7                        ; Clear the PWM bit in advance
+  add   PwmAcc, PwmVal                  ; Set current PWM value
+  snc                                   ; Need to toggle the output ?
+    setb rcBuff.7
+
+  mov   rc, rcBuff                      ; Output port data
+  mov   w, #-100
+  retiw
+
+org     $100
+
+Start
+  clr   PwmVal
+  clr   PwmAcc
+  mode  LVL
+  mov   !rc, #%10111111                 ; rc.6 is CMOS input
+  mode  TRIS
+  mov   !rc, #%01111111                 ; rc.7 is PWM output
+  mov   !option,#%10011111              ; Enable RTCC interrupt
+
+Loop                                    ; Nothing to do here
+  jmp Loop                              ; for now...

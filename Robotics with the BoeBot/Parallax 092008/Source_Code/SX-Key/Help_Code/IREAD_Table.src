@@ -1,0 +1,75 @@
+;=======================================================================
+;TITLE:         IREAD_Table.src
+;
+;PURPOSE:       This SX28 code demonstrates the creation and use of an 
+;               8-bit or 12-bit data table with the IREAD command.
+;
+;AUTHOR:        Parallax, Inc.
+;
+;REVISIONS:
+;  08/12/99 -   Initial release.
+;  09/17/04 -   Updated to support SASM.
+;
+;CONNECTIONS:
+;  None.
+;
+;DETAILS:
+;  Use Run -> Debug option to program SX chip.  After it has downloaded and
+;  the Debug screens appear, use the Hop or Step buttons to step one
+;  instruction at a time.  Watch the Data registers in the Watch window
+;  after the call to the Table for the value returned from the table.  The
+;  top Data line in the Watch window is the lower 8-bits shown in ASCII
+;  format, the bottom Data line in the Watch window is the 12-bit value
+;  (DataH:DataL) shown in unsigned decimal format.
+;=======================================================================
+
+
+;-------------------------- DEVICE DIRECTIVES --------------------------
+
+		DEVICE		SX28,OSC4MHZ,TURBO
+
+IFDEF	__SASM  ;SASM Directives
+		DEVICE		STACKX,OPTIONX
+		IRC_CAL		IRC_SLOW
+		
+ELSE		;Parallax Assember Directives
+		DEVICE		STACKX_OPTIONX
+ENDIF
+
+		RESET		Initialize
+
+;------------------------------ CONSTANTS ------------------------------
+		ORG	0
+
+Table		DW      'ABCDEFG'		;Store text
+		DW	10,300,4095,0		;Store numbers
+
+;------------------------------ VARIABLES ------------------------------
+
+		Idx	EQU	$08
+		DataL	EQU	$09
+		DataH	EQU	$0A
+
+;---------------------------- DEBUG SETTINGS ---------------------------
+
+		FREQ	4_000_000
+	
+		WATCH	DataL,12,UDEC
+
+;------------------------ INITIALIZATION ROUTINE -----------------------
+
+Initialize
+		mov	Idx,#Table		;Reset Table Index
+
+;---------------------------- MAIN PROGRAM -----------------------------
+
+Main
+		mov	M,#Table>>8		;(1)upper 4-bits of table offset
+		mov	w,Idx			;(1)
+		inc	Idx			;(1)Increment table index
+		iread				;(4)Retrieve data
+		mov	DataL,W			;(1)
+		mov	DataH,M			
+		cjne	DataL,#0,Main		;At this point, the data
+		cjne	DataH,#0,Main		;is in DataL and DataH
+		END

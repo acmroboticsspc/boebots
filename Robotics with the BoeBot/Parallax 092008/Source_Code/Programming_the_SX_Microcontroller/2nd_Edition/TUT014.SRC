@@ -1,0 +1,25 @@
+; TUT014.SRC
+;
+; --------------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" 2nd Edition by Guenther Daubach
+; Copyright (c), by Parallax Inc. 2004
+; --------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET     Main
+org       $08           ;  1
+F1        ds 1          ;  2
+F2        ds 1          ;  3
+Result    ds 1          ;  4
+
+org       $100          ;  5
+Main                    ;  6
+  mov     F1, #11       ;  7
+  mov     F2, #4        ;  8
+  clr     Result        ;  9
+:MulLoop                ; 10
+  add     Result, F1    ; 11
+  decsz   F2            ; 12
+    jmp   :MulLoop      ; 13
+jmp       $             ; 14

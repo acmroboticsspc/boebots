@@ -1,0 +1,35 @@
+' -----[ Title ]----------------------------------------------------------------
+' Mini Sumo 4.1 : IR Sensor Test
+' {$STAMP BS2}
+
+' -----[ I/O Definitions ]------------------------------------------------------
+
+LfIrOut         CON     4                       ' left IR LED output
+LfIrIn          VAR     In11                    ' left IR sensor input
+RtIrOut         CON     15                      ' right IR LED output
+RtIrIn          VAR     In14                    ' right IR sensor input
+
+' -----[ Variables ]------------------------------------------------------------
+
+irBits          VAR     Nib                     ' storage for IR target data
+irLeft          VAR     irBits.Bit1
+irRight         VAR     irBits.Bit0
+
+' -----[ Main Code ]------------------------------------------------------------
+
+Read_Left:
+  FREQOUT LfIrOut, 1, 38500                     ' modulate IR LED
+  irLeft = ~LfIrIn                              ' read input (1 = target)
+
+Read_Right:
+  FREQOUT RtIrOut, 1, 38500                     ' modulate IR LED
+  irRight = ~RtIrIn                             ' read input (1 = target)
+
+Display:
+  DEBUG Home
+  DEBUG "L  R", CR
+  DEBUG "----",CR
+  DEBUG BIN1 irLeft, "  ", BIN1 irRight
+
+  PAUSE 20
+  GOTO Read_Left          

@@ -1,0 +1,79 @@
+' =========================================================================
+'
+'   File....... SW21-EX23-74HC595-2.BS2
+'   Purpose.... Additional expanded outputs with 74HC595
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates a simple method of turning three BASIC Stamp
+' I/O pins into sixteen digital outputs with a 74HC595 shift register.
+' When multiple 595s are used, the order of SHIFTOUT instructions will
+' determine where the values "land."
+'
+' [Stamp]--->[pattern]--->[counter]
+'
+' ... would require "counter" to be shifted first, then "pattern." The
+' value for "counter" will be shifted through the 595 that ultimately
+' holds "pattern."
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Clock           PIN     0                       ' shift clock (74HC595.11)
+SerData         PIN     1                       ' serial data (74HC595.14)
+Latch           PIN     2                       ' output latch (74HC595.12)
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+DelayTime       CON     100
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+counter         VAR     Byte                    ' binary counter
+pattern         VAR     Byte                    ' zig-zag pattern
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  LOW Latch                                     ' make output and low
+  pattern = %00000001
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    counter = counter + 1                       ' update counter
+    GOSUB Out_595x2                             ' put pattern on 74x595
+    PAUSE DelayTime                             ' hold
+    pattern = pattern << 1                      ' shift pattern left
+  LOOP UNTIL (pattern = %10000000)
+  DO
+    counter = counter + 1
+    GOSUB Out_595x2
+    PAUSE DelayTime
+    pattern = pattern >> 1                      ' shift pattern right
+  LOOP UNTIL (pattern = %00000001)
+  GOTO Main
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Out_595x2:
+  SHIFTOUT SerData, Clock, MSBFIRST, [counter]  ' send counter to 595-2
+  SHIFTOUT SerData, Clock, MSBFIRST, [pattern]  ' send pattern to 595-1
+  PULSOUT Latch, 5                              ' latch outputs
+  RETURN

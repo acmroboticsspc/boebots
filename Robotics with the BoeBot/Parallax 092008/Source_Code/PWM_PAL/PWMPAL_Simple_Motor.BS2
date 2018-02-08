@@ -1,0 +1,101 @@
+' =========================================================================
+'
+'   File....... PWM_Simple_Motor.BS2
+'   Purpose.... Simple DC motor control
+'   Author..... Parallax
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 18 JUN 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+
+' Demonstrates simple DC motor control with the PWMPAL.
+
+' NOTE: Do NOT connect a DC motor directly to the PWMPAL / Stamp.  You
+' must use a buffer (transistor, MOSFET, etc.) to switch the current
+' required by the motor.
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+PpPin           PIN     0                       ' PWMPAL Serial I/O
+SpdCtrl         PIN     8                       ' speed button
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+MotorNum        CON     1                       ' PWMPAL motor output
+
+T9600           CON     84
+T19200          CON     32
+T38400          CON     6
+PpBaud          CON     T38400
+
+Yes             CON     1                       ' for active-high
+MinSpeed        CON     25                      ' minimum DC to spin motor
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+speed           VAR     Byte                    ' speed, 0% to 100%
+status          VAR     Byte                    ' motor control status
+
+onTime          VAR     Word                    ' PWM timing
+offTime         VAR     Word
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Setup:
+  status.HIGHNIB = %0001 << (MotorNum - 1)      ' set enable bit
+  status.LOWNIB = %0001 << (MotorNum - 1)       ' set control bit
+  SEROUT PpPin, PpBaud, ["!PWMSS", status]
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    IF (SpdCtrl = Yes) THEN                     ' button pressed
+      IF (speed < 100) THEN                     ' can we speed up?
+        speed = speed + 1 MIN MinSpeed          ' increase speed
+        GOSUB Set_Speed                         ' update PWMPAL
+      ENDIF
+    ELSE
+      speed = 0
+    ENDIF
+    DEBUG HOME, "Speed = ", DEC speed, CLREOL   ' show current speed
+    PAUSE 100                                   ' speed ramp delay
+  LOOP
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Set_Speed:
+  IF (speed = 100) THEN
+    onTime = $FFFF                              ' full on for 100%
+    offTime = $0001
+  ELSE
+    onTime = speed                              ' set duty cycle
+    offTime = 100 - speed
+  ENDIF
+
+  SEROUT PpPin, PpBaud, ["!PWMM", (48 + MotorNum),
+                          onTime.BYTE0, onTime.BYTE1,
+                          offTime.BYTE0, offTime.BYTE1]
+
+  RETURN

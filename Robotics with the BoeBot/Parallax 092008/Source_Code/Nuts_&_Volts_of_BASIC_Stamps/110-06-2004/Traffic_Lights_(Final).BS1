@@ -1,0 +1,81 @@
+' =========================================================================
+'
+'   File...... Traffic_Lights_(Final).BS1
+'   Purpose... Simple Traffic Light Demo
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallax.com
+'   Started...
+'   Updated... 11 APR 2004
+'
+'   {$STAMP BS1}
+'   {$PBASIC 1.0}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+SYMBOL  SpdInput        = 7                     ' speed controller input
+SYMBOL  Lights          = PINS                  ' output to lights
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+SYMBOL  StepUnits       = 1000                  ' for PAUSE, 1 second
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+SYMBOL  drumPntr        = B2                    ' drum pointer
+SYMBOL  stepTime        = B3                    ' step time in seconds
+SYMBOL  scale           = B4                    ' speed scale factor
+SYMBOL  timer           = W3                    ' timer value for PAUSE
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+Drum:
+  EEPROM (%00100001, 10)                        ' step outs, seconds
+  EEPROM (%00100010,  3)
+  EEPROM (%00100100,  1)
+  EEPROM (%00001100, 10)
+  EEPROM (%00010100,  3)
+  EEPROM (%00100100,  1)
+  EEPROM (%00100100,  0)
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  DIRS = %00111111
+  drumPntr = 0
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  READ drumPntr, Lights
+  drumPntr = drumPntr + 1
+  READ drumPntr, stepTime
+  drumPntr = drumPntr + 1
+  IF stepTime = 0 THEN Reset
+  GOSUB Get_Speed
+  timer = stepTime * StepUnits / 100 * scale
+  PAUSE timer
+  GOTO Main
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Get_Speed:
+  POT SpdInput, 103, scale                      ' read speed pot
+  scale = scale * 69 / 100 + 25                 ' scale to 25 - 200
+  RETURN

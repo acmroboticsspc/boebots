@@ -1,0 +1,113 @@
+' ==============================================================================
+'
+'   File...... AS5020.BS2
+'   Purpose... Austria Microsystems AS5020-E interface
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallax.com
+'   Started... 18 OCT 2002
+'   Updated... 18 OCT 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' This program reads and displays the position data from an AS5020 absolute
+' angular position encoder.
+'
+' Data for the AS5020-E is available from www.austriamicrosystems.com
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+
+Dpin            CON     0                       ' data in from AS5020
+Cpin            CON     1                       ' clock out to AS5020
+CSpin           CON     2                       ' chip select (active low)
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+MoveTo          CON     2                       ' move to x/y in DEBUG window
+ClrRt           CON     11                      ' clear DEBUG line to right
+DegSym          CON     176                     ' degrees symbol
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+position        VAR     Byte                    ' angular position from AS5020
+degrees         VAR     Word                    ' convert to degrees
+offset          VAR     Byte                    ' position offset
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Initialize:
+  HIGH CSpin                                    ' deselect AS5020
+  LOW Cpin
+
+  PAUSE 250                                     ' let DEBUG open
+  DEBUG CLS
+  DEBUG "AS5020 Angular Position Sensor", CR
+  DEBUG "------------------------------"
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  GOSUB Get_Position                            ' read position from AS5020
+
+  ' degrees (tenths) = position * 56.25
+  '
+  degrees = position */ 14400
+
+  DEBUG MoveTo, 0, 3
+  DEBUG "Position... ", DEC position, ClrRt, CR
+  DEBUG "Angle...... ", DEC (degrees / 10), ".", DEC1 degrees, degSym, ClrRt
+
+  GOTO Main
+  END
+
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+Get_Position:
+  LOW CSpin                                     ' select device
+  PULSOUT Cpin, 1                               ' start measurement
+  PAUSE 0                                       ' allow measurement
+  SHIFTIN Dpin, Cpin, MSBPOST, [position\6]     ' load data
+  HIGH CSpin                                    ' deselect device
+  position = position + offset // 64            ' account for offset
+  RETURN
+
+
+Set_Offset:
+  offset = 0                                    ' clear offset
+  GOSUB Get_Position                            ' get current position
+  offset = 64 - position                        ' calculate new "0" offset
+  RETURN

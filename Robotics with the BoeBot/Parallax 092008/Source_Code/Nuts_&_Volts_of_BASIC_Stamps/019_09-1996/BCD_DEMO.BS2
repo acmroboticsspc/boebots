@@ -1,0 +1,75 @@
+' Program Listing 19.2: Demonstrating BCD Counting with the BS2
+' Program: BCD_DEMO.BS2
+' This program implements a counter to demonstrate the basics
+' of working with binary-coded decimal (BCD) numbers with the BS2.
+' Variables used in the program.
+
+BCDcnt 	var nib(6) 		' Six-digit BCD counter.
+i 	var nib 		' Index into array of BCD digits.
+nonZ 	var bit 		' Flag used in blanking leading zeros.
+
+' You can enter a starting value for the counter by changing the
+' digits stored in BCDcnt below.
+BCDcnt(5) = 0: BCDcnt(4) = 0: BCDcnt(3) = 0
+BCDcnt(2) = 0: BCDcnt(1) = 0: BCDcnt(0) = 0
+
+' ===================================================================
+' Main Loop of Demonstration Program
+' ===================================================================
+' All of the real action takes place in the subroutines--all this
+' main program loop does is to display the BCD number, increment
+' it, and repeat. Forever.
+Main:
+  gosub BCD_display 		' Show the BCD number.
+  gosub BCD_inc 		' Add 1 to the BCD number.
+goto Main ' Do it again.
+
+' ===================================================================
+' BCD Subroutines
+' ===================================================================
+' =====BCD_display
+' This routine displays the six BCD digits stored in BCDcnt() on
+' the screen using the debug instruction. It incorporates logic
+' to eliminate leading zeros (i.e., to display values like
+' "001234" as "1234"). A zero is defined as a leading zero if
+' it is to the left of the first non-zero digit. We also
+' have to consider the case in which _all_ digits are zero;
+' here we don't want to blank the zero in the ones place.
+' In the routine, a flag (nonZ) is set to 1 by the first
+' non-zero digit. The if/then instruction right below the
+' label "skip1" takes care of the rest. It says, "if this
+' digit is 0, AND the first non-zero digit hasn't come yet,
+' AND this isn't the ones place, then don't print this digit."
+
+BCD_display:
+  nonZ = 0 			' Turn on leading-zero blanking.
+  for i = 5 to 0 		' For each digit..
+   if BCDcnt(i)= 0 then skip1 ' In effect: "if digit is not 0..
+   nonZ = 1 			' ..then nonZ = 1"
+  skip1: 			' See comments above for next line.
+   if BCDcnt(i) = 0 and nonZ = 0 and i <> 0 then skip2
+   debug hex1 BCDcnt(i) 	' Place the digit on the screen.
+  skip2:
+  next 				' Process all 6 digits.
+  debug cr 			' Send a carriage return.
+return ' Return to program.
+
+' =====BCD_inc
+' This subroutine increments (adds 1 to) the 6-digit BCD number stored
+' in BCDcnt. It works like grade school arithmetic: add 1 to the ones
+' digit. If the result is 10, put zero into the ones digit and carry
+' the 1 to the 10s digit. The routine uses a loop to carry the 1 all
+' way up to the 6th digit when the number to be incremented is
+' 999999.
+BCD_inc
+  i = 0 			' Start at lowest digit.
+  incLoop:
+   if i > 5 then done 		' Stay within the 6 digits, 0-5.
+   BCDcnt(i) = BCDcnt(i) + 1 	' Increment digit.
+   if BCDcnt(i)< 10 then done ' If no carry-the-one, we're done.
+   BCDcnt(i) = 0 		' Otherwise, zero this digit..
+   i = i + 1 ' ..and increment the next digit.
+  goto incLoop 		' Keep going until out of digits..
+done: 				' ..or no more carries.
+return 				' Return to program.
+ 

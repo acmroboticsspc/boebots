@@ -1,0 +1,119 @@
+' Program Listing 58.2: Analog.bsx
+
+'Analog.bsx
+'This is program 1 for the STAMP Net design. If this program
+'is requested then 128 analog measurements are taken with the
+'ADC0831 analog to digital converter. The maximum, minimum,
+'and average result are returned to the Master unit.
+
+'I/O pin designations
+AD_Clk		CON	0		'ADC0831 clock pin	
+AD_Dat		CON	1		'ADC0831 data pin
+AD_CS		CON	8		'ADC0831 chip select (asserted low)
+Relay		CON	9		'Relay control pin (asserted high)
+GPIO1		CON	10		'General purpose I/O pin
+GPIO2		CON	11		'General purpose I/O pin
+
+'Communication Constants 
+Data_Out	CON	5		'TTL data out pin
+TX_RX		CON	6		'Receive enable(asserted low)
+Data_In		CON	7		'TTL data in pin
+Baud		CON	45		'38.4kbps, 8N1 true data
+
+'Internally used registers
+Addr		var	byte		'Address of unit
+Comm_Flag	var	byte		'flag bits for unit
+	Mstr	var 	Comm_Flag.bit0	
+'Set for Master unit cleared for Slave
+	Sl	var	Comm_Flag.bit1	
+'Set if Slave # 1 is present on RS-485 bus
+	S2	var	Comm_Flag.bit2	
+'Set if Slave # 2 is present on RS-485 bus
+	S3	var	Comm_Flag.bit3	'Set if Slave # 3 is present on RS-485 bus
+	S4	var	Comm_Flag.bit4	
+'Set if Slave # 4 is present on RS-485 bus
+	S5	var	Comm_Flag.bit5	
+'Set if Slave # 5 is present on RS-485 bus
+	S6	var	Comm_Flag.bit6	
+'Set if Slave # 6 is present on RS-485 bus
+	S7	var	Comm_Flag.bit7	
+'Set if Slave # 7 is present on RS-485 bus
+
+'Communication message string variables bytes(8 total)
+Addr_Req	var	byte		'Unit address of message destination
+Prgm_Req	var	byte		'Request execution of this program
+Dat1		var	byte		'Data byte 1
+Dat2		var	byte		'Data byte 2
+Dat3		var	byte		'Data byte 3
+Dat4		var	byte		'Data byte 4
+Dat5		var	byte		'Data byte 5
+Checksum	var	byte		'Sum of previous bytes
+
+'Storage Registers
+Put_Addr	var	byte		'Put address location
+Get_Addr	var	byte		'Get address location
+
+'Working registers
+Loop1		var	byte		'For...Next variable
+Work1		var	byte		'General purpose register 
+Work2		var	byte		'General purpose register 
+Work3		var	byte		'General purpose register 
+Work4		var	byte		'General purpose register 
+WorkBig		var	word		'Word sized general purpose register
+
+'A/D registers
+ResultA_D	var	byte		'Result of A to D measurement
+MaxA_D		var	byte		'Storage for maximum A to D result
+MinA_D		var	byte		'Storage for minimum A to D result
+AvgA_D		var	byte		'Storage for avg. A to D result
+
+'Program constants
+AD_Samples	CON	128		'Number of samples taken
+DirFlag		CON	6		'Flag set to skip direction setting routine
+
+'*******************************************************************
+Main_Program:
+
+GET	DirFlag,Work2
+If Work2 = 10 Then Get_Address
+
+Comm_Flag 	= %00000000	
+Outs 		= %0000000100100000	'Set output pin values
+Dirs 		= %0000001101100011	'Set pin direction values
+
+Get_Address:
+Addr	= (INL&%0011100)/4		'Get unit address from P4-2
+
+	WorkBig 	= 0		'Clear average storage register
+	MinA_D	= 255			'Set minimum to max output
+	MaxA_D	= 0			'Set maximum to min output
+
+Measure_Analog:		
+	For Loop1 = 1 to AD_Samples
+		LOW		AD_CS
+		PULSOUT	AD_Clk,10	
+		SHIFTIN	AD_Dat,AD_Clk,msbpost,[ResultA_D]
+		HIGH		AD_CS
+		WorkBig = Workbig + ResultA_D
+		If ResultA_D < MaxA_D Then Test_Min
+			MaxA_D = ResultA_D
+Test_Min:
+		If ResultA_D > MinA_D Then Keep_Sampling
+			MinA_D = ResultA_D
+Keep_Sampling:
+	Next
+	AvgA_D = WorkBig/AD_Samples
+
+Debug	"Average Storage = ",DEC WorkBig,cr
+Debug	"Minimum A to D = ",DEC MinA_D,cr
+Debug	"Maximum A to D = ",DEC MaxA_D,cr
+
+	Checksum 	= MaxA_D+MinA_D+AvgA_D
+	HIGH		Data_Out		'Set output high
+	HIGH		TX_RX		'Enable transmission on RS-485
+	SEROUT	Data_Out,Baud,[$00,$00,MaxA_D,MinA_D,AvgA_D,$00,$00,Checksum]
+	PAUSE		1
+	LOW		TX_RX		'Enable receiver on RS-485
+
+	RUN	0			'Return to main program
+END

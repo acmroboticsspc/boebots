@@ -1,0 +1,63 @@
+' -----[ Title ]------------------------------------------------------
+'
+' File prn_8574.BSP
+' Purpose...  Sample for I2COUT - statement. 
+' Author....  Klaus Zahnert
+' Started...  10.6.01
+' Updated... 
+'
+' -----[ Program Description ]----------------------------------------
+' 
+'Serial transmission of bytes from BS2P-IC to PCF8574 to get 
+'parallel data for CENTRONICS  printer interface.
+'Separate lines for control BUSY and /STROBE  connected from BS2P-IC to 
+'printer. ACKN and other controls are not used.   
+
+' -----[ Revision History ]-------------------------------------------
+'
+' 
+
+' -----[ Constants ]--------------------------------------------------
+'
+  adr9574Aw	con   %01110000 'D0 = 0 for write 	
+  strb		con   4
+  datapin	con   0         'low byte adressing I2C
+     
+' -----[ Variables ]--------------------------------------------------
+'
+  pos		var 	byte	
+  rdbyt 	var 	byte
+   
+
+' -----[ Initialization ]---------------------------------------------
+'
+  dirl =%00010000  'P4 = /STROBE for output  
+  high strb		'	  
+  data "the big brown fox jumps over the lazy dog",13,10 
+  data "1234567890!§$%&/()=?",13,10
+  data $00				  'termination of string
+  pos = 0
+
+' -----[ Main Code ]--------------------------------------------------
+'
+
+waitbusy: if in3 = 1 then waitbusy        'wait for printer
+          read pos,rdbyt		  'read act. Byte from EEPPROM 
+          if rdbyt = $00 then finis       'goto end if recogniced $00
+ 	    
+	    debug dec pos,tab,hex2 rdbyt,tab,tab,rdbyt,cr
+					  'display to screen
+          pos = pos + 1                   'prepare next position
+
+          i2cout datapin,adr9574Aw,0,[rdbyt]     'output to PCF8574A
+
+          low  strb                       '/STROBE-pulse to printer                          
+	  high strb
+          goto waitbusy
+
+finis: end 
+    
+
+' -----[ Subroutines ]------------------------------------------------
+'
+' no

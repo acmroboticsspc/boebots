@@ -1,0 +1,335 @@
+' =========================================================================
+'
+'   File...... Thermo-K.BPE
+'   Purpose... Type-K Thermocouple temperature measurement using the DS2760
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallax.com
+'   Started...
+'   Updated... 19 JAN 2004
+'
+'   {$STAMP BS2pe, KTablePos.BPE, KTableNeg.BPE}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program lets a BS2p or BS2pe read the temperature from the Parallax
+' DS2760 thermocouple module.  User interface is through the Parallax LCD
+' AppMod.  This program uses separate tables for positive and negative
+' temperatures allowing for a wide range of measurement values.
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+E               PIN     1                       ' LCD Enable (1 = enabled)
+RW              PIN     2                       ' Read/Write\
+RS              PIN     3                       ' Reg Select (1 = char)
+LcdDirs         VAR     DIRB                    ' dirs for I/O redirection
+LcdBusOut       VAR     OUTB
+LcdBusIn        VAR     INB
+
+OW              PIN     8                       ' 1-Wire buss pin
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+LcdCls          CON     $01                     ' clear the LCD
+LcdHome         CON     $02                     ' move cursor home
+LcdCrsrL        CON     $10                     ' move cursor left
+LcdCrsrR        CON     $14                     ' move cursor right
+LcdDispL        CON     $18                     ' shift chars left
+LcdDispR        CON     $1C                     ' shift chars right
+
+LcdDDRam        CON     $80                     ' Display Data RAM control
+LcdCGRam        CON     $40                     ' Custom character RAM
+LcdLine1        CON     $80                     ' DDRAM address of line 1
+LcdLine2        CON     $C0                     ' DDRAM address of line 2
+
+BtnUp           CON     0                       ' for AppMod buttons
+BtnDn           CON     1
+
+ReadNet         CON     $33                     ' read OW net address
+SkipNet         CON     $CC                     ' skip OW net address
+RdReg           CON     $69                     ' read register
+
+PosTable        CON     1                       ' slot for postives table
+NegTable        CON     2                       ' slot for negative table
+
+
+#DEFINE _DebugOn = 1                            ' show data on DEBUG window
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+idx             VAR     Nib                     ' loop counter
+char            VAR     Byte                    ' for display
+
+buttons         VAR     Nib                     ' LCD AppMod buttons
+btn1            VAR     buttons.BIT0
+btn2            VAR     buttons.BIT1
+btn3            VAR     buttons.BIT2
+btn4            VAR     buttons.BIT3
+
+vIn             VAR     Word                    ' DS2760 voltage input
+tmpCJ           VAR     Word                    ' cold junction temp in C
+tCuV            VAR     Word                    ' thermocouple millivolts
+signTC          VAR     Word                    ' TC sign bit
+
+cjComp          VAR     Word                    ' temp compensation
+tempC           VAR     Word                    ' temp in Celsius
+signC           VAR     Bit
+tempF           VAR     Word                    ' temp in Fahrenheit
+signF           VAR     Bit
+
+tblLo           VAR     Word                    ' table pointers
+tblHi           VAR     Word
+eePntr          VAR     Word
+testVal         VAR     Word                    ' test value from table
+error           VAR     Bit                     ' 1 = out of range
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Stamp_Check:
+  #IF ($stamp < BS2P) #THEN
+    #ERROR "This program requires BS2p or BS2pe"
+  #ENDIF
+
+Setup:
+  DIRL = %11111110                              ' setup pins for LCD
+
+LCD_Init:
+  PAUSE 500                                     ' let LCD settle
+  LCDCMD E, %00110000 : PAUSE 5                 ' 8-bit mode
+  LCDCMD E, %00110000 : PAUSE 0
+  LCDCMD E, %00110000 : PAUSE 0
+  LCDCMD E, %00100000 : PAUSE 0                 ' 4-bit mode
+  LCDCMD E, %00101000 : PAUSE 0                 ' 2-line mode
+  LCDCMD E, %00001100 : PAUSE 0                 ' no crsr, no blink
+  LCDCMD E, %00000110                           ' inc crsr, no disp shift
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Intro:
+  LCDOUT E, LcdCls, ["THERMO-K"]                ' splash
+
+  #IF _DebugOn #THEN
+    DEBUG CLS, "Thermo-K", CR
+  #ENDIF
+
+  PAUSE 1500
+
+Check_Device:
+  OWOUT OW, %0001, [ReadNet]                    ' get serial number
+  OWIN  OW, %0010, [SPSTR 8]                    ' store in SPRAM
+  GET 0, char                                   ' read OW device type
+  IF (char <> $30) THEN                         ' if not $30, wrong device
+    LCDOUT E, LcdCls,   ["NO"]                  ' display error message
+    LCDOUT E, LcdLine2, ["  DS2760"]
+
+    #IF _DebugOn #THEN
+      DEBUG CLS, "No DS2760 found."
+    #ENDIF
+
+    STOP                                        ' stop program
+  ENDIF
+
+Main:
+  DO
+    GOSUB Read_TC_Volts                         ' read Seebeck voltage
+    GOSUB Read_CJ_Temp                          ' read cold junction temp
+    STORE PosTable
+    READ (tmpCJ * 2), Word cjComp               ' get compensation voltage
+
+    ' combine cjComp and tCuV
+    '
+    IF (signTC = 0) THEN
+      ' TC is above cold junction
+      cjComp = cjComp + tCuV
+      STORE PosTable
+      tblHi = 1023
+      signC = 0
+    ELSE
+      ' TC is below cold junction
+      IF (tCuV <= cjComp) THEN
+        cjComp = cjComp - tCuV
+        STORE PosTable
+        tblHi = 1023
+        signC = 0
+      ELSE
+        cjComp = tCuV - cjComp
+        STORE NegTable
+        tblHi = 270                             ' absolute zero
+        signC = 1
+      ENDIF
+    ENDIF
+
+    GOSUB TC_Lookup                             ' get temp via table search
+
+    IF error THEN
+      GOSUB Display_OOR                         ' out of range
+    ELSE
+      GOSUB Display_Temps                       ' put temps on LCD
+    ENDIF
+
+    #IF _DebugOn #THEN                          ' program report
+      DEBUG HOME,
+            "DS2760 Demo", CR,
+            CLREOL, CR,
+            "tmpCJ  ", DEC tmpCJ, " C", CLREOL, CR,
+            "tCuV   ", signTC * 13 + 32, DEC tCuV, " uV", CLREOL, CR,
+            CLREOL, CR
+
+      IF error THEN
+        DEBUG "tC     ?", CLREOL, CR
+        DEBUG "tF     ?", CLREOL, CR
+      ELSE
+        DEBUG "tC     ", (signC * 13 + 32), DEC tempC, CLREOL, CR
+        DEBUG "tF     ", (signF * 13 + 32), DEC tempF, CLREOL, CR
+      ENDIF
+    #ENDIF
+
+    PAUSE 100
+  LOOP
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' Read and debounce the LCD AppMod buttons
+
+LCD_Get_Buttons:
+  LcdDirs = %0000                               ' make LCD bus inputs
+  buttons = %1111                               ' assume all pressed
+  FOR idx = 1 TO 10
+    buttons = buttons & LcdBusIn                ' make sure button held
+    PAUSE 5                                     ' debounce 10 x 5 ms
+  NEXT
+  LcdDirs = %1111                               ' return bus to outputs
+  RETURN
+
+
+' Reads device input voltage (Vin pin)
+' -- mV in millivolts (max reading is 4.75 volts)
+
+Read_Vin:
+  OWOUT OW, %0001, [SkipNet, RdReg, $0C]
+  OWIN  OW, %0010, [vIn.BYTE1, vIn.BYTE0]
+  IF (vIn.BIT15) THEN                           ' check sign
+    vIn = 0                                     ' disallow negative
+  ELSE
+    vIn = vIn >> 5 */ $4E1                      ' x 4.88 millivolts
+  ENDIF
+  RETURN
+
+
+' Reads current register to get TC voltage
+' -- each raw bit = 15.625 uV
+' -- tCuV in microvolts
+
+Read_TC_Volts:
+  OWOUT OW, %0001, [SkipNet, RdReg, $0E]
+  OWIN  OW, %0010, [tCuV.BYTE1, tCuV.BYTE0]
+  signTC = tCuV.BIT15                           ' save sign bit
+  tCuV = tCuV >> 3                              ' correct alignment
+  IF signTC THEN
+    tCuV = tCuV | $F000                         ' pad 2's-compliment bits
+  ENDIF
+  tCuV = ABS tCuV */ 4000                       ' x 15.625 uV
+  RETURN
+
+
+' Reads cold junction (device) temperature
+' -- each raw bit = 0.125 degrees C
+' -- returns tmpCJ in whole degrees C
+
+Read_CJ_Temp:
+  OWOUT OW, %0001, [SkipNet, RdReg, $18]
+  OWIN  OW, %0010, [tmpCJ.BYTE1, tmpCJ.BYTE0]
+  IF (tmpCJ.BIT15) THEN                         ' check sign
+    tmpCJ = 0                                   ' disallow negative
+    error = 1                                   ' flag temp too low
+  ELSE
+    tmpCJ = tmpCJ.HIGHBYTE                      ' >> 5 x 0.125 (>> 3)
+    error = 0
+  ENDIF
+  RETURN
+
+
+' Search currently selected table for nearest entry
+' -- uses modified binary search algorithm to find cjComp
+' -- high end of search set before calling (tblHi)
+' -- successful search sets tempC
+
+TC_Lookup:
+  tblLo = 0                                     ' low entry of table
+  tempC = 22                                    ' default to room temp
+
+  READ (tblHi * 2), Word testVal                ' check max temp
+  IF (cjComp > testVal) THEN
+    error = 1                                   ' out of range
+  ELSE
+    DO
+      eePntr = (tblLo + tblHi) / 2              ' midpoint of search span
+      READ (eePntr * 2), Word testVal           ' read value from midpoint
+
+      IF (cjComp = testVal) THEN
+        EXIT                                    ' found it!
+      ELSEIF (cjComp < testVal) THEN
+        tblHi = eePntr                          ' search lower half
+      ELSE
+        tblLo = eePntr                          ' search upper half
+      ENDIF
+
+      IF ((tblHi - tblLo) < 2) THEN             ' span at minimum
+        eePntr = tblLo
+        EXIT
+      ENDIF
+    LOOP
+    tempC = eePntr
+  ENDIF
+  RETURN
+
+
+Display_OOR:
+  LCDOUT E, LcdLine1, [" OUT OF "]
+  LCDOUT E, LcdLine2, [" RANGE! "]
+  RETURN
+
+
+Display_Temps:
+  IF (tempC = 0) THEN
+    signC = 0                                   ' fix sign error if needed
+  ENDIF
+
+  ' calculate Fahrenheit
+
+  tempF = tempC * 9 / 5
+  IF (signC) THEN                               ' C temp is negative
+    tempF = 32 - tempF
+  ELSE
+    tempF = tempF + 32
+  ENDIF
+  signF = tempF.BIT15                           ' save sign
+  tempF = ABS tempF                             ' work with absolute value
+
+  ' send temps to LCD
+
+  LOOKDOWN tempC, >= [1000, 100, 10, 0], idx
+  LCDOUT E, LcdLine1, [223, "C ", REP " "\idx,
+                       signC * 13 + 32, DEC tempC]
+
+  LOOKDOWN tempF, >= [1000, 100, 10, 0], idx
+  LCDOUT E, LcdLine2, [223, "F ", REP " "\idx,
+                       signF * 13 + 32, DEC tempF]
+
+  RETURN

@@ -1,0 +1,18 @@
+LED con 8
+RxD con 9
+TxD con 10
+
+baud con 396+$4000	' N2400
+
+char var byte
+temp var byte
+
+start:serin RxD, baud, [char]
+	low LED
+	pause 500
+	high LED
+	char = char +1
+	serout TxD, baud , [char]
+	goto start
+
+end

@@ -1,0 +1,123 @@
+; APP024.SRC - A software FIFO for 16-bit data
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+  
+  WATCH   FIFOCnt, 8, UDEC
+  WATCH   Head,    8, UDEC
+  WATCH   Tail,    8, UDEC
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+
+org     $08
+FIFOCnt ds 1                            ; Number of items in the FIFO
+FsrSave ds 1                            ; Temporary storage for FSR
+FIFODat ds 2                            ; FIFO parameter buffer
+Value    ds 2                           ; Test variable for the main program
+
+org     $30
+FIFO    = $
+Head    ds 1                            ; FIFO head pointer
+Tail    ds 1                            ; FIFO tail pointer
+
+; NOTE: Use two subsequent banks for FIFOl and FIFOh !
+;
+org     $50
+FIFOl   = $                             ; 16 bytes for FIFO data (low byte)
+        ds 16
+
+org     $50
+FIFOh   = $                             ; 16 Bytes for FIFO data (high byte)
+        ds 16
+
+org     $000
+
+;** Subroutine saves the contents of FIFODat in the FIFO
+;
+; Entry:   FIFODat   = Value (low byte)
+;          FIFODat+1 = Value (high byte)
+;  
+; Changes: FSRSave, Head, FIFOCnt
+;
+WriteFIFO
+  snb  FIFOCnt.4                        ; If FIFO is "full", no action
+    ret
+  mov  FsrSave, fsr                     ; save FSR
+  bank FIFO                             ; Switch bank for Head
+  mov  w, #FIFOl                        ; Indirectly address the FIFO
+  add  w, Head                          ; using the Head
+  mov  fsr, w                           ; pointer
+  mov  ind, FIFODat                     ; Save the value (low byte)
+  add  fsr, #32                         ; Switch to FIFOh bank
+  mov  ind, FIFODat+1                   ; Save the value (high byte)
+  bank FIFO                             ; Switch bank for Head
+  inc  Head                             ; Point Head to next empty storage
+  clrb Head.4                           ; If Head = 16, reset it to 0
+  inc  FIFOCnt                          ; Increment the item count
+  mov  fsr, FsrSave                     ; Restore the FSR
+  ret
+
+;** Subroutine reads the FIFO and returns the value in FIFODat
+;
+; Returns:  Value in FIFODat   (low byte) and
+;                    FIFODat+1 (high byte)
+;  
+; Changes:  Temp, FSRSave, Tail, and FIFOCnt
+;
+ReadFIFO
+  test FIFOCnt                          ; If FIFOCnt = 0, the
+  snz                                   ; FIFO is "empty", i.e.
+    ret                                 ; no action
+  mov  FsrSave, fsr                     ; Save FSR
+  bank FIFO                             ; Switch bank for Tail
+  mov  w, #FIFOl                        ; Indirectly address the FIFO
+  add  w, Tail                          ; using the Tail
+  mov  fsr, w                           ; pointer
+  mov  FIFODat, ind                     ; Read the value (low byte)
+  add  fsr, #32                         ; Switch the FIFOh bank
+  mov  FIFODat+1, ind                   ; Read the value (high byte)
+  bank FIFO                             ; Switch bank for Tail
+  inc  Tail                             ; Point Tail to next storage
+  clrb Tail.4                           ; If Tail = 16, reset it to 0
+  dec  FIFOCnt                          ; Decrement the item count
+  mov  fsr, FsrSave                     ; Restore the FSR
+  ret
+
+ 
+org     $100
+
+;** Main program to test the FIFO ******************************
+;
+Start
+  clr    fsr                            ; Clear the data memory
+ClearData
+  sb     fsr.4
+    Setb fsr.3
+  clr    ind
+  ijnz   fsr, ClearData
+
+Loop
+  inc  Value                            ; Generate test data 
+  inc  Value+1                          
+  mov  FIFODat, Value                   ; Set the FIFO "input value"
+  mov  FIFODat+1, Value+1        
+  call WriteFIFO                        ; Save the value
+  inc  Value                            ; Generate test data
+  inc  Value+1  
+  mov  FIFODat, Value                   ; Set the FIFO "input value"
+  mov  FIFODat+1, Value +1       
+  call WriteFIFO                        ; Save the value
+  clr FIFODat
+  clr FIFODat+1
+  call ReadFIFO                         ; Read one FIFO value
+  jmp Loop                              ; Do it again...

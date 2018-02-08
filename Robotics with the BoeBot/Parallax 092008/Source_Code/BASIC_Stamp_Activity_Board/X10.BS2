@@ -1,0 +1,28 @@
+'************************************************************************
+'*  Basic Stamp Activity Board Sample Program           X-10 Interface  *
+'*  9 September, 1997                                           (BS-2)  *
+'*                                                                      *
+'*  This program demonstrates the use of the X-10 Powerline interface.  *
+'*  Connect a normal 4-conductor phone line from the RJ-11 connector    *
+'*  on the Basic Stamp Activity Board to the Power Line interface.      *
+'*  This program will toggle a lamp module if the lamp modules address  *
+'*  set to: House code 'A' and Unit code '1'.  Hit Alt-R to download.   *
+'************************************************************************
+
+mPin	con	0
+zPin	con	1
+house	var	byte
+unit	var	byte
+
+INIT
+	house = 0
+	unit = 0
+START
+	xout mPin,zPin,[house\unit]
+	xout mPin,zPin,[house\unitOn]
+	debug "Unit On",cr
+	pause 1000
+	xout mPin,zPin,[house\unitOff] 
+	debug "Unit Off",cr
+	pause 1000
+	goto START

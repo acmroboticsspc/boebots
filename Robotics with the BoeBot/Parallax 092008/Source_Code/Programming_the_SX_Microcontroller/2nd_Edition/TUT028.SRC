@@ -1,0 +1,63 @@
+; TUT028.SRC
+;
+; --------------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" 2nd Edition by Guenther Daubach
+; Copyright (c), by Parallax Inc. 2004
+; --------------------------------------------------------------------
+
+include "Setup28.inc"
+DEVICE   WATCHDOG
+RESET    Main
+
+TRIS    equ  $0f
+PLP     equ  $0e
+WKEN    equ  $0b
+WKED    equ  $0a
+WKPND_W equ  $09
+
+org           $08
+Counter       ds 4
+Time          ds 1
+
+org           $100
+Main
+  mov  w, #50
+  sb   status.3
+    mov w, #25
+  mov  Time, w
+  
+  mode WKEN
+  mov  !rb, #%11111111
+  mode PLP
+  mov  !rb, #%11110111
+  mode TRIS
+  mov  !rb, #%11111110
+
+  clr  Counter
+  clr  Counter+1
+  clr  Counter+2
+  clrb rb.0
+  
+  mov Counter+3, #11
+:Loop1
+    mov Counter+2, Time
+:Loop2
+    decsz Counter
+      jmp :Loop2
+    decsz Counter+1
+      jmp :Loop2
+    decsz Counter+2
+      jmp :Loop2
+    xor rb, #%00000001
+    decsz Counter+3
+      jmp :Loop1
+
+    mode WKED
+    mov  !rb, #%11111111
+    mode WKPND_W
+    clr  w
+    mov  !rb, w
+    mode WKEN
+    mov  !rb, #%11110111
+    sleep

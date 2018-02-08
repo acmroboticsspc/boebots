@@ -1,0 +1,88 @@
+***********************************************************************
+            WELCOME TO THE PARALLAX, INC PRODUCT CD-ROM!
+***********************************************************************
+
+This CD-ROM is loaded with photographs, documentation, software and
+source code for nearly all of the products we manufacture and/or sell.
+Also included is our full-color catalog and links to our web sites!
+
+------------------- IF YOU JUST PURCHASED A PRODUCT -------------------
+
+If you have just received this CD as part of a product or kit purchase,
+you may need some specific information (documents, software, etc)
+contained on this CD-ROM.
+
+To find these items (assuming the CD auto started):
+
+1) Select the Kits section.
+
+2) Select (or highlight) the item, from the Items list, that most
+   closely describes the product or kit you purchased.  (You may have
+   to scroll the items list to see more products).
+
+3) Click on the Install button (below the Items list).  A message will
+   appear showing the directory on your hard drive in which we suggest
+   installing the files.  If you wish, you can change the installation
+   directory.
+
+4) Click OK to copy the files to your hard drive.  That's It!  You may
+   now use the files that were installed into that directory.  If the
+   documentation that accompanied your product indicates the use of
+   certain files, they should also be in this directory.
+
+----------------------- ADDITIONAL INFORMATION ------------------------
+
+When the Parallax CD is inserted into your computer's CD-ROM drive, it
+should automatically start (unless you've disabled that feature) and
+display a screen with the Parallax, Inc. logo and a number of options
+to choose from (Catalog, Kits, Images, Documentation, etc).  Click on
+the desired option to continue.
+
+Some options, as described below, will take you to a second screen
+where all the available items within that category are listed for you.
+The list (under the heading "Items") is in a collapsible outline
+format.  Click on the plus or minus signs ('+' or '-') to the left of
+the desired item to see the items within that section.  
+
+By selecting (highlighting) an item, the Install, Run or View buttons
+(below the items list) become active.  Selecting Install will copy all
+the files associated with the selected item to your hard drive.
+Selecting Run will run the selected item (if it is a program) right 
+from the CD (without installing it).  Selecting View will open up the
+selected item in the appropriate viewer (if you have one installed).
+
+*** Parallax, Inc,  Stamps In Class ***
+
+The Parallax, Inc, and Stamps In Class options will open up your 
+default browser and connect to the corresponding website. These options
+require a web browser and Internet connection to view.
+
+*** Images ***
+
+Most images on this CD-ROM are stored in the .jpg or .tif format.  Some
+are stored in a vector graphics format called .emf.  In order to use
+the "View" option of the CD, you need to have the .jpg, .tif and/or the
+.emf file extensions already associated with the proper software on 
+your computer.  NOTE: ALL .TIF FILES ARE COMPRESSED AS .ZIP FILES. If
+an extension is not already associated with that item, you'll have to
+find software that can open that file and use it to open the images
+manually.
+
+*** Documentation ***
+
+Most of the documentation on the CD is stored in .pdf format.  This 
+requires the latest version of Adobe Acrobat Reader to be installed on
+your computer for viewing.  This CD contains a free Adobe Acrobat
+Reader for your convenience.  Simply select the Acrobat Reader option
+to install this software on your computer.
+
+*** Kits ***
+
+The Kits section lists items associated with each kit.  These items 
+can be found (separately) under the Documents, Software and Source Code
+options, but are gathered here for your convenience.
+
+*** WinZip ***
+
+Some files on the CD are compressed into .zip files.  The WinZip
+installation software is included on this CD for that purpose.

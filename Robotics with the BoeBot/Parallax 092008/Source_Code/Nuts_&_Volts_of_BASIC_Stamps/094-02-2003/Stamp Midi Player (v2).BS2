@@ -1,0 +1,179 @@
+' =========================================================================
+'
+'   File...... Stamp Midi Player (v2).BS2
+'   Purpose... Midi demo with BASIC Stamp 2
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallax.com
+'   Started... 22 DEC 2002
+'   Updated... 24 DEC 2002
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates a very simple mechanism for storing songs in
+' EEPROM and playing them through a connected midi instrument.  This ver-
+' sion lets each note be sent to a different channel (voice).
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+MidiOut         PIN     15                      ' midi serial output
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+MidiBaud        CON     $8000 + 12              ' 31.25 kBaud -- open
+
+NN              CON     $90                     ' note on
+NX              CON     $80                     ' note off
+CP              CON     $C0                     ' change patch
+
+ND              CON     $01                     ' note duration    
+
+N01             CON     1800                    ' whole note
+ND2             CON     N01 / 4 * 3             ' dotted half
+N02             CON     N01 / 2                 ' half note
+N04             CON     N01 / 4                 ' quarter note
+N08             CON     N01 / 8                 ' eighth note
+N12             CON     N04 / 3                 ' quarter note triplet
+N16             CON     N01 / 16
+N32             CON     N01 / 32
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+eePntr          VAR     Word                    ' pointer to EE table
+cmd             VAR     Byte                    ' command (on or off)
+patch           VAR     Byte                    ' patch (voice)
+notes           VAR     Nib                     ' number of notes to play
+nTime           VAR     Word                    ' note timing
+midi            VAR     Byte(6)                 ' up to 3 notes at once
+chan            VAR     Nib                     ' channel
+
+idx             VAR     Nib
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+Mystery         DATA    CP+0, $3B               ' french horn
+                DATA    CP+1, $32               ' guitar
+                DATA    CP+2, $1E               ' whistle
+
+                DATA    NN+0, 1, 069, 100, ND, Word N12
+                DATA    NX+0, 1, 069, 000
+                DATA    NN+0, 1, 072, 060, ND, Word N12
+                DATA    NX+0, 1, 072, 000
+                DATA    NN+0, 1, 069, 060, ND, Word N12
+                DATA    NX+0, 1, 069, 000
+                DATA    NN+0, 1, 077, 072, ND, Word N12
+                DATA    NX+0, 1, 077, 000
+                DATA    NN+0, 1, 072, 060, ND, Word N12
+                DATA    NX+0, 1, 072, 000
+                DATA    NN+0, 1, 069, 060, ND, Word N12
+                DATA    NX+0, 1, 069, 000
+                DATA    NN+0, 1, 077, 072, ND, Word N12
+                DATA    NX+0, 1, 077, 000
+                DATA    NN+0, 1, 072, 060, ND, Word N12
+                DATA    NX+0, 1, 072, 000
+                DATA    NN+0, 1, 069, 060, ND, Word N12
+                DATA    NX+0, 1, 069, 000
+                DATA    NN+0, 1, 077, 072, ND, Word N12
+                DATA    NX+0, 1, 077, 000
+                DATA    NN+0, 1, 072, 060, ND, Word N12
+                DATA    NX+0, 1, 072, 000
+                DATA    NN+0, 1, 069, 060, ND, Word N12
+                DATA    NX+0, 1, 069, 000
+
+                DATA    NN+1, 1, 081, 074, ND, Word N04
+                DATA    NX+1, 1, 081, 000
+                DATA    NN+1, 1, 081, 067, ND, Word N04
+                DATA    NX+1, 1, 081, 000
+                DATA    NN+1, 1, 081, 066, NN+2, 1, 081, 079, ND, Word N04
+                DATA    NX+1, 1, 081, 000, NX+2, 1, 081, 000
+                DATA    NN+1, 1, 081, 038, NN+2, 1, 088, 072, ND, Word N04
+                DATA    NX+1, 1, 081, 000, NX+2, 1, 088, 000
+
+                DATA    NN+0, 1, 069, 100, NN+2, 1, 086, 079, ND, Word N12
+                DATA    NX+0, 1, 069, 000
+                DATA    NN+0, 1, 072, 060, ND, Word N12
+                DATA    NX+0, 1, 072, 000
+                DATA    NN+0, 1, 069, 060, ND, Word N12
+                DATA    NX+0, 1, 069, 000, NX+2, 1, 086, 000
+                DATA    NN+0, 1, 077, 072, NN+2, 1, 088, 080, ND, Word N12
+                DATA    NX+0, 1, 077, 000
+                DATA    NN+0, 1, 072, 060, ND, Word N12
+                DATA    NX+0, 1, 072, 000
+                DATA    NN+0, 1, 069, 060, ND, Word N12
+                DATA    NX+0, 1, 069, 000, NX+2, 1, 088, 000
+                DATA    NN+0, 1, 077, 072, NN+2, 1, 091, 082, ND, Word N12
+                DATA    NX+0, 1, 077, 000
+                DATA    NN+0, 1, 072, 060, ND, Word N12
+                DATA    NX+0, 1, 072, 000
+                DATA    NN+0, 1, 069, 060, ND, Word N12
+                DATA    NX+0, 1, 069, 000, NX+2, 1, 091, 000
+                DATA    NN+0, 1, 077, 072, NN+2, 1, 088, 080, ND, Word N12
+                DATA    NX+0, 1, 077, 000
+                DATA    NN+0, 1, 072, 060, ND, Word N12
+                DATA    NX+0, 1, 072, 000
+                DATA    NN+0, 1, 069, 060, ND, Word N12
+                DATA    NX+0, 1, 069, 000
+
+                DATA    NN+1, 1, 083, 074, ND, Word N04
+                DATA    NX+1, 1, 083, 000
+                DATA    NN+1, 1, 083, 065, ND, Word N04
+                DATA    NX+1, 1, 083, 000
+                DATA    NN+1, 1, 083, 065, ND, Word N04
+                DATA    NX+1, 1, 083, 000, NX+2, 1, 088, 000
+                DATA    NN+1, 1, 083, 045, ND, Word N04
+                DATA    NX+1, 1, 083, 000
+
+                DATA    $FF
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  eePntr = Mystery
+  GOSUB Play_EE
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Play_EE:
+  READ eePntr, cmd                              ' get command
+  IF (cmd < $FF) THEN 
+    SELECT cmd
+      CASE $C0 TO $CF                           ' change patch
+        READ (eePntr + 1), patch                ' read new patch #
+        SEROUT MidiOut, MidiBaud, [cmd, patch]
+        eePntr = eePntr + 2
+      
+      CASE $80 TO $8F, $90 TO $9F               ' note off or on
+        READ (eePntr + 1), notes                ' read number of notes
+        FOR idx = 0 TO (notes * 2 - 1)          ' read notes/velocities
+          READ (eePntr + 2 + idx), midi(idx)
+        NEXT
+        SEROUT MidiOut, MidiBaud, [cmd, STR midi\(notes * 2)]
+        eePntr = eePntr + 2 + (notes * 2)
+
+      CASE ND                                   ' note duration
+        READ (eePntr + 1), Word nTime           ' read note timing
+        PAUSE nTime
+        eePntr = eePntr + 3
+
+    ENDSELECT
+    GOTO Play_EE
+  ENDIF
+  RETURN

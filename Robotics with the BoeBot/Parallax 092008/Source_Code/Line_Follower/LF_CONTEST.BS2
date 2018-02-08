@@ -1,0 +1,115 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' File...... LF_CONTEST.BS2
+' Purpose... Line Follower contest code
+' Author.... Parallax
+' E-mail.... stamptech@parallaxinc.com
+' { $STAMP BS2 }
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program is designed to run line follower contests where the BOE-Bot will
+' start and stop on a "T" in the track. It implements a controlled start feature
+' using the BOE Reset button. Pressing the Reset button starts the BOE-Bot.
+' -----[ Revision History ]-----------------------------------------------------
+'
+' 01 DEC 2001 - Version 1.0
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+LMotor CON 15 ' servo motor connections
+RMotor CON 14
+' -----[ Constants ]------------------------------------------------------------
+'
+LEDon CON 0 ' LF LEDs are active low
+LEDoff CON 1
+WLine CON 0 ' white line on black field
+BLine CON 1 ' black line on white field
+LFmode CON BLine ' set for black line
+MStop CON 750 ' motor stop
+Speed100 CON 125 ' full speed
+Speed075 CON 50 ' three-quarter speed
+Speed050 CON 40 ' half speed
+Yes CON 1
+No CON 0
+' -----[ Variables ]------------------------------------------------------------
+'
+temp VAR Byte
+ledPos VAR Nib ' LED position in lfBits
+lfBits VAR Byte ' line follower input bits
+lastBits VAR Byte ' last LF input
+steer VAR Nib ' steering control
+onCourse VAR Bit ' on course flag
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+RstValue DATA $FF ' $FF = no run
+' -----[ Initialization ]-------------------------------------------------------
+'
+Run_Check:
+READ RstValue, temp ' get reset value
+temp = ~temp ' invert bits
+WRITE RstValue, temp ' write inverted bits back
+IF (temp) THEN Initialize ' run if inverted > 0
+No_Run:
+END ' low power mode
+Initialize:
+PAUSE 500 ' allow hand to release
+OutL = %01111100 ' all LF LEDs off
+DirL = %01111100 ' make pins outputs
+lastBits = %00100 ' assume straight
+onCourse = No ' we haven't run course yet
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+GOSUB Read_Line_Follower ' read the Line Follower
+IF (lfBits <> %00100) THEN Check_End ' check for middle sensor
+onCourse = Yes ' -- has been on the course
+Check_End:
+IF (lfBits <> %11111) THEN Steer_Robot ' keep steering if not at end
+IF (onCourse = No) THEN Straight ' still at start
+IF (lastBits <> %00000 ) THEN At_End ' verify end of course
+Steer_Robot:
+steer = NCD lfBits ' get highest "on" bit
+BRANCH steer,[Off_Line, Hard_Right, Right, Straight, Left, Hard_Left]
+Save_Last:
+lastBits = lfBits ' save last reading
+GOTO Main
+At_End:
+PULSOUT LMotor, MStop ' stop motors
+PULSOUT RMotor, MStop
+Dirs = 0 ' turn off outputs
+WRITE RstValue, 0 ' run again after Reset press
+END
+' -----[ Subroutines ]----------------------------------------------------------
+'
+Read_Line_Follower:
+lfBits = 0 ' clear last reading
+FOR ledPos = 2 TO 6
+OutL.LowBit(ledPos) = LEDon ' turn the LED on
+PAUSE 1 ' allow sensor to read
+lfBits.LowBit(ledPos) = In9 ^ LFmode ' record the sensor reading
+OutL = OutL | %01111100 ' turn LEDs off
+NEXT
+lfBits = lfBits >> 2 ' shift bits to zero index
+RETURN
+Off_Line:
+lfBits = lastBits ' get last known position
+GOTO Steer_Robot
+Hard_Right:
+PULSOUT LMotor, MStop + Speed100 ' full speed on left
+PULSOUT RMotor, MStop + Speed100 ' reverse right motor
+GOTO Save_Last
+Right:
+PULSOUT LMotor, MStop + Speed100 ' full speed on left
+PULSOUT RMotor, MStop
+GOTO Save_Last
+Straight:
+PULSOUT LMotor, MStop + Speed100 ' both motors forward
+PULSOUT RMotor, MStop - Speed100
+GOTO Save_Last
+Left:
+PULSOUT LMotor, MStop
+PULSOUT RMotor, MStop - Speed100 ' full speed on right
+GOTO Save_Last
+Hard_Left:
+PULSOUT LMotor, MStop - Speed100 ' reverse left motor
+PULSOUT RMotor, MStop - Speed100 ' full speed on right
+GOTO Save_Last

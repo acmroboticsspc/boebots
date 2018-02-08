@@ -1,0 +1,187 @@
+' =========================================================================
+'
+'   File...... SERIAL_LF.SXB
+'   Purpose... Serial Line Follower module for robots
+'   Author.... Jon Williams -- Parallax, Inc.
+'   E-mail.... jwilliams@parallax.com
+'   Started... 
+'   Updated... 10 OCT 2004
+'
+' =========================================================================
+
+
+' -------------------------------------------------------------------------
+' Program Description
+' -------------------------------------------------------------------------
+'
+' Serial Line Follower module for BOE-Bots
+'
+' The module uses an open baudmode serial connection and the Parallax
+' AppMod protocol structure.
+'
+' Valid serial commands from host:
+'
+' "!LFV" -- returns 3-byte version string (e.g., "0.1")
+' "!LFB" -- returns sensor bits, black line on white field
+' "!LFW" -- returns sensor bits, while line on black field
+
+
+' -------------------------------------------------------------------------
+' Device Settings
+' -------------------------------------------------------------------------
+
+DEVICE          SX28, OSCXT2, TURBO, STACKX, OPTIONX
+FREQ            4_000_000
+
+
+' -------------------------------------------------------------------------
+' IO Pins
+' -------------------------------------------------------------------------
+
+Sio		VAR	RA.0			' serial connection
+Sensor		VAR	RC			' sensor control pins
+CmpOut		VAR	RB.0			' comparitor output
+
+
+' -------------------------------------------------------------------------
+' Constants
+' -------------------------------------------------------------------------
+
+Baud		CON	"OT9600"		' open, true, 9600 baud
+
+
+' -------------------------------------------------------------------------
+' Variables
+' -------------------------------------------------------------------------
+
+char		VAR	Byte			' serial char in and out
+lnBits		VAR	Byte			' line sensor bits
+idx		VAR	Byte			' loop counter
+
+rtnAddr		VAR	Byte			' return address parameter
+temp1		VAR	Byte
+temp2		VAR	Byte	
+
+
+' =========================================================================
+  PROGRAM Start
+' =========================================================================
+
+Rev_Code:
+  DATA	"0.1", 0
+
+
+' -------------------------------------------------------------------------
+' Subroutines
+' -------------------------------------------------------------------------
+
+' Wait for and receive a byte from the serial connection
+' -- Use: GOSUB RX_Byte, @theByte
+' -- serial input byte is placed in 'theByte'
+
+RX_Byte:
+  rtnAddr = __PARAM1				' save return address
+  SERIN Sio, Baud, temp1			' get serial byte
+  PUT rtnAddr, temp1				' put in return address
+  RETURN
+
+
+' Transmit a byte through the serial connection
+' -- Use: GOSUB TX_Byte, theByte
+' -- transmits 'theByte'
+
+TX_Byte:
+  temp1 = __PARAM1				' save serial byte
+  SEROUT Sio, Baud, temp1			' transmit it
+  RETURN
+
+
+' Insert program delay
+' -- Use: GOSUB Delay, delayVal, multiplier
+' -- holds program 'delayVal' * 'multiplier' microseconds
+
+Delay:
+  temp1 = __PARAM1				' grab parameters
+  temp2 = __PARAM2
+  PAUSEUS temp1 * temp2				' do the delay
+  RETURN
+
+
+' Reads the line sensor bits
+' -- Use: GOSUB Get_Line, @theByte
+' -- line bits are placed in 'theByte'
+
+Get_Line:
+  rtnAddr = __PARAM1				' save return address
+  CMP_B = 0					' enable comparator
+  temp1 = %00000000				' clear line bits
+  FOR idx = 0 TO 6				' loop through 7 sensors
+    Sensor = 1 << idx				' activate element
+    \ MOV __PARAM1, #250			' 250 us delay @ 4 MHz
+    \ DJNZ __PARAM1, $
+    temp1 = temp1 << 1				' setup output var
+    temp1.0 = CmpOut				' get new bit
+  NEXT idx
+  Sensor = %00000000				' deactivate all elements
+  PUT rtnAddr, temp1				' retun value to sender
+  CMP_B = $FF					' shutdown comparitor
+  RETURN
+
+
+
+' -------------------------------------------------------------------------
+' Program Code
+' -------------------------------------------------------------------------
+
+Start:
+  ADDRESS $100					' prevent subs overrun
+  PLP_A = %0001					' activate pull-ups, 1 - 3
+  PLP_B = %00000111				' activate pull-ups, 3 - 7
+  TRIS_B = %11111110				' RB.0 is an output
+  Sensor = %00000000				' clear sensor
+  TRIS_C = %00000000				' make pins outputs 
+
+Main:
+  GOSUB RX_Byte, @char
+  IF char <> "!" THEN Main			' wait for "!"
+  GOSUB RX_Byte, @char
+  IF char <> "L" THEN Main			' wait for "L"
+  GOSUB RX_Byte, @char
+  IF char <> "F" THEN Main			' wait for "F"
+
+Get_Command:
+  GOSUB RX_Byte, @char				' wait on a character
+
+Check_V:					' version
+  IF char <> "V" THEN Check_B
+  GOSUB Delay, 250, 4				' let BASIC Stamp get ready
+  idx = 0					' reset index
+
+Next_Char:
+  READ Rev_Code + idx, char			' read character
+  INC idx					' update index
+  IF char = 0 THEN Main				' if 0, we're done
+  GOSUB TX_Byte, char				' transmit the character
+  GOTO Next_Char				' repeat until done
+
+
+Check_B:					' black line
+  IF char <> "B" THEN Check_W
+  GOSUB Delay, 250, 4				' let BASIC Stamp get ready
+  GOSUB Get_Line, @lnBits			' get line bits
+  lnBits = lnBits XOR %01111111			' make line bit = 1
+  GOSUB TX_Byte, lnBits				' send line bits
+  GOTO Main
+
+Check_W:					' white line
+  IF char <> "W" THEN Check_X
+  GOSUB Delay, 250, 4				' let BASIC Stamp get ready
+  GOSUB Get_Line, @lnBits			' get line bits
+  GOSUB TX_Byte, lnBits				' send line bits
+  GOTO Main
+
+Check_X:
+  '
+  ' for future expansion
+  '
+  GOTO Main

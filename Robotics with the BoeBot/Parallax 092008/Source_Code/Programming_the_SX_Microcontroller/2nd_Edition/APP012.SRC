@@ -1,0 +1,158 @@
+; APP012.SRC - Controlling 7-Segment LED Displays
+;
+; ---------------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller", 2nd Edition by Guenther Daubach
+; Copyright (c) by Parallax Inc. 2004
+; ---------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET   Main
+
+org     $08
+Std     = $
+Counter ds 3                ; Counter for time delay in the
+                            ;  mainline program (for demo
+                            ;  only)
+org     $30
+Leds    = $                 ; The LED bank
+Column  ds 1                ; Column mask
+Digit   ds 1                ; Current display digit
+Digits  ds 6                ; Digits buffer
+
+org     $50
+Timers  = $
+Millsec ds 1                ; Counter for Milliseconds
+
+ 
+org     $000
+
+;** VP to drive a 7-segment LED display matrix with 6 digits *********
+;
+Seg_7
+
+  bank Timers
+  mov  w, #250              ; Initialization value in w
+  dec  Millsec              ; When 1 ms has elapsed,
+  snz                       ;  re-initialize the counter    
+    mov Millsec, w          ;  and
+  sz                        ;  refresh the display, else
+    jmp :LedExit            ;  no action
+
+  bank Leds
+  mov  w, #Digits           ; Indirectly read data for 
+  add  w, Digit             ;  the current digit
+  mov  fsr, w               ;
+  mov  w, ind               ; 
+  and  w, #%00001111        ; Don't allow values > 15
+  call Decode               ; Decimal --> 7-Segment
+  clr  rc                   ; Set all columns to low
+  mov  rb, w                ; Set the segment rows
+  bank Leds
+  mov  rc, Column           ; Set one column line to high
+  clc                       ;  and prepare for
+  rl   Column               ;  next column and for
+  inc  Digit                ;  next digit
+  mov  w, #6                ; If digit > 5, 
+  mov  w, Digit-w
+  snz
+    clr Digit               ;  digit = 0,
+  mov  w, #1
+  snz
+    mov Column, w           ;  and column mask = %00000001
+
+:LedExit
+  mov   w, #-200            ; Call the ISR every 4us
+  retiw
+
+;** Subroutine returns the 7-cegment coding in w when called with
+;   a hexadecimal digit in w.
+;   
+;   Note:  : Negative logic - 0-Bits turn on the associated LED
+;
+Decode
+  jmp pc+w
+
+  ; Segments
+  ;     dcgbe.fa
+  retw %00100100            ; 0
+  retw %10101111            ; 1
+  retw %01000110            ; 2
+  retw %00001110            ; 3
+  retw %10001101            ; 4
+  retw %00011100            ; 5
+  retw %00010100            ; 6
+  retw %10101110            ; 7
+  retw %00000100            ; 8
+  retw %00001100            ; 9
+  retw %10000100            ; A
+  retw %00010101            ; b
+  retw %01110100            ; C
+  retw %00000111            ; d
+  retw %01010100            ; E
+  retw %11010100            ; F
+
+org     $100
+
+;** Mainline program *******************************************
+;
+Main
+
+include "Clr2x.inc"
+
+  mov  rb, #$ff
+  mov  !rb, #0              ; Outputs for cathodes
+  clr  rc
+  mov  !rc, #%11000000      ; Outputs for anodes
+
+  bank Leds
+  mov  Column, #1           ; Initialize the column mask 
+  mov  !option, #%10011111  ; Enable RTCC interrupt
+
+  mov Counter+2, #8         ; Initialize the time delay
+
+Loop
+
+  bank Timers
+  sb   Millsec.1            ; "Borrow" bit 1 of millisecs
+    jmp Loop
+  decsz Counter             ; Time delay
+    jmp Loop                ;
+  decsz Counter +1          ;
+    jmp Loop                ;
+  decsz Counter +2          ;
+    jmp Loop                ;
+
+  mov Counter+2, #8         ; Re-initialize the time delay
+
+  bank Leds
+
+  inc Digits                ; Increment the lowest digit,
+  sb  Digits.4              ;  if > 15,
+    jmp Loop                ;
+  clrb Digits.4             ;  reset it to 0, and
+  inc Digits+1              ;  increment next digit
+  sb  Digits+1.4             ;
+    jmp Loop                ;  etc. ...
+  clrb Digits+1.4
+
+  inc Digits+2
+  sb  Digits+2.4
+    jmp Loop
+  clrb Digits+2.4
+
+  inc Digits+3
+  sb  Digits+3.4
+    jmp Loop
+  clrb Digits+3.4
+
+  inc Digits+4
+  sb  Digits+4.4
+    jmp Loop
+  clrb Digits+4.4
+
+  inc Digits+5
+  sb  Digits+5.4
+    jmp Loop
+  clrb Digits+5.4
+  jmp  Loop

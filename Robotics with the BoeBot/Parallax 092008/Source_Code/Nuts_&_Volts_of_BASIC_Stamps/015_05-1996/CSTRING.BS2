@@ -1,0 +1,65 @@
+' Program Listing 15.2. C-Style Strings for the BS2
+' Program: CSTRING.BS2 (C-style null-terminated strings in EEPROM)
+' This program shows how to use the DATA statement to store C-style
+' strings in EEPROM, and how to retrieve these strings for serial
+' transmission.
+' Define constants for serial communication with the PC through
+' the built-in serial connector at 9600 baud.
+
+builtIn	con 	16 	' Pin number for built-in serial connector.
+baud 	con 	84 	' Baudmode constant for 9600, non-inverted.
+
+' C strings end with an end-of string marker: a byte containing 0,
+' also called a "null" or "ASCII null." You can store such strings
+' in EEPROM like so:
+' ADDRESS STRING DATA
+' CONSTANT (ASCII CHARACTERS) NULL
+' -----------------------------------------------------------
+  title 	DATA ">>> HELLO DOLLY <<<", 0
+  phrase1 	DATA "Hello, Dolly", 0
+  phrase2 	DATA "Well hello, Dolly", 0
+  phrase3 	DATA "It's so nice to have you back", 0
+  phrase4 	DATA "where you belong", 0
+
+' The subroutine that gets C-style strings requires one less word
+' variable than its BASIC counterpart.
+
+char 	var 	byte 		' Character (byte) to send via Serout.
+StrAddr	var 	word 		' Base address of the string.
+i 	var 	nib 		' Small (0-15) counter for part 2 of demo.
+
+' Our demonstration program will retrieve the strings one at a time
+' and print them to the debug screen on the PC. A subroutine handles the
+' details of getting the bytes and feeding them to serout.
+
+demo:
+  debug cls 			' Open a clear debug window.
+  strAddr = title 		' Specify which string
+  gosub stringOut 		' and display it in debug window.
+  pause 2000 			' Take a 2-second intermission.
+
+' Now we'll run through the strings in order, courtesy of a lookup
+' table containing their addresses.
+
+  for i = 0 to 3 		' For each of 4 phrases.
+  serout builtIn,baud,[cls] 	' Clear the screen.
+  lookup i,[phrase1,phrase2,phrase3,phrase4],strAddr ' Get a phrase.
+  gosub stringOut 		' Send to screen.
+  pause 1000 			' Time to read phrase.
+  next 				' Next phrase until done.
+STOP 				' End of program
+
+' =================================================================
+' Here's the subroutine that reads C strings. To use it, place the
+' address of the string, assigned by its DATA statement, into
+' the variable strAddr.
+
+stringOut:
+  read strAddr,char 		' Get the character.
+  if char <> 0 then continue 	' If char is 0, then return
+return
+
+continue: 			' else continue
+  serout builtIn,baud,[char] 	' and send char out the port.
+  strAddr = strAddr+1 		' Point to next character in string.
+goto stringOut 		' Repeat until char = 0.

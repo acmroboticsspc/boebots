@@ -1,0 +1,81 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 7.5
+;=======================================================================
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	start_point
+		freq	50000000   		; 50 MHz
+		org	8
+microlow	ds	1
+microhi		ds	1
+millilow	ds	1
+millihi		ds	1
+seconds		ds	1
+ticker		ds	1
+tmp		ds	1
+
+
+		org	0
+isr		inc	microlow
+		snz
+		inc	microhi
+		cjne	microhi,#$03,iout  	; blink every $03e8 periods
+		cjne	microlow,#$e8,iout
+; 1000 uS already!
+		clr	microlow
+		clr	microhi
+		inc	millilow
+		snz
+		inc	millihi
+		cjne	millihi,#$03,iout
+		cjne	millilow,#$e8,iout
+; 1000 ms!
+		clr	millihi
+		clr	millilow
+		test	ticker
+		jz	notick
+		xor 	rb,#$FF  		; toggle LEDs
+notick		inc	seconds
+iout
+		mov	w,#-50   		; interrupt every 1uS
+		retiw
+
+start_point
+		mov   	!rb,#$01    		; 7 outputs, 1 in
+areset		clr	microhi
+		clr	microlow
+		clr	seconds
+		clr	ticker
+; set RTCC to internal clock 1:1 ratio
+		mov	!option,#$88  		; no prescale
+
+loop
+; active wait so ticking will occur
+		jb	rb.0,loop
+; button pushed
+		not	ticker
+; debounce delay (about 1 second)
+milloop0	test	millihi   		; wait for millhi to go to 0
+		jnz	milloop0
+milloop1	test	millihi
+		jz	milloop1  		; wait for nonzero
+milloop	test		millihi
+		jz	milloop   		; wait for zero again
+		jmp	loop
+
+
+
+
+
+
+
+
+
+
+	
+
+
+
+

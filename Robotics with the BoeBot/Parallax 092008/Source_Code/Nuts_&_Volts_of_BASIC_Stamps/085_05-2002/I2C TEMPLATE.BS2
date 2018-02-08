@@ -1,0 +1,131 @@
+' ==============================================================================
+'
+'   File...... I2C TEMPLATE.BS2
+'   Purpose... Template for I2C projects using the BS2/BS2e/BS2sx
+'   Author.... Jon Williams
+'   E-mail.... jonwms@aol.com
+'   Started... 20 MAR 2002
+'   Updated... 29 MAR 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+'
+SDA             CON     8                       ' I2C serial data line
+SCL             CON     9                       ' I2C serial clock line
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+DevType         CON     %0000 << 4              ' device type
+DevAddr         CON     %000 << 1               ' address = %000 -> %111
+WrXXXX          CON     DevType | DevAddr | 0   ' write to device
+RdXXXX          CON     DevType | DevAddr | 1   ' read from device
+
+ACK             CON     0                       ' acknowledge bit
+NAK             CON     1                       ' no ack bit
+
+Yes             CON     0
+No              CON     1
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+i2cSDA          VAR     Nib                     ' I2C serial data pin
+i2cData         VAR     Word                    ' data to/from device
+i2cWork         VAR     Byte                    ' work byte for TX routine
+i2cAck          VAR     Bit                     ' ACK bit from device
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Initialize:
+  i2cSDA = SDA                                  ' define SDA pin
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+
+  END
+
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Low Level I2C Subroutines
+' ------------------------------------------------------------------------------
+
+' --- Start ---
+
+I2C_Start:                                      ' I2C start bit sequence
+  INPUT i2cSDA
+  INPUT SCL
+  LOW i2cSDA                                    ' SDA -> low while SCL high
+
+Clock_Hold:
+  IF (Ins.LowBit(SCL) = 0) THEN Clock_Hold      ' device ready?
+  RETURN
+
+
+' --- Transmit ---
+
+I2C_TX_Byte:
+  SHIFTOUT i2cSDA,SCL,MSBFIRST,[i2cWork\8]      ' send byte to device
+  SHIFTIN i2cSDA,SCL,MSBPRE,[i2cAck\1]          ' get acknowledge bit
+  RETURN
+
+
+' --- Receive ---
+
+I2C_RX_Byte_Nak:
+  i2cAck = NAK                                  ' no ACK = high
+  GOTO I2C_RX
+
+I2C_RX_Byte:
+  i2cAck = ACK                                  ' ACK = low
+
+I2C_RX:
+  SHIFTIN i2cSDA,SCL,MSBPRE,[i2cWork\8]         ' get byte from device
+  SHIFTOUT i2cSDA,SCL,LSBFIRST,[i2cAck\1]       ' send ack or nak
+  RETURN
+
+
+' --- Stop ---
+
+I2C_Stop:                                       ' I2C stop bit sequence
+  LOW i2cSDA
+  INPUT SCL
+  INPUT i2cSDA                                  ' SDA --> high while SCL high
+  RETURN

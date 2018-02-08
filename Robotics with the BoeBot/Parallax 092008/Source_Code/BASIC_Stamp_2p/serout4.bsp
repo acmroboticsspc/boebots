@@ -1,0 +1,10 @@
+'{$STAMP BS2p}
+
+TxD  	con 16   		'TxD at SOUT
+Fpin  con 15		'Fpin is I/O Pin 15
+baud 	con 16624 		'N9600 for BS2p
+
+
+loop:	serout TxD, baud, [cls]
+	serout TxD\Fpin, baud,["Hello world", cr]
+	goto loop

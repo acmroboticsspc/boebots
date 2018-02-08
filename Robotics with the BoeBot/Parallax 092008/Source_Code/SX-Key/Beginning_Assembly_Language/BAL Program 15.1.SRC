@@ -1,0 +1,389 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 15.1
+;SSIB - by Al Williams, AWC http://www.al-williams.com/awce
+;v2.0
+;=======================================================================
+
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	start_point
+		freq	10000000   
+
+; Port Assignment: Bit variables
+;
+int_period      EQU	130    
+XBAUDRATE	EQU	19200 ; baud rate to stamp
+BAUDRATE_A	EQU	9600  ; Channel A baudrate
+BAUDRATE_B	EQU	9600  ; Channel B baudrate
+
+; Non inverted modes are best because
+; the internal pull up resistors will stop all devices
+; from talking, setting any of the below to 1
+; makes the handshaking reverse which means
+; devices are free to send until the SSIB and/or
+; Stamp wakes up which may cause you problems
+
+INVSEND		EQU	0     ; inverted/true to Stamp
+INVRCVA		EQU	0     ; inverted/true to Chan A
+INVRCVB		EQU	0     ; inverted/true to Chan B
+BUFFERLIM	EQU	2     ; space free in buffer before h/s off
+
+rx_pin  	EQU   	rb.2 		;UART receive input
+rx_pin1  	EQU	rb.0
+tx_pin   	EQU   	ra.3 		;UART transmit output
+enablepin	equ	ra.0
+enablepin1	equ	ra.1
+rxen_pin	equ	rb.1   		; handshake for buffer A
+rxen_pin1	equ	rb.3 		; handshake for buffer B
+;
+		org	8
+head		ds	1
+head1		ds	1
+tail		ds	1
+tail1		ds	1
+byte        	ds    	1
+tmpvar		ds	1
+flags       	DS    	1		;program flags register
+spare7		EQU	flags.7			
+rx_flag1	EQU	flags.6		
+rx_flag		EQU   	flags.5		;signals when byte is received
+spare4		EQU	flags.4
+spare3		EQU	flags.3
+spare2		EQU	flags.2
+spare1		EQU	flags.1
+spare0		EQU	flags.0
+		watch byte,8,uhex
+		watch head,8,uhex
+		watch tail,8,uhex
+		watch rx_flag,1,uhex
+
+		org     10h		;bank3 variables
+serial          =       $		;UART bank
+;
+tx_high         ds      1		;hi byte to transmit
+tx_low          ds      1		;low byte to transmit
+tx_count        ds      1		;number of bits sent
+tx_divide       ds      1		;xmit timing (/16) counter
+rx_count        ds      1		;number of bits received
+rx_divide       ds      1		;receive timing counter
+rx_byte         ds      1		;buffer for incoming byte
+rx_count1	ds	1
+rx_divide1	ds	1
+rx_byte1	ds	1
+
+; baud rate bit #
+baud2400 = 5
+baud9600 = 3
+baud19200 = 2 
+; above 19.2K may not be reliable
+; without adjusting int speed (see text)
+
+IF XBAUDRATE=2400
+baud_bit        =	baud2400	;for 2400 baud
+start_delay     =       (1<<baud2400)+(1<<(baud2400-1))+1 
+ENDIF
+
+IF BAUDRATE_A=2400
+bauda	 	=	1<<baud2400
+ENDIF
+
+IF BAUDRATE_B=2400
+baudb	 	=	1<<baud2400
+ENDIF
+
+IF XBAUDRATE=9600
+baud_bit        =	baud9600			
+start_delay     = 	(1<<baud9600)+(1<<(baud9600-1))+1		
+ENDIF
+
+IF BAUDRATE_A=9600
+bauda		=    	1<<baud9600            
+ENDIF
+
+IF BAUDRATE_B=9600
+baudb		= 	1<<baud9600
+ENDIF
+
+IF XBAUDRATE=19200
+baud_bit        =	baud19200
+start_delay     =       (1<<baud19200)+(1<<(baud19200-1))+1
+ENDIF
+
+IF BAUDRATE_A=19200
+bauda	 	=	1<<baud19200
+ENDIF
+
+IF BAUDRATE_B=19200
+baudb	 	=	1<<baud19200
+ENDIF
+
+
+; bit and a half for receiver alignment
+baud15a		=	3*bauda/2
+baud15b		=	3*baudb/2
+
+		org	$50
+scan		ds	1	    ; buffer A
+bufmod		equ	$F
+
+		org 	$70        ; buffer B
+scan1		ds	1
+
+
+
+
+
+		org	0
+isr		bank    serial                  
+:transmit   	clrb    tx_divide.baud_bit      
+	   	inc     tx_divide               
+	   	STZ                             
+		SNB     tx_divide.baud_bit      
+		test    tx_count                ; are we sending?
+		JZ      :receive                ; if not, go to :receive
+		clc                             ; yes, ready stop bit
+		rr      tx_high                 ; and shift to next bit
+		rr      tx_low                  ;
+		dec     tx_count                ; decrement bit counter
+IF INVSEND
+		movb	tx_pin,tx_low.6
+ELSE
+		movb    tx_pin,/tx_low.6        ; output next bit
+ENDIF
+;
+:receive
+IF INVRCVA
+		movb	c,/rx_pin
+ELSE
+		movb    c,rx_pin            ;serial receive
+ENDIF
+                test    rx_count            ;waiting for stop bit?
+                jnz     :rxbit              ;if not, :rxbit
+                mov     w,#9                ;in case start, ready 9
+                sc                          ;if start, set rx_count
+                mov     rx_count,w              
+                mov     rx_divide,#baud15a  ;ready 1.5 bit periods
+:rxbit          djnz    rx_divide,rxdone    ;8th time through?
+                mov 	rx_divide,#bauda
+                dec     rx_count            ;last bit?
+                sz                          ;if not, save bit
+                rr      rx_byte                 
+                snz                         ;if so, set flag
+                setb    rx_flag                 
+rxdone
+
+
+:receive1
+IF INVRCVB
+		movb	c,/rx_pin1
+ELSE
+                movb    c,rx_pin1           ;serial receive (B)
+ENDIF
+                test    rx_count1           ;waiting for stop bit?
+                jnz     :rxbit1             ;if not, :rxbit1
+                mov     w,#9                ;in case start, ready 9
+                sc                          ;if start, set rx_count
+                mov     rx_count1,w             
+                mov     rx_divide1,#baud15b      ;ready 1.5 bit periods
+:rxbit1         djnz    rx_divide1,rxdone1       ;8th time through?
+                mov 	rx_divide1,#baudb
+                dec     rx_count1                ;last bit?
+                sz                               ;if not, save bit
+                rr      rx_byte1                
+                snz                              ;if so, set flag
+                setb    rx_flag1                
+rxdone1
+
+
+;
+; check for circ buffer send
+		test    tx_count         
+		jnz     end_int               	; busy?
+		cje	head,tail,end_int1	; nothing to send
+; are we allowed to send?
+IF INVSEND
+		jnb	enablepin,end_int1
+ELSE
+		jb	enablepin,end_int1
+ENDIF
+		mov	fsr,tail
+		add	fsr,#scan
+		mov	w,ind
+;send byte
+		bank	serial
+		not     w                	;ready bits (inverse logic)
+		mov     tx_high,w        	; store data byte
+		setb    tx_low.7         	; set up start bit
+		mov     tx_count,#10     	;1 start + 8 data + 1 stop bit
+		inc	tail
+		and	tail,#bufmod		; circularize
+IF INVRCVA
+		setb	rxen_pin
+ELSE
+		clrb	rxen_pin
+ENDIF
+; if transmitting why check alt channel?
+		jmp 	end_int
+
+end_int1
+; are we allowed to send alt channel?
+IF INVSEND
+		jnb	enablepin1,end_int
+ELSE
+		jb	enablepin1,end_int
+ENDIF
+		mov	fsr,tail1
+		add	fsr,#scan1
+		mov	w,ind
+;send byte
+		bank    serial
+		not     w                 	;ready bits (inverse logic)
+		mov     tx_high,w         	; store data byte
+		setb    tx_low.7          	; set up start bit
+		mov     tx_count,#10      	;1 start + 8 data + 1 stop bit
+
+		inc	tail1
+		and	tail1,#bufmod		; circularize
+IF INVRCVB
+		setb	rxen_pin1
+ElSE
+		clrb	rxen_pin1
+ENDIF
+
+
+end_int	mov     w,#-int_period          
+		retiw                           ;exit interrupt
+
+
+; ****** Main program begin
+
+start_point
+; want pull ups on all
+		mode	$E
+		mov	!ra,#0  ; pull ups on
+		mov	!rb,#0  ; pull ups on
+		mov	!rc,#0  ; pull ups on
+		mode	$F
+IF INVSEND
+		mov	ra,#%0011
+ELSE
+		mov   ra,#%1011			;initialize port RA
+ENDIF
+		mov   !ra,#%0011		;Set RA in/out directions
+		mov	rb,#%00001010
+		mov	!rb,#%00000101
+
+warmboot
+		CLR     FSR        		;reset all ram starting at 08h
+:zero_ram   	SB      FSR.4      		;are we on low half of bank?
+		SETB    FSR.3      		;If so, don't touch regs 0-7
+		CLR     IND        		;clear using indirect addressing
+		IJNZ    FSR,:zero_ram  		;repeat until done
+
+		mov     !option,#%10011111      ;enable rtcc interrupt
+
+		clr 	rb
+
+; Here is where the action is!
+mainloop
+		jnb	rx_flag,:t1   
+		call 	get_byte     		; if char, copy to buffer
+		call	enqueue
+:t1
+		jnb	rx_flag1,mainloop
+		call    get_byte1		; if char, copy to buffer
+		call	enqueue1
+		jmp	mainloop
+
+enqueue 
+; check for buffer overrun!
+	 	mov 	w,#1
+	 	add 	w,head
+	 	and 	w,#bufmod
+	 	mov 	w,tail-w
+	 	jz 	queuefull   		; if full too bad
+       		mov 	fsr,head
+	 	add 	fsr,#scan
+	 	mov 	ind,byte
+  	 	inc	head
+	 	and	head,#bufmod  		; circular
+
+; calculate buffer limit
+  		mov 	tmpvar,tail	        
+  		cjae 	tail,head,:normal
+  		add 	tmpvar,#16
+:normal
+  		mov 	w,head
+  		sub 	tmpvar,w
+  		jz 	doret       		; buffer is empty?
+  		add 	tmpvar,#-BUFFERLIM
+  		jz 	:hshalt
+  		jc 	doret  
+
+:hshalt   			; buffer full so...
+
+
+IF INVRCVA
+		clrb 	rxen_pin
+ELSE
+      		setb 	rxen_pin
+ENDIF
+doret
+queuefull
+	 	ret
+
+
+enqueue1
+; check for buffer overrun!
+	 	mov 	w,#1
+	 	add 	w,head1
+	 	and 	w,#bufmod
+	 	mov 	w,tail1-w
+	 	jz 	queuefull1   		; if full too bad
+       		mov 	fsr,head1
+	 	add 	fsr,#scan1
+	 	mov 	ind,byte
+  	 	inc	head1
+	 	and	head1,#bufmod  		; circular
+
+
+; calculate buffer limit
+  		mov 	tmpvar,tail	        
+  		cjae 	tail,head,:normal
+  		add 	tmpvar,#16
+:normal
+  		mov 	w,head
+  		sub 	tmpvar,w
+  		jz 	doret       		; buffer is empty?
+  		add 	tmpvar,#-BUFFERLIM
+  		jz 	:hshalt
+  		jc 	doret  
+
+:hshalt  					; buffer full...
+
+
+IF INVRCVB
+		clrb 	rxen_pin1
+ELSE
+      		setb 	rxen_pin1
+ENDIF
+queuefull1
+	 	ret
+
+; Subroutine - Get byte via serial port
+;
+get_byte
+		bank	serial
+            	jnb     rx_flag,$          	;wait till byte is received
+		mov     byte,rx_byte       	;store byte (copy using W)
+		clrb    rx_flag            	;reset the receive flag
+		ret
+
+get_byte1
+		bank	serial
+            	jnb     rx_flag1,$        	;wait till byte is received
+		mov     byte,rx_byte1     	;store byte (copy using W)
+		clrb    rx_flag1          	;reset the receive flag
+		ret

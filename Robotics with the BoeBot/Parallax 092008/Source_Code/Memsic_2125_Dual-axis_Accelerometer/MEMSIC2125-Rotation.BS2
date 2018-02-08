@@ -1,0 +1,102 @@
+' =========================================================================
+'
+'   File...... MEMSIC2125-Rotation.BS2
+'   Purpose... Memsic 2125 Accelerometer Rotational Angle Measurement
+'   Author.... Parallax
+'   E-mail.... support@parallax.com
+'   Started... 
+'   Updated... 15 JAN 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -------------------------------------------------------------------------
+' Program Description
+' -------------------------------------------------------------------------
+'
+' Read the pulse outputs from a Memsic 2125 accelerometer and combine to
+' calculation rotational position.
+'
+' Refer to Memsic documentation (AN-00MX-007.PDF) for details on angle
+' conversion and considerations.
+'
+' www.memsic.com
+
+
+' -------------------------------------------------------------------------
+' I/O Definitions
+' -------------------------------------------------------------------------
+
+Xin             PIN     8                       ' X input from Memsic 2125
+Yin             PIN     9                       ' Y input from Memsic 2125
+
+
+' -------------------------------------------------------------------------
+' Constants
+' -------------------------------------------------------------------------
+
+HiPulse         CON     1                       ' measure high-going pulse
+LoPulse         CON     0
+
+DegSym          CON     176                     ' degrees symbol
+
+
+' -------------------------------------------------------------------------
+' Variables
+' -------------------------------------------------------------------------
+
+pulse           VAR     Word                    ' pulse input
+xmG             VAR     Word                    ' g force (1000ths)
+ymG             VAR     Word
+brads           VAR     Word                    ' binary radians
+degrees         VAR     Word
+
+
+' -------------------------------------------------------------------------
+' Initialization
+' -------------------------------------------------------------------------
+
+Setup:
+  PAUSE 250                                     ' let DEBUG window open
+  DEBUG "Memsic 2125 Rotation", CR
+  DEBUG "--------------------"
+
+
+' -------------------------------------------------------------------------
+' Program Code
+' -------------------------------------------------------------------------
+
+Main:
+  DO
+    GOSUB Read_G_Force                          ' read X and Y
+
+    brads = (xmG / 8) ATN (ymG / 8)             ' calculate angle
+    degrees = brads */ 360                      ' convert to degrees
+
+    DEBUG CRSRXY, 0, 3
+    DEBUG "Axis   A(g)", CR,    
+          "X     ", (xmG.Bit15 * 13 + " "),
+          DEC (ABS xmG / 1000), ".", DEC3 (ABS xmG), " g", CR,
+          "Y     ", (ymG.Bit15 * 13 + " "),
+          DEC (ABS ymG / 1000), ".", DEC3 (ABS ymG), " g", CR, CR,
+          "Tilt = ", DEC3 brads, " Brads", CR,
+          "       ", DEC3 degrees, " Degrees"
+
+    PAUSE 200                                   ' update about 5x/second
+  LOOP
+  END
+ 
+
+' -------------------------------------------------------------------------
+' Subroutines
+' -------------------------------------------------------------------------
+
+Read_G_Force:
+  PULSIN Xin, HiPulse, pulse                    ' read pulse output
+  xmG = ((pulse / 5) - 500) * 8                 ' convert to 1/1000 g
+  PULSIN Yin, HiPulse, pulse
+  ymG = ((pulse / 5) - 500) * 8
+  RETURN

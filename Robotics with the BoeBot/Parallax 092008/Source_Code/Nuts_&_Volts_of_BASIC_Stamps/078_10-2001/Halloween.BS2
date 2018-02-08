@@ -1,0 +1,198 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' File...... HALLOWEEN.BS2
+' Purpose... Wireless Halloween Sound FX Controller
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 09 SEP 2001
+' Updated... 11 SEP 2001 
+
+' {$STAMP BS2}
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program monitors pins 8 - 12 for input from a Parallax keyfob receiver.
+' Based on the inputs, it plays sounds stored in a QV306M4 or QV306M1 sound
+' module.
+
+' QV306M4 / QV306M1 Connections:
+'
+'  1 (RxD)		Stamp.P1
+'  2 (TxD)		Stamp.P2
+'  3 (Busy)		Stamp.P3
+'  4 (BR1)		Ground
+'  5 (BR0)		Ground
+'  7 (+5)		+5 volts
+'  8 (Gnd)		Ground
+' 14 (Reset)		Stamp.P0
+' 15 (Sp-)		8 ohm speaker -
+' 16 (Sp+)		8 ohm speaker +
+'
+' Keyfob Receiever Connections:
+'
+'  1 (Gnd)		Ground
+'  2 (+5)		+5 volts
+'  3 (Out1)		Stamp.P8
+'  4 (Out2)		Stamp.P9
+'  5 (Out3)		Stamp.P10
+'  6 (Out4)		Stamp.P11
+'  7 (Out5)		Stamp.P12
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+KeyFob		VAR	InH			' from keyfob receiver
+
+QV_RST		CON	0			' to QV306M4 or QV306M1
+QV_RX		CON	1
+QV_TX		CON	2
+QV_BUSY		VAR	In3
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+T2400		CON	396			' 2400 baud, true
+IsBusy		CON	0
+
+' Quadravox Commands
+
+QV_Play		CON	$F0			' play direct file
+QV_Stop		CON	$F6
+QV_Sleep	CON	$F8
+QV_OpenStr	CON	$F9			' open string buffer (QV306M1)
+QV_CloseStr	CON	$FA			' close string buffer (QV306M1)
+QV_PlayStr	CON	$FB			' play string buffer (QV306M1)
+QV_Volume	CON	$FC
+QV_Reset	CON	$FD			' software reset
+QV_Rev		CON	$FE			' module revision
+QV_Type		CON	$FF			' module type
+
+QV306M4		CON	0
+QV306M1		CON	1
+
+KeyMask		CON	%00011111		' mask for pin inputs
+
+
+' -----[ Sound Files ]----------------------------------------------------------
+'
+_attack		CON	 0			' animal attack.wav
+_belch		CON	 1			' belch.wav
+_boing		CON	 2			' boing.wav
+_bonk		CON	 3			' bonk.wav
+_door		CON	 4			' creaking door.wav
+_dingdong	CON	 5			' ding-dong.wav
+_zap		CON	 6			' electric current.wav
+_laugh1		CON	 7			' evil laugh 1.wav
+_laugh2		CON	 8			' evil laugh 2.wav
+_explode	CON	 9			' explode.wav
+_barf		CON	10			' funny barf.wav
+_getout		CON	11			' get out.wav
+_glass		CON	12			' glas.wav
+_gunshot	CON	13			' gunshot.wav
+_hh		CON	14			' happy halloween.wav
+_moan1		CON	15			' moan 1
+_moan2		CON	16			' moan 2
+_phone		CON	17			' phone ring.wav
+_scream		CON	18			' scream.wav
+_shotgun	CON	19			' shotgun.wav
+_thunder	CON	20			' thunder.wav
+_werewolf	CON	21			' werewolf.wav
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+qvData		VAR	Byte			' data to/from QV306
+devType		VAR	Bit			' device type
+theKey		VAR	Nib			' current key press
+lastKey		VAR	Nib			' last key press
+addr		VAR	Word			' ee address of sound file
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+Btn1		DATA	_hh, _laugh1, $FF
+Btn2		DATA	_scream, _gunshot, _bonk, _glass, $FF
+Btn3		DATA	_dingdong, _door, _attack, $FF
+Btn4		DATA	_belch, _laugh2, _barf, $FF
+Btn5		DATA	_getout, _moan1, _werewolf, _thunder, $FF
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  LOW QV_RST					' Reset the QV306
+  PAUSE 100
+  HIGH QV_RST
+  PAUSE 2000
+
+  GOSUB QV_GetType				' get device type from module
+  LOOKDOWN qvData, [54, 55], devType		' 0 = QV306M4, 1 = QV306M1
+
+  DEBUG CLS, "Device is QV306M", "4" - (devType * 3)
+
+  qvData = 25					' default volume for QV306M4
+  IF (devType = QV306M4) THEN Set_Volume
+  qvData = 50					' defualt volume for QV306M1
+
+Set_Volume:
+  GOSUB QV_SetVolume
+
+  lastKey = ~theKey				' force string build first time
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  theKey = NCD (KeyFob & KeyMask)		' get receiver inputs
+  IF (theKey = 0) THEN Main			' button pressed?
+  LOOKUP theKey-1, [Btn1, Btn2, Btn3, Btn4, Btn5], addr
+
+  IF (devType = QV306M4) THEN Get_Sound_File	' skip this if 306M4
+  IF (theKey = lastKey) THEN Play_M1_String
+  SEROUT QV_RX,T2400,[QV_OpenStr]		' open buffer on 306M1
+
+Get_Sound_File:
+  READ addr, qvData				' get sound file
+  IF (qvData > 239) THEN Done
+
+QV306_Busy:
+  IF (QV_Busy = IsBusy) THEN QV306_Busy		' wait for Busy to release
+  SEROUT QV_RX,T2400,[qvData]			' send the phrase
+  addr = addr + 1				' point to next phrase
+  GOTO Get_Sound_File				' send it
+
+Done:
+  IF (devType = QV306M4) THEN Do_Again		' if 306M4 - we're done
+  SEROUT QV_RX,T2400,[QV_CloseStr]		' ..otherwise, close buffer
+
+Play_M1_String:
+  SEROUT QV_RX,T2400,[QV_PlayStr]		' play it
+  lastKey = theKey
+  
+Do_Again:
+  qvData = KeyFob & KeyMask			' check inputs
+  IF (qvData > 0) THEN Do_Again			' make sure they're clear
+  GOTO Main					' get next button
+  END
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'
+QV_GetType:
+  qvData = 0
+  SEROUT QV_RX,T2400,[QV_Type]			' send request
+  SERIN  QV_TX,T2400,2000,NoType,[qvData]	' get type
+NoType:
+  RETURN
+
+
+QV_SetVolume:
+  IF (QV_Busy = IsBusy) THEN QV_SetVolume	' wait for Busy to release
+  SEROUT QV_RX,T2400,[QV_Volume]		' send volume command
+  SEROUT QV_RX,T2400,[qvData]			' send volume level
+  RETURN

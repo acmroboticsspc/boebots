@@ -1,0 +1,187 @@
+' ==============================================================================
+'
+'   File...... IRB Slave.BS2
+'   Purpose... Buffered serial comms with IR Buddy
+'   Author.... Parallax, Inc.
+'   E-mail.... stamptech@parallaxinc.com
+'   Started...
+'   Updated... 25 NOV 2002
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' This program waits on an eight-byte packet from a master controller.  The
+' packet is checked and, if valid, the command and data are acted upon.  A
+' corresponding eight-byte packet is returned to the master.
+'
+' Note: For best performance, shield IR Buddy from external interference
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+
+IRbSIO          PIN     15                      ' IR Buddy serial I/O
+LEDs            VAR     OutA                    ' LED control outputs
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+IRbDataTx       CON     $44                     ' 8-byte data transmit
+IRbDataRx       CON     $64                     ' 8-byte data receive
+
+IRbMod          CON     38                      ' modulation freq: 30, 38 or 56
+
+IRb96           CON      84 + $8000             ' 9600 baud, open
+IRb48           CON     188 + $8000             ' 4800 baud, open
+IRb24           CON     396 + $8000             ' 2400 baud, open
+IRbBaud         CON     IRb96
+
+STX             CON     $02
+ACK             CON     $06
+NAK             CON     $15
+
+ErrHeader       CON     %0001                   ' bad header
+ErrChkSum       CON     %0010                   ' bad checksum
+ErrCommand      CON     %0100                   ' invalid command
+
+LightLeds       CON     $C0                     ' commands for slave
+LedsOff         CON     $C1
+
+Busy            CON     0                       ' IR Buddy is transmitting
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+buffer          VAR     Byte                    ' rx-tx buffer (8 bytes)
+cmd             VAR     Byte
+data1           VAR     Byte
+data2           VAR     Byte
+data3           VAR     Byte
+data4           VAR     Byte
+data5           VAR     Byte
+chkSum          VAR     Byte
+
+header          VAR     buffer                  ' rx packet
+ackByte         VAR     buffer                  ' ack/nak byte
+rxChkSum        VAR     Byte                    ' comparison checksum
+errorLevel      VAR     Nib                     ' possible packet errors
+
+idx             VAR     Nib                     ' loop counter
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Setup:
+  LEDs = %0000                                  ' LEDs off
+  DirA = %1111                                  ' make LED pins outputs
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  GOSUB IR_Buddy_Reset
+  SEROUT IRbSIO, IRbBaud, [IRbDataRx]           ' prep for 8-byte RX
+
+RX_Packet:
+  SERIN IRbSIO, IRbBaud, 2000, TO_Error, [STR buffer\8]
+  errorLevel = %0000
+
+Check_RX_Packet:
+  IF (header = STX) THEN
+    rxChkSum = chkSum                           ' save rx checksum
+    GOSUB Make_CheckSum                         ' calc checksum of rx packet
+    IF (rxChkSum <> chkSum) THEN                ' compare checksum values
+      errorLevel = errorLevel | ErrChkSum
+    ENDIF
+  ELSE
+    errorLevel = errorLevel | ErrHeader
+  ENDIF
+
+Process_Command:
+  IF (errorLevel = 0) THEN
+    SELECT cmd
+      CASE LightLEDs
+        LEDs = data1                            ' move data1 value to LEDs
+
+      CASE LedsOff
+        LEDs = %0000
+
+      CASE ELSE
+        errorLevel = errorLevel | ErrCommand
+    ENDSELECT
+  ENDIF
+
+Make_Packet:
+  IF (errorLevel = 0) THEN 
+    header = ACK
+  ELSE
+    header = NAK
+    data1 = errorLevel
+  ENDIF
+  GOSUB Make_CheckSum
+
+TX_Packet:
+  GOSUB IR_Buddy_Reset
+  SEROUT IRbSIO, IRbBaud, [IRbDataTx, IRbMod, STR buffer\8]
+  PAUSE 5                                       ' let IRB grab SIO line
+
+TX_Wait:
+  DO WHILE (IRbSIO = Busy) : LOOP               ' wait for TX to end
+  GOTO Main
+
+
+TO_Error:
+
+  ' put code here that handles timeout error
+
+  GOTO Main                                     ' reset, look for new packet
+
+  END
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+' Reset the IR Buddy.  This code is useful for clearing data from the RX
+' buffer and prepping to switch modes.  Timing specific; do not change.
+
+IR_Buddy_Reset:
+  LOW IRbSIO                                    ' signal reset
+  PAUSE 5
+  INPUT IRbSIO                                  ' release reset signal
+  PAUSE 50                                      ' allow time for reset actions
+  RETURN
+
+
+Make_CheckSum:                                  ' checksum of bytes 0 to 6
+  chkSum = 0
+  FOR idx = 0 TO 6
+    chkSum = chkSum + buffer(idx)
+  NEXT
+  RETURN

@@ -1,0 +1,84 @@
+'{$STAMP  BS2}                       STAMP directive (specifies a BS2)
+'{$PBASIC 2.5}                       LAWICEL HB, Lars Wictorsson
+'
+' Sample code for the Stamp-PLC1 with BS2P module.               v1.00
+' Written by Lars Wictorsson.  Updated as follows:
+' 06/09/03      Added support for PBASIC 2.5 syntax by John Barrowman
+' 06/10/03      Change format to use subroutines
+
+ADDclk          PIN     0            ' A/D clock
+latch           CON     1            ' Latch input for HC165
+ADDout          PIN     4            ' A/D Data out
+ADDin           PIN     5            ' A/D Data in
+digin1          CON     6
+digin2          CON     7
+CSadc           CON     3            ' Chip Select for ADC
+
+result          VAR     Byte
+adresult        VAR     Word
+
+'Initialization Code
+'
+' Set the Chip Select High on ADC and the Load signal of HC165
+'
+  HIGH latch
+  HIGH CSadc
+
+'Main Code
+DO
+  PAUSE 500
+  GOSUB Get8Ins                       ' Gets and shows inputs 1-8
+  GOSUB Get2Ins                       ' Gets and shows inputs 9&10
+  GOSUB GetAnaIn                      ' Gets and shows analog input
+  GOSUB ExampleIO
+LOOP
+  END
+'
+' This part clocks in 8 digital inputs and display result binary
+'
+Get8Ins:
+  LOW latch
+  PAUSE 1
+  HIGH latch
+  PAUSE 1
+  SHIFTIN 2,0, LSBPRE, [result]
+  DEBUG "Digital Inputs:", ISBIN8 result
+  RETURN
+'
+' This part reads the two direct inputs to the stamp
+'
+Get2Ins:
+  DEBUG "  Direct Input#1:", ISBIN1 IN6
+  DEBUG "  Direct Input#2:", ISBIN1 IN7
+  RETURN
+'
+' This part reads an ADC channel and prints out result in mV
+' Just comment in the channel you wish to read and ensure that
+' the other channels are commented out.
+GetAnaIn:
+  LOW CSadc
+  PAUSE 1
+  SHIFTOUT ADDout,ADDclk, MSBFIRST, [240]   'Ch1
+'  SHIFTOUT ADDout,ADDclk, MSBFIRST, [224]   'Ch2
+'  SHIFTOUT ADDout,ADDclk, MSBFIRST, [208]   'Ch3
+'  SHIFTOUT ADDout,ADDclk, MSBFIRST, [192]   'Ch4
+'  PAUSE 1
+  HIGH CSadc
+  PAUSE 1
+  LOW CSadc
+  PAUSE 1
+  SHIFTIN ADDin,ADDclk, MSBPRE, [adresult\12]
+  PAUSE 1
+  HIGH CSadc
+  adresult = adresult * 10 / 78 * 10
+  DEBUG "  ADC1:",SDEC adresult, "mV",CR
+  RETURN
+'
+' Toggle 8 Outputs
+'
+ExampleIO:
+  FOR B0 = 8 TO $f
+    TOGGLE B0
+    PAUSE 50
+  NEXT
+  RETURN

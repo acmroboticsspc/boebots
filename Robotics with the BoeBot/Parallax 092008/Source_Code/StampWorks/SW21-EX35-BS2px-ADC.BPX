@@ -1,0 +1,85 @@
+' =========================================================================
+'
+'   File....... SW21-EX35-BS2px-ADC.BPX
+'   Purpose.... 8-bit ADC using the BS2px comparator
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2px}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Creates a simple 8-bit ADC with the BS2px using the internal comparator.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Vin             PIN     1                       ' unknown voltage input
+DacIn           PIN     2                       ' input from R/C DAC
+DacOut          PIN     3                       ' DAC via PWM + R/C
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+adcVal          VAR     Byte                    ' adc value (0 - 255)
+bias            VAR     Byte                    ' bias for ADC conversion
+result          VAR     Bit                     ' comparator result bit
+mVolts          VAR     Word                    ' input in millivolts
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Check_Stamp:
+  #IF ($STAMP <> BS2PX) #THEN
+    #ERROR "This program requires the BS2px"
+  #ENDIF
+
+Setup:
+  DEBUG CLS,
+        "BS2px ADC Demo", CR,
+        "==============", CR,
+        "Raw.....      ", CR,
+        "Volts...      "
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Get_ADC                               ' read comparator ADC
+    mVolts = adcVal */ $139B                    ' convert to millivolts
+
+    DEBUG CRSRXY, 9, 2,                         ' show results
+          DEC adcVal, "  ",
+          CRSRXY, 9, 3,
+          DEC1 (mVolts / 1000), ".",
+          DEC3 mVolts
+
+    PAUSE 250
+  LOOP
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' Simple ADC conversion
+' -- outputs voltage on P3 until it crosses voltage on P2
+
+Get_ADC:
+  adcVal = 0                                    ' clear ADC
+  bias = 128                                    ' start in middle
+  DO
+    adcVal = adcVal + bias                      ' add bias to adc result
+    PWM DacOut, adcVal, 15                      ' output new test value
+    COMPARE 2, result                           ' check comparator
+    IF (result = 1) THEN                        ' if unknown lower than test
+      adcVal = adcVal - bias                    ' -- reduce adcVal
+    ENDIF
+    bias = bias / 2                             ' check next half
+  LOOP UNTIL (bias = 0)
+  RETURN

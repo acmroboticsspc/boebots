@@ -1,0 +1,57 @@
+;=======================================================================
+;TITLE:         Schmitt-Trigger.src
+;
+;PURPOSE:       This SX28 code demonstrates setup of I/O pin Schmitt
+;               Triggers.
+;
+;AUTHOR:        Parallax, Inc.
+;
+;REVISIONS:
+;  08/12/99 -   Initial release.
+;  09/17/04 -   Updated to support SASM.
+;
+;CONNECTIONS:
+;  None.
+;
+;DETAILS:
+;  This code demonstrates configuring the I/O pin Schmitt Triggers.
+;=======================================================================
+
+
+;-------------------------- DEVICE DIRECTIVES --------------------------
+
+		DEVICE		SX28,OSC4MHZ,TURBO
+
+IFDEF	__SASM  ;SASM Directives
+		DEVICE		STACKX,OPTIONX
+		IRC_CAL		IRC_SLOW
+		
+ELSE		;Parallax Assember Directives
+		DEVICE		STACKX_OPTIONX
+ENDIF
+
+		RESET		Initialize
+
+;---------------------------- DEBUG SETTINGS ---------------------------
+
+		FREQ	4_000_000
+	
+;------------------------ INITIALIZATION ROUTINE -----------------------
+
+Initialize
+		;Schmitt-Trigger Configuration
+		mov	W,#$1C			;Allow Schmitt Trigger configuration
+		mov	M,W
+		mov	!rb,#%11110000		;Set port B bits 4-7 to normal, bits 0-3 to Schmitt Trigger
+		mov	!rc,#%00001111		;Set port C bits 4-7 to Schmitt Trigger, bits 0-3 normal
+
+		mov	W,#$1F			;Allow Direction configuration
+		mov	M,W
+		mov	!rb,#%10110011		;Set port B bits 0,3,6 to output direction, all others inputs
+		mov	!rc,#%11011110  	;Set port C bits 0,5 to output direction, all others inputs
+
+
+;---------------------------- MAIN PROGRAM -----------------------------
+
+Main		
+		jmp	Main

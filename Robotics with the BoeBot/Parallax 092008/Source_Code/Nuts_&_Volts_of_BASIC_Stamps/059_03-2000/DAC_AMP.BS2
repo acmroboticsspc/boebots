@@ -1,0 +1,46 @@
+'Program Listing 61.1: DAC_AMP.BS2
+'DAC_AMP.BS2 writes to the MAX5250 4 channel 10-bit DAC 
+'generating a saw-tooth wave
+
+	CSpin		CON	0 	'DAC chip select	
+	SDOpin		CON	1	'Data out from BS2	
+    	CLKpin		CON	2	'SPI clock pin	
+	 
+	DACaddr0	CON	$1000	'DAC 1 address
+	DACaddr1	CON	$5000	'DAC 2 address
+	DACaddr2	CON	$9000	'DAC 3 address
+	DACaddr3	CON	$D000	'DAC 4 address
+	DACwrite	ON	$4000	'DAC write data to outputsz
+
+	DACreg		VAR	WORD	'DAC voltage value register
+	DACloc		VAR	WORD	'Location for voltage value 
+	SPIreg		VAR	WORD	'Register sent with SHIFTOUT
+
+	DACreg	=	$0000		'Default to 0V out
+	HIGH		CSpin		'De-select DAC
+	PAUSE		500
+
+
+START:
+	FOR 		DACreg = 0 to 820	
+	DACloc 		= DACaddr0	'Load DAC zero
+	GOSUB		WRITE_TO_DAC
+	DACloc 		= DACaddr1	'Load DAC one	
+	GOSUB		WRITE_TO_DAC
+	DACloc 		= DACaddr2	'Load DAC two
+	GOSUB		WRITE_TO_DAC
+	DACloc 		= DACaddr3	'Load DAC three	
+	GOSUB		WRITE_TO_DAC
+	DACloc 		= DACwrite	'Update DAC outputs	
+	GOSUB		WRITE_TO_DAC
+	NEXT				'Get next voltage value
+	GOTO		START
+
+WRITE_TO_DAC:
+	SPIreg		= DACreg<<2	'Shift voltage value by two bits
+	SPIreg		= SPIreg+DACloc  'Add address to voltage value
+	LOW		CSpin		 'Select DAC		
+	SHIFTOUT	SDOpin,CLKpin,msbfirst,[SPIreg\16]
+	HIGH		CSpin
+	RETURN
+END: 

@@ -1,0 +1,117 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' BS2p Plus Pack
+'
+' File...... PP_LCDDEMO2.BSP
+' Purpose... Basic LCD Demo - Multi-line mode with custom characters
+' Author.... Parallax, Inc.
+' E-mail.... stamptech@parallaxinc.com
+' Started...
+' Updated... 26 SEP 2001
+
+' {$STAMP BS2p}
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program demonstrates the use of the multi-line initialization and
+' the use of custom characters.  When using the standard 5x7 font, the LCD
+' will hold up to eight customer characters.
+'
+' To run this program on the BS2p Demo Board, connect the LCD and install
+' Jumper X6. Adjust contrast pot for best display.
+'
+' Refer to the Hitachi HD44780 documentation for details on LCD control.
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+LCDpin          CON     0                       ' connect LCD to OutL
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+NoCmd           CON     $00                     ' No command in LCDOUT
+ClrLCD          CON     $01                     ' clear the LCD
+CrsrHm          CON     $02                     ' move cursor to home position
+CrsrLf          CON     $10                     ' move cursor left
+CrsrRt          CON     $14                     ' move cursor right
+DispLf          CON     $18                     ' shift displayed chars left
+DispRt          CON     $1C                     ' shift displayed chars right
+DDRam           CON     $80                     ' Display Data RAM control
+CGRam           CON     $40                     ' Custom character RAM
+Line1           CON     $80                     ' DDRAM address of line 1
+Line2           CON     $C0                     ' DDRAM address of line 2
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+cmd             VAR     Byte                    ' commnand sent to LCD
+char            VAR     Byte                    ' character sent to LCD
+newChr          VAR     Byte                    ' new character for animation
+addr            VAR     Byte                    ' address in EE and display
+cNum            VAR     Byte                    ' character number
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+' custom character definitions
+
+Mouth0          DATA    $0E,$1F,$1F,$1F,$1F,$1F,$0E,$00
+Mouth1          DATA    $0E,$1F,$1F,$18,$1F,$1F,$0E,$00
+Mouth2          DATA    $0E,$1F,$1C,$18,$1C,$1F,$0E,$00
+Smile           DATA    $00,$0A,$0A,$00,$11,$0E,$06,$00
+
+Msg             DATA    " IS VERY COOL! ",3     ' revealed message
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  PAUSE 500                                     ' let the LCD settle
+  LCDCMD LCDpin,%00110000 : PAUSE 5             ' 8-bit mode
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00100000 : PAUSE 0             ' 4-bit mode
+  LCDCMD LCDpin,%00101000 : PAUSE 0             ' 2-line mode
+  LCDCMD LCDpin,%00001100 : PAUSE 0             ' no crsr, no blink
+  LCDCMD LCDpin,%00000110                       ' inc crsr, no disp shift
+
+DLChars:                                        ' download custom chars to LCD
+  LCDCMD LCDpin,CGRam                           ' prepare to write CG data
+  FOR addr = Mouth0 TO (Smile + 7)              ' build 4 custom chars
+    READ addr,char                              ' get byte from EEPROM
+    LCDOUT LCDpin,NoCmd,[char]                  ' put into LCD CGRAM
+  NEXT
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  LCDCMD LCDpin,ClrLCD
+  PAUSE 1000
+  LCDOUT LCDpin,NoCmd,["THE BASIC STAMP"]
+  PAUSE 2000
+
+  ' Animation by character replacement
+
+  FOR addr = 0 TO 15                            ' cover 16 characters
+    READ (Msg + addr),newChr                    ' get new char from message
+    cmd = Line2 + addr                          ' set new DDRAM address
+    FOR cNum = 0 TO 4                           ' 5 characters in cycle
+      LOOKUP cNum,[2,1,0,1,newChr],char
+      LCDOUT LCDpin,cmd,[char]                  ' write animation character
+      PAUSE 100                                 ' delay between animation chars
+    NEXT
+  NEXT
+
+  PAUSE 3000
+  GOTO Main                                     ' do it all over
+  END
+
+' -----[ Subroutines ]----------------------------------------------------------
+'

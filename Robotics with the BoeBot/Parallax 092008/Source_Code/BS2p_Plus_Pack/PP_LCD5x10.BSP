@@ -1,0 +1,155 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' BS2p Plus Pack
+'
+' File...... PP_LCD5x10.BSP
+' Purpose... Basic LCD Demo -- Using 5x10 font and descended characters
+' Author.... Parallax, Inc.
+' E-mail.... stamptech@parallaxinc.com
+' Started...
+' Updated... 26 SEP 2001
+
+' {$STAMP BS2p}
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program demostrates a method of intializing a 2x16 LCD so that it behaves
+' like a single-line LCD that will display the 5x10 character set.  The LCD
+' character map includes properly descended characters, but they are not mapped
+' in the normal ASCII set.  A simple conversion routine can be used to replace
+' "squishy" descended characters with proper ones.
+'
+' Stamp pin 14 is pulled up to Vdd (+5) through 10K.  This pin is connected to
+' Vss (ground) through a N.O. pushbutton switch.  The pin will read 1 when the
+' switch is open, 0 when pressed.
+'
+' To run this program on the BS2p Demo Board, assemble the the switch circuit on
+' the breadboard, connect the LCD to X5 and install Jumper X6. Adjust contrast
+' pot for best display.
+'
+' Refer to the Hitachi HD44780 documentation for details on LCD control.
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+LCDpin          CON     0                       ' LCD is connected to OutL
+AskBtn          VAR     In15                    ' Ask button input pin
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+NoCmd           CON     $00                     ' No command in LCDOUT
+ClrLCD          CON     $01                     ' clear the LCD
+CrsrHm          CON     $02                     ' move cursor to home position
+CrsrLf          CON     $10                     ' move cursor left
+CrsrRt          CON     $14                     ' move cursor right
+DispLf          CON     $18                     ' shift displayed chars left
+DispRt          CON     $1C                     ' shift displayed chars right
+DDRam           CON     $80                     ' Display Data RAM control
+
+NumAns          CON     6                       ' 6 possible answers
+
+_g              CON     $E7                     ' DDROM addresses of descenders
+_j              CON     $EA
+_p              CON     $F0
+_q              CON     $F1
+_y              CON     $F9
+
+Pressed         CON     0                       ' button input is active low
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+char            VAR     Byte                    ' character sent to LCD
+addr            VAR     Byte                    ' message address
+answer          VAR     Nib                     ' answer pointer
+clock           VAR     Nib                     ' animation clock
+pntr            VAR     Nib                     ' pointer to animation character
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+Prompt          DATA    "Ask a question",0      ' messages for LCD
+
+Ans0            DATA    "Definitely YES",0
+Ans1            DATA    "Possible...",0
+Ans2            DATA    "Definitely NO",0
+Ans3            DATA    "Not likely...",0
+Ans4            DATA    "Answer uncertain",0
+Ans5            DATA    "Please ask again",0
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  PAUSE 500                                     ' let the LCD settle
+  LCDCMD LCDpin,%00110000 : PAUSE 5             ' 8-bit mode
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00100000 : PAUSE 0             ' 4-bit mode
+  LCDCMD LCDpin,%00100100 : PAUSE 0             ' 5x10 font
+  LCDCMD LCDpin,%00001100 : PAUSE 0             ' no crsr, no blink
+  LCDCMD LCDpin,%00000110                       ' inc crsr, no disp shift
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  LCDCMD LCDpin,ClrLCD                          ' clear the LCD
+  addr = Prompt
+  GOSUB Show_Msg                                ' print prompt
+
+Rollem:
+  GOSUB Shuffle                                 ' shuffle until button pressed
+  PAUSE 5
+  IF (AskBtn = Pressed) THEN Show_Answer
+  GOTO Rollem
+
+Show_Answer:
+  ' get address of answer message
+  LOOKUP answer,[Ans0,Ans1,Ans2,Ans3,Ans4,Ans5],addr
+
+  LCDCMD LCDpin,ClrLCD
+  GOSUB Show_Msg
+
+  PAUSE 2000                                    ' give time to read answer
+  GOTO Main                                     ' do it all over
+  END
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'
+Show_Msg:
+  READ addr,char                                ' read a character
+  IF (char = 0) THEN Msg_Done                   ' if 0, message is complete
+  GOSUB Translate                               ' fix letters with descenders
+  LCDOUT LCDpin,NoCmd,[char]
+  addr = addr + 1                               ' point to next character
+  GOTO Show_Msg
+Msg_Done:
+  RETURN
+
+
+' convert to descender font
+' - does not change other characters
+
+Translate:
+  LOOKDOWN char,["g","j","q","p","y"],char      ' translate decended characters
+  LOOKUP char,[_g,_j,_q,_p,_y],char
+  RETURN
+
+
+Shuffle:
+  answer = answer + 1 // NumAns                 ' update answer pointer
+  clock = clock + 1 // 15                       ' update pointer clock
+  IF (clock > 0) THEN Shuffle_Done              ' time to update animation?
+  LOOKUP pntr,["-+|*"],char                     ' load animation character
+  LCDOUT LCDpin,DDRam + 15,[char]               ' write it at column 15
+  pntr = pntr + 1 // 4                          ' update animation char
+Shuffle_Done:
+  RETURN

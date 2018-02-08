@@ -1,0 +1,92 @@
+'
+'Code Listing: NV_JUL99.BS2
+'NV_JUL99.BS2: This BS2 code interfaces to the Ultralink WWVB Receiver and
+'decoder module that is available through Parallax, Inc. This code makes
+'use of two of the features available in the module. The first feature
+'is a diagnostic mode which returns a byte each second. The value of the 
+'returned byte is useful in determining whether or not your WWVB receiver 
+'has locked on to the signal coming out of Fort Collins, CO. The second
+'feature displayed by this BS2 code is the reading of the WWVB time and 
+'date.The time is read in BCD format and displayed with the DEBUG command.
+
+RXpin	CON	1 	'serial data receive pin
+TXpin	CON	0	'serial data transmit pin
+DatGood	CON	6	'signal lock LED indicator
+DatBad	CON	5	'signal not locked LED indicator
+ClockOK	CON	4	'clock data OK LED indicator
+BAUD	CON	84	'9600 bps, 8N1, true serial data
+LT_CENT_MASK CON %00010000 'mask isolates the century bit
+LT_DAYS_MASK CON %00000011 'mask isolates the hundreds of days bits
+ 
+LOW	DatGood		'default LED status displays no signal
+LOW	ClockOK		'condition
+HIGH	DatBad
+
+RX	VAR	BYTE	'receive status byte
+YEAR	VAR	WORD	'year value storage word 
+RAW_YEAR VAR	BYTE	'year value received from WWVB decoder
+LT	VAR	BYTE	'leap year,century,DST,days modifier bits
+RAW_DAY	VAR	BYTE	'days value received from WWVB decoder
+DAY	VAR	WORD	'day value storage word
+HOUR	VAR	BYTE	'hours value received from WWVB decoder
+MINUTE	VAR	BYTE	'minutes value received from WWVB decoder
+SEC	VAR	BYTE	'seconds value received from WWVB decoder
+MSEC	VAR	BYTE	'milli-seconds value from WWVB decoder
+DAT1	VAR	BYTE	'data received in diagnostic mode
+TEMP_REG VAR	BYTE	'counting/working register
+
+PAUSE	3000		'Allow > 2s for decoder reset cycle
+GOSUB	DIAGNOSTIC_MODE 'verify reception of signal
+
+START:
+  GOSUB	READ_WWVB        'read and display WWVB time each second
+  PAUSE	1000
+GOTO	START
+
+READ_WWVB:
+  SEROUT TXpin,BAUD,[$01]	'01'hex requests time from decoder
+  SERIN RXpin, BAUD,500,no_response1, [RX,RAW_YEAR,LT,RAW_DAY,HOUR,MINUTE,SEC,MSEC]
+  HIGH	ClockOK		    	'light valid time LED
+  DEBUG	"RX BYTE ",BIN8 RX,CR	'display flag registers in binary
+  DEBUG	"LT BYTE ",BIN8 LT,CR	'display flag registers in binary
+  DEBUG	"TIME = ",hex2 HOUR,":",hex2 MINUTE,":",hex2 SEC,":",hex2 MSEC,CR
+  TEMP_REG = LT&LT_DAYS_MASK	'mask all but lowest two bits of LT
+  DAY = (TEMP_REG*$100)+RAW_DAY	'lowest 2 bits = #100's of days to add
+'
+  YEAR = $1900+RAW_YEAR		'Year = 1900 + raw year 
+  TEMP_REG = LT&LT_CENT_MASK	'unless masked century value is 10'hex
+  IF TEMP_REG <> $10 THEN Display_Years	
+  YEAR = $2000+RAW_YEAR		'Year = 2000 + raw year
+
+Display_Years:			'display year and date	
+  DEBUG	"YEAR = ",HEX4 YEAR," DAYS = ",HEX3 DAY,CR,CR				
+RETURN
+
+no_response1:
+  DEBUG	"NO RESPONSE",CR
+RETURN
+
+DIAGNOSTIC_MODE:
+  SEROUT	TXpin,BAUD,[$02]'execute diagnotic mode
+  TEMP_REG = 0			'counting register is reset to zero
+
+Read_Mode:
+  DEBUG	"COUNT = ",DEC TEMP_REG,CR 'display count
+  SERIN	RXpin,BAUD,2000,no_response2,[DAT1]	
+  IF DAT1 <> %00000011 THEN Increase_Count	
+'see if diagnostic mode returns a '03'hex
+  TEMP_REG = 0			'if a '03'hex is returned then reset counter
+  HIGH DatBad			'light no signal lock LED
+  LOW DatGood			'extinguish signal lock LED
+  GOTO Read_Mode		'continue checking
+
+Increase_Count:
+  TEMP_REG = TEMP_REG + 1	'increment count of "good" responses
+  If TEMP_REG < 60 THEN Read_Mode 'after a minute of "good" responses 	
+  HIGH	DatGood			'consider the receiver locked
+  LOW	DatBad			'set LEDs to display data as valid
+RETURN
+
+no_response2:
+  GOTO DIAGNOSTIC_MODE
+END: 

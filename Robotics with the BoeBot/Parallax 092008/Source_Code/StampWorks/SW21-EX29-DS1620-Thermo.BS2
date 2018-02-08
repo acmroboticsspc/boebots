@@ -1,0 +1,123 @@
+' =========================================================================
+'
+'   File....... SW21-EX29-DS1620-Thermo.BS2
+'   Purpose.... Simple temperature measurement with the DS1620
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program measures temperature using the Dallas Semiconductor DS1620
+' temperature sensor. Resolution is 0.5 degrees Celsius.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+DQ              CON     0                       ' DS1620.1 (data I/O)
+Clock           CON     1                       ' DS1620.2
+Reset           CON     2                       ' DS1620.3
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+RdTmp           CON     $AA                     ' read temperature
+WrHi            CON     $01                     ' write TH (high temp)
+WrLo            CON     $02                     ' write TL (low temp)
+RdHi            CON     $A1                     ' read TH
+RdLo            CON     $A2                     ' read TL
+RdCntr          CON     $A0                     ' read counter
+RdSlope         CON     $A9                     ' read slope
+StartC          CON     $EE                     ' start conversion
+StopC           CON     $22                     ' stop conversion
+WrCfg           CON     $0C                     ' write config register
+RdCfg           CON     $AC                     ' read config register
+
+DegSym          CON     186                     ' degrees symbol
+
+THi             CON     80                      ' high temp alarm
+TLo             CON     75                      ' low temp alarm
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+tempIn          VAR     Word                    ' raw temperature
+sign            VAR     tempIn.BIT8             ' 1 = negative temperature
+tC              VAR     Word                    ' Celsius
+tF              VAR     Word                    ' Fahrenheit
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Setup:
+  HIGH Reset                                    ' alert the DS1620
+  SHIFTOUT DQ, Clock, LSBFIRST, [WrCfg, %10]    ' use with CPU; free-run
+  LOW Reset
+  PAUSE 10
+  HIGH Reset
+  SHIFTOUT DQ, Clock, LSBFIRST, [StartC]        ' start conversions
+  LOW Reset
+
+Set_Alarms:
+  HIGH Reset
+  tC = (THi - 32 */ $008E) * 2                  ' convert to 0.5 C
+  SHIFTOUT DQ, Clock, LSBFIRST, [WrHi, tC\9]    ' write high temp
+  LOW Reset
+  PAUSE 10
+  HIGH Reset
+  tC = (TLo - 32 */ $008E) * 2
+  SHIFTOUT DQ, Clock, LSBFIRST, [WrLo, tC\9]    ' write low temp
+  LOW Reset
+  PAUSE 10
+
+  DEBUG CLS,
+        "DS1620 ", CR,
+        "---------"
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Read_DS1620                           ' get the temperature
+
+Display_C:
+    DEBUG CRSRXY, 0, 2,
+          (tC.BIT15 * 13 + " "),
+          DEC (ABS tC / 10), ".", DEC1 (ABS tC),
+          DegSym, " C", CLREOL
+
+Display_F:
+    DEBUG CRSRXY, 0, 3,
+          (tF.BIT15 * 13 + " "),
+          DEC (ABS tF / 10), ".", DEC1 (ABS tF),
+          DegSym, " F", CLREOL
+
+    PAUSE 1000                                  ' delay between readings
+  LOOP
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Read_DS1620:
+  HIGH Reset                                    ' alert the DS1620
+  SHIFTOUT DQ, Clock, LSBFIRST, [RdTmp]         ' give command to read temp
+  SHIFTIN DQ, Clock, LSBPRE, [tempIn\9]         ' read it in
+  LOW Reset                                     ' release the DS1620
+
+  tempIn.BYTE1 = -sign                          ' extend sign bit
+  tC = tempIn * 5                               ' convert to tenths
+
+  IF (tC.BIT15 = 0) THEN                        ' temp C is positive
+    tF = tC */ $01CC + 320                      ' convert to F
+  ELSE                                          ' temp C is negative
+    tF = 320 - ((ABS tC) */ $01CC)              ' convert to F
+  ENDIF
+  RETURN

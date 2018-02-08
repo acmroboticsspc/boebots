@@ -1,0 +1,99 @@
+' =========================================================================
+'
+'   File...... KTableNeg.BPE
+'   Purpose... K-type (Chromel/Alumel) thermocouple data (0C reference)
+'   Author.... Compiled by Jon Williams
+'   E-mail.... jwilliams@parallax.com
+'   Started...
+'   Updated... 19 JAN 2004
+'
+'   {$STAMP BS2pe}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+' tC                 -0          -1          -2          -3          -4
+'                    -5          -6          -7          -8          -9
+
+Kn000   DATA    Word 00000, Word 00039, Word 00079, Word 00118, Word 00157,
+                Word 00197, Word 00236, Word 00275, Word 00314, Word 00353
+
+Kn010   DATA    Word 00392, Word 00431, Word 00470, Word 00508, Word 00547,
+                Word 00586, Word 00624, Word 00663, Word 00701, Word 00739
+
+Kn020   DATA    Word 00778, Word 00816, Word 00854, Word 00892, Word 00930,
+                Word 00968, Word 01006, Word 01043, Word 01081, Word 01119
+
+Kn030   DATA    Word 01156, Word 01194, Word 01231, Word 01268, Word 01305,
+                Word 01343, Word 01380, Word 01417, Word 01453, Word 01490
+
+Kn040   DATA    Word 01527, Word 01564, Word 01600, Word 01637, Word 01673,
+                Word 01709, Word 01745, Word 01782, Word 01818, Word 01854
+
+Kn050   DATA    Word 01889, Word 01925, Word 01961, Word 01996, Word 02032,
+                Word 02067, Word 02103, Word 02138, Word 02173, Word 02208
+
+Kn060   DATA    Word 02243, Word 02278, Word 02312, Word 02347, Word 02382,
+                Word 02416, Word 02450, Word 02485, Word 02519, Word 02553
+
+Kn070   DATA    Word 02587, Word 02620, Word 02654, Word 02688, Word 02721,
+                Word 02755, Word 02788, Word 02821, Word 02854, Word 02887
+
+Kn080   DATA    Word 02920, Word 02953, Word 02986, Word 03018, Word 03050,
+                Word 03083, Word 03115, Word 03147, Word 03179, Word 03211
+
+Kn090   DATA    Word 03243, Word 03274, Word 03306, Word 03337, Word 03368,
+                Word 03400, Word 03431, Word 03462, Word 03492, Word 03523
+
+Kn100   DATA    Word 03554, Word 03584, Word 03614, Word 03645, Word 03675,
+                Word 03705, Word 03734, Word 03764, Word 03794, Word 03823
+
+Kn110   DATA    Word 03852, Word 03882, Word 03911, Word 03939, Word 03968,
+                Word 03997, Word 04025, Word 04054, Word 04082, Word 04110
+
+Kn120   DATA    Word 04138, Word 04166, Word 04194, Word 04221, Word 04249,
+                Word 04276, Word 04303, Word 04330, Word 04357, Word 04384
+
+Kn130   DATA    Word 04411, Word 04437, Word 04463, Word 04490, Word 04516,
+                Word 04542, Word 04567, Word 04593, Word 04618, Word 04644
+
+Kn140   DATA    Word 04669, Word 04694, Word 04719, Word 04744, Word 04768,
+                Word 04793, Word 04817, Word 04841, Word 04865, Word 04889
+
+Kn150   DATA    Word 04913, Word 04936, Word 04960, Word 04983, Word 05006,
+                Word 05029, Word 05052, Word 05074, Word 05097, Word 05119
+
+Kn160   DATA    Word 05141, Word 05163, Word 05185, Word 05207, Word 05228,
+                Word 05250, Word 05271, Word 05292, Word 05313, Word 05333
+
+Kn170   DATA    Word 05354, Word 05374, Word 05395, Word 05415, Word 05435,
+                Word 05454, Word 05474, Word 05493, Word 05512, Word 05531
+
+Kn180   DATA    Word 05550, Word 05569, Word 05588, Word 05606, Word 05624,
+                Word 05642, Word 05660, Word 05678, Word 05695, Word 05713
+
+Kn190   DATA    Word 05730, Word 05747, Word 05763, Word 05780, Word 05797,
+                Word 05813, Word 05829, Word 05845, Word 05861, Word 05876
+
+Kn200   DATA    Word 05891, Word 05907, Word 05922, Word 05936, Word 05951,
+                Word 05965, Word 05980, Word 05994, Word 06007, Word 06021
+
+Kn210   DATA    Word 06035, Word 06048, Word 06061, Word 06074, Word 06087,
+                Word 06099, Word 06111, Word 06123, Word 06135, Word 06147
+
+Kn220   DATA    Word 06158, Word 06170, Word 06181, Word 06192, Word 06202,
+                Word 06213, Word 06223, Word 06233, Word 06243, Word 06252
+
+Kn230   DATA    Word 06262, Word 06271, Word 06280, Word 06289, Word 06297,
+                Word 06306, Word 06314, Word 06322, Word 06329, Word 06337
+
+Kn240   DATA    Word 06344, Word 06351, Word 06358, Word 06364, Word 06370,
+                Word 06377, Word 06382, Word 06388, Word 06393, Word 06399
+
+Kn250   DATA    Word 06404, Word 06408, Word 06413, Word 06417, Word 06421,
+                Word 06425, Word 06429, Word 06432, Word 06435, Word 06441
+
+Kn260   DATA    Word 06441, Word 06444, Word 06446, Word 06448, Word 06450,
+                Word 06452, Word 06453, Word 06455, Word 06456, Word 06457
+
+Kn270   DATA    Word 06458

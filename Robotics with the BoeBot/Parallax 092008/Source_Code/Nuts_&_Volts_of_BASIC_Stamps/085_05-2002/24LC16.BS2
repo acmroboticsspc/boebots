@@ -1,0 +1,206 @@
+' ==============================================================================
+'
+'   File...... 24LC16B.BS2
+'   Purpose... 24LC16B control via I2C
+'   Author.... Jon Williams
+'   E-mail.... jonwms@aol.com
+'   Started... 21 MAR 2002
+'   Updated... 30 MAR 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' This program demonstrates essential I2C routines and communication with the
+' Microchip 24LC16B serial EEPROM.
+'
+' The "block" address of the data to be written or read is sent as part of the
+' device ID byte.  This means that you can only use one 24LC16B on a bus and
+' it shouldn't be mixed with other devices as it could cause inteference.
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+'
+SDA             CON     8                       ' I2C serial data line
+SCL             CON     9                       ' I2C serial clock line
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+DevType         CON     %1010 << 4              ' device type
+Wr2416          CON     DevType | 0             ' write to 24LC16B
+Rd2416          CON     DevType | 1             ' read from 24LC16B
+
+PgSize          CON     256                     ' ee page size
+
+ACK             CON     0                       ' acknowledge bit
+NAK             CON     1                       ' no ack bit
+
+CrsrXY          CON     2                       ' DEBUG Position Control
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+i2cSDA          VAR     Nib                     ' I2C serial data pin
+i2cData         VAR     Byte                    ' data to/from device
+i2cWork         VAR     Byte                    ' work byte for TX routine
+i2cAck          VAR     Bit                     ' ACK bit from device
+
+eeAddr          VAR     Word                    ' address: 0 - 2047
+test            VAR     Nib
+outVal          VAR     Byte                    ' output to EEPROM
+inVal           VAR     Byte                    ' input from EEPROM
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Initialize:
+  PAUSE 250                                     ' let DEBUG open
+  DEBUG CLS, "24LC16B Demo", CR, CR             ' setup output screen
+  DEBUG "Address... ", CR
+  DEBUG "Block..... ", CR
+  DEBUG "Word...... ", CR
+  DEBUG "Output.... ", CR
+  DEBUG "Input..... ", CR
+
+  i2cSDA = SDA                                  ' define SDA pin
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  FOR eeAddr = 0 TO 2047                        ' test all locations
+    DEBUG CrsrXY, 11, 2, DEC eeAddr, "   "
+    DEBUG CrsrXY, 11, 3, DEC eeAddr / PgSize
+    DEBUG CrsrXY, 11, 4, DEC eeAddr // PgSize, "  "
+    FOR test = 0 TO 3                           ' use four patterns
+      LOOKUP test, [$FF, $AA, $55, $00], outVal
+      DEBUG CrsrXY, 11, 5, IHEX2 outVal
+      i2cData = outVal
+      GOSUB Write_Byte
+      PAUSE 10
+      GOSUB Read_Byte
+      inVal = i2cData
+      DEBUG CrsrXY, 11, 6, IHEX2 inVal, "  "
+      IF (inVal <> outVal) THEN Bad_Addr
+      DEBUG "Pass  "
+      GOTO Next_Addr
+Bad_Addr:
+      DEBUG "Fail  "
+Next_Addr:
+      PAUSE 50                                  ' give time to see result
+    NEXT
+  NEXT
+
+  END
+
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+' Byte to be written is passed in i2cData
+' -- address passed in eeAddr
+
+Write_Byte:                                     ' write to eeAddr
+  GOSUB I2C_Start                               ' send Start
+  i2cWork = Wr2416 | ((eeAddr / PgSize) << 1)   ' send block address
+  GOSUB I2C_TX_Byte
+  IF (i2cAck = NAK) THEN Write_Byte             ' wait until not busy
+  i2cWork = eeAddr // PgSize                    ' send word address
+  GOSUB I2C_TX_Byte
+  i2cWork = i2cData                             ' send data
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_Stop
+  RETURN
+
+
+' Byte read is returned in i2cData
+' -- address passed in eeAddr
+
+Read_Byte:
+  GOSUB I2C_Start
+  i2cWork = Wr2416 | ((eeAddr / PgSize) << 1)   ' send block address
+  GOSUB I2C_TX_Byte
+  i2cWork = eeAddr // PgSize                    ' send word address
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_Start                               ' restart without stop
+  i2cWork = Rd2416 | ((eeAddr / PgSize) << 1)   ' send read command
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_RX_Byte_Nak
+  GOSUB I2C_Stop
+  i2cData = i2cWork
+  RETURN
+
+
+' ------------------------------------------------------------------------------
+' Low Level I2C Subroutines
+' ------------------------------------------------------------------------------
+
+' --- Start ---
+
+I2C_Start:                                      ' I2C start bit sequence
+  INPUT i2cSDA
+  INPUT SCL
+  LOW i2cSDA                                    ' SDA -> low while SCL high
+
+Clock_Hold:
+  IF (Ins.LowBit(SCL) = 0) THEN Clock_Hold      ' device ready?
+  RETURN
+
+
+' --- Transmit ---
+
+I2C_TX_Byte:
+  SHIFTOUT i2cSDA,SCL,MSBFIRST,[i2cWork\8]      ' send byte to device
+  SHIFTIN i2cSDA,SCL,MSBPRE,[i2cAck\1]          ' get acknowledge bit
+  RETURN
+
+
+' --- Receive ---
+
+I2C_RX_Byte_Nak:
+  i2cAck = NAK                                  ' no ACK = high
+  GOTO I2C_RX
+
+I2C_RX_Byte:
+  i2cAck = ACK                                  ' ACK = low
+
+I2C_RX:
+  SHIFTIN i2cSDA,SCL,MSBPRE,[i2cWork\8]         ' get byte from device
+  SHIFTOUT i2cSDA,SCL,LSBFIRST,[i2cAck\1]       ' send ack or nak
+  RETURN
+
+
+' --- Stop ---
+
+I2C_Stop:                                       ' I2C stop bit sequence
+  LOW i2cSDA
+  INPUT SCL
+  INPUT i2cSDA                                  ' SDA --> high while SCL high
+  RETURN

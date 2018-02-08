@@ -1,0 +1,55 @@
+' =========================================================================
+'
+'   File....... SW21-EX03-Counter_LEDs.BS2
+'   Purpose.... Advanced LED Flasher
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Displays a 4-bit binary counter on LEDs connected to P0 - P3.  This
+' program will work, unmodified, on any BS2-family module.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+LEDs            VAR     OUTA                    ' LEDs on P0 - P3
+LEDsDirs        VAR     DIRA                    ' DIRS control for LEDs
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+MinCount        CON     0                       ' counter start value
+MaxCount        CON     15                      ' counter end value
+
+DelayTm         CON     100                     ' delay time for LEDs
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+cntr            VAR     Nib                     ' 4-bit counter variable
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  LEDsDirs = %1111                              ' make LEDs outputs
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    FOR cntr = MinCount TO MaxCount             ' loop through all values
+      LEDs = cntr                               ' move count to LEDs
+      PAUSE DelayTm                             ' hold a bit
+    NEXT
+  LOOP                                          ' repeat forever

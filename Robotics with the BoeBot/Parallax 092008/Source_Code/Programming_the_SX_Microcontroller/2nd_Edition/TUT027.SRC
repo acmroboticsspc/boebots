@@ -1,0 +1,59 @@
+; TUT027.SRC
+;
+; --------------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" 2nd Edition by Guenther Daubach
+; Copyright (c), by Parallax Inc. 2004
+; --------------------------------------------------------------------
+
+include "Setup28.inc"
+SOUND
+DEVICE  WATCHDOG
+RESET   Main
+
+org     $08
+Counter ds  3
+
+Main
+  mov   !option, #%11111111
+  clr   Counter
+  clr   Counter+1
+  clr   Counter+2
+  sb    status.4
+    jmp WarmBoot
+  clr   rb
+  mov   !rb, #%11111110
+
+:Loop1
+  clr   !wdt
+  decsz Counter
+    jmp :Loop1
+  decsz Counter+1
+    jmp :Loop1
+  decsz Counter+2
+    jmp :Loop1
+  setb  rb.0
+:Loop2
+  jmp   :Loop2
+
+WarmBoot
+
+ifdef SOUND
+  mov   !rb, #%01111111
+:Loop1
+  mov   Counter+1, #30
+:Loop2
+  clr   !wdt
+  decsz Counter
+    jmp :Loop2
+  decsz Counter+1
+    jmp :Loop2
+  xor   rb, #%10000000
+  jmp   :Loop1
+else
+  mov   !rb, #%10111111
+  setb  rb.6
+:Loop1
+  clr   !wdt
+  jmp   :Loop1
+endif

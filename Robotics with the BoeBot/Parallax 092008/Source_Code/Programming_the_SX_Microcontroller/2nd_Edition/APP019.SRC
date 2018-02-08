@@ -1,0 +1,88 @@
+; APP019.SRC - Testing Port Outputs
+;
+; ---------------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller", 2nd Edition by Guenther Daubach
+; Copyright (c) by Parallax Inc. 2004
+; ---------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET    Main
+
+org      $08
+PortId   ds 1                   ; Address of the port under test
+PinMask  ds 1                   ; Mask for port pin under test
+Timer    ds 2                   ; Delay counter
+Temp     ds 1                   ; Temporary storage
+TrisMask ds 1                   ; Mask for TRIS register
+
+;** Main program *****************************************************
+;
+Main
+  mov PortId,   #5              ; Start the test at port ra
+
+:PortLoop
+  mov PinMask, #%00000001       ; Start the test with pin 0
+
+:PinLoop
+  mov fsr, PortId               ; Indirectly address the port
+  mov w, PinMask                ;  register, and write
+  mov ind, w                    ;  the pin mask
+  not w                         ; Invert the pin mask for the 
+  mov TrisMask, w               ;  TRIS register and save it
+  call SetDir                   ; Set port as output, high level
+                                ;  and delay
+  call SetInput                 ; Set port as input, 
+                                ;   and delay
+  mov fsr, PortId               ; Indirectly address the port
+  mov w, /PinMask               ;   register, and write the
+  mov ind, w                    ;   inverted pin mask
+  mov TrisMask, w               ; Save inverted mask in the 
+                                ;   TRIS register
+  call SetDir                   ; Set port as output, low level
+                                ;   and delay
+  call SetInput                 ; Set port as input, 
+                                ;   and delay
+  clc
+  rl PinMask                    ; Rotate left the mask
+  sc                            ;  after 8 RLs, the C flag is set
+    jmp :PinLoop                ; Not yet 8 tests, select next port
+                                ;  pin for test in this port
+  inc PortId                    ; Next port
+  sb PortId.3                   ; PortId > 7 ?
+    jmp :PortLoop               ;  If not, test this port,
+                                ;  else repeat the test
+  jmp Main                      ;  for port ra
+
+;** Subroutine sets all pins of the port <PortId> to inputs (hi-Z)
+;
+SetInput
+  mov TrisMask, #$ff
+
+;** Subroutine sets the !R? register of port <PortId> to the value
+;   contained in <TrisMask>
+;
+;   Call: :    PortId = port address, TrisMask = data
+;   Uses:      Temp
+;
+SetDir
+  mov Temp, PortId              ; PortId -> Temp
+  sub Temp, #4                  ; Make PortId 1-based
+  mov w, TrisMask               ; TrisMask -> w
+  dec Temp
+  snz                           ; If Temp = 0,
+    mov !ra, w                  ;  Port A, else
+  dec Temp
+  snz                           ; if Temp = 0,
+    mov !rb, w                  ;  Port B, else
+  dec Temp
+  snz                           ; if Temp = 0,
+    mov !rc, w                  ;  Port C
+
+  mov Timer+1, #20              ; Time delay
+:Loop
+  decsz Timer
+    jmp :Loop
+  decsz Timer+1
+    jmp :Loop
+  ret

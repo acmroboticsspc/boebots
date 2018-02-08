@@ -1,0 +1,612 @@
+' Quadravox Talking Module for Basic Stamp 2 (QV306M4-P)
+'
+'============================================
+'QV306M4-P pinout and control lines:
+'
+'Control lines 	pin 	level 	Function
+'RXD (5V) 		1 	-- 		RS232 receive line
+'TXD (5V)		2 	-- 		RS232 transmit line
+'BUSY_ 		3 	low 		indicates system is busy
+'BR1 			4 	-- 		msb of baud rate selection; must be +5V or GND
+'BR0 			5 	-- 		lsb of baud rate selection; must be +5V or GND
+'RECLED_ 		6 	low 		can be used to sink current for record LED. The external
+'						system must provide the current-limiting resistor.
+'+5V 			7 	+5 		system power
+'GND 			8 	0 		system ground
+'ANA_IN 		9 	-- 		line level analog input for recording
+'ANA_OUT 		10 	-- 		line level, volume controlled, analog output
+'GND 			11 	0 		system ground
+'PWR_ 			12 	low 		can be used to control an external power amplifier such
+'						as the QVamp3.
+'AUX 			13 	-- 		not used in this version.
+'RESET_ 		14 	low 		system reset
+'SP- 			15 	-- 		speaker output; bridge tied load
+'SP+ 			16 	-- 		speaker output; bridge tied load
+'Baud rate selection:
+'BR1 BR0 Rate
+'0 0 2400b		'this is the one implemented here
+'0 1 4800b
+'1 0 9600b
+'1 1 19200b
+'Commands:
+'Value  		Action
+'-------------------------
+'0-239 		Play phrase <value> according to mode settings
+'240-255 		Set mode: see mode table below for functions
+'
+'Set mode functions:
+'Value (hex) 	Function
+'-------------------------
+'0f0h 		set play mode to direct addressing
+'0f6h 		stop play
+'0f8h 		sleep
+'0fch 		set volume with next byte transmitted. Only values 0-31 are valid
+'0fdh 		software reset
+'0feh 		return version byte (00dh)
+'0ffh 		return type byte (036h)
+'-------------------------
+'
+' Board of Education Connections
+'
+'  We call Q1, Q2, ... pins 1,2 ... of the QV306M4-P module:
+'
+' 1) Insert the QV306M4-P module at the far end of the Board of Education, component side
+'	facing away from the Basic Stamp 2. Align the left most pin (Q16) of the connector with
+'	the left most row of the board (P15). This way, Pin 1 (Q1) of QV306M4-P corresponds to the row 
+'	of P1 for the Basic Stamp.
+' 2) Wire connections:
+' 	On the QV306M4-P side of the "Board of Education":
+'	- VDD to Q7 (QV306M4-P Pin 7: Power)
+'	- VSS (Ground) to Q8  (QV306M4-P  Pin 8: Ground) . Then from there to Q5 (QV306M4-P pin 5: BR0) and Q4 (QV306M4-P  Pin 4: BR1)
+'			 (to set the baudrate at 2400 bps)
+'	- connect a wire to Q15 and one Q14: these two wires will go to an 8 Ohm speaker
+' 
+'	From the Px connections, on the Stamp side:
+'
+'	-P1 to Q1 on the QV306M4-P side (QV306M4-P receive)
+'	-P2 to Q2 on the QV306M4-P side (QV306M4-P transmit)
+'	-P3 to Q3 on the QV306M4-P side (QV306M4-P busy_)
+'	-P14 to Q14 on the QV306M4-P side (QV306M4-P  reset)
+'
+'		 Q Q Q Q Q Q Q Q Q Q Q Q Q Q Q Q
+'		 1 1 1 1 1 1 1 9 8 7 6 5 4 3 2 1
+'		 6 5 4 3 2 1 0
+'          ======================================= QV306M4-P
+'		 . . . . . . . . . . . . . . . . . 
+'	V 	 . . . . . . . . . . . . . . . . 
+'	S 	 . . . . . . . . . . . . . . . . 
+'	S	 . . . . . . . . . . . . . . . . 
+'		 . . . . . . . . . . . . . . . . . 
+'
+'
+'		 . . . . . . . . . . . . . . . . . 
+'	V	 . . . . . . . . . . . . . . . . 
+'	D	 . . . . . . . . . . . . . . . . . 
+'	D	 . . . . . . . . . . . . . . . . . 
+'		 . . . . . . . . . . . . . . . . . 
+'
+'		 = = = = = = = = = = = = = = = = =
+'		 P P P P P P P P P P P P P P P P
+'		 1 1 1 1 1 1 9 8 7 6 5 4 3 2 1 0
+'		 5 4 3 2 2 0
+'
+'
+'
+'		   _________________
+'              | Basic Stamp 2 |
+'		   -----------------
+'
+'
+'
+'
+' Vocabulary list
+'
+NUM0		con	  0
+NUM1		con	  1
+NUM2		con	  2
+NUM3		con	  3
+NUM4		con	  4
+NUM5		con	  5
+NUM6		con	  6
+NUM7		con	  7
+NUM8		con	  8 
+NUM9		con	  9 
+NUM10		con	 10 
+NUM11		con	 11 
+NUM12		con	 12 
+NUM13		con	 13 
+NUM14		con	 14 
+NUM15		con	 15 
+NUM16		con	 16 
+NUM17		con	 17 
+NUM18		con	 18 
+NUM19		con	 19 
+NUM20		con	 20 
+NUM30		con	 21 
+NUM40		con	 22 
+NUM50		con	 23 
+NUM60		con	 24 
+NUM70		con	 25 
+NUM80		con	 26 
+NUM90		con	 27 
+NUM100   	con	 28 
+NUM1000   	con	 29 
+million   	con	 30 
+billion   	con	 31 
+NUM2000	con	 32 
+a_m		con	 33 
+p_m		con	 34 
+let_a		con	 35 	'this is the letter "a"
+alpha		con	 36 
+let_b		con	 37 
+bravo		con	 38 
+let_c		con	 39 
+charlie	con	 40 
+let_d		con	 41 
+delta		con	 42 
+let_e		con	 43 
+echo		con	 44 
+let_f		con	 45 
+fox		con	 46 
+let_g		con	 47 
+golf		con	 48 
+let_h		con	 49 
+hotel		con	 50 
+let_i		con	 51 
+india		con	 52 
+let_j		con	 53 
+juliet	con	 54 
+let_k		con	 55 
+kilo		con	 56 
+let_l		con      57
+lima		con	 58
+let_m		con	 59 
+mike		con	 60
+let_n		con	 61
+november0	con	 62
+let_o		con	 63
+oscar		con	 64
+let_p		con	 65
+papa		con	 66
+let_q		con	 67
+quebec	con	 68
+let_r		con	 69
+romeo		con	 70
+let_s		con	 71
+sierra	con	 72
+let_t		con	 73
+tango		con	 74
+let_u		con	 75
+uniform	con	 76
+let_v		con	 77
+victor	con	 78
+let_w		con	 79
+whiskey	con	 80
+let_x		con	 81
+xray		con	 82
+let_y		con	 83
+yankee	con	 84
+let_z		con	 85
+zulu		con	 86
+monday	con	 87
+tuesday	con	 88
+wednesday	con	 89
+thursday	con	 90
+friday	con	 91
+saturday	con	 92
+sunday	con	 93
+january	con	 94
+february	con	 95
+march		con	 96
+april		con	 97
+may		con	 98
+june		con	 99
+july		con	100
+august	con	101
+september	con	102
+october	con	103
+november	con	104
+december	con	105
+amp		con	106
+amps		con	107
+Bars		con	108
+bit_w		con	109 	'this is the word "bit"
+bits		con	110
+black		con	111
+blue		con	112
+brown		con	113
+byte_w	con	114 	'this is the word "byte"
+bytes		con	115
+cable		con	116
+celsius	con	117
+centimeter	con	118
+centimeters	con	119
+Cents		con	120
+chip		con	121
+connector	con	122
+Cubic		con	123
+degrees	con	124
+divided_by	con	125
+Dollars	con	126
+down		con	127
+equals	con	128
+fahrenheit	con	129
+farads	con	130
+feet		con	131
+foot		con	132
+Gallons	con	133
+gigahertz	con	134
+go		con	135
+gold		con	136
+good_aft	con	137 	'good afternoon
+good_morn	con	138 	'good morning
+goodbye	con	139
+gram		con	140
+grams		con	141
+gray		con	142
+green		con	143
+hello		con	144
+hertz		con	145
+hour		con	146
+hours		con	147
+inch		con	148
+inches	con	149
+indoor_temp	con	150 	'indoor temperature
+is		con	151
+key		con	152
+kilobit	con	153
+kilobits	con	154
+kilobyte	con	155
+kilohm	con	156
+kilometer	con	157
+kilometers	con	158
+kiloohms	con	159
+light		con	160
+Liters	con	161
+mega		con	162
+megabytes	con	163
+megaohms	con	164
+megohms	con	165
+meter		con	166
+meters	con	167
+micro		con	168
+micron	con	169
+microns	con	170
+midnight	con	171
+mile		con	172
+miles		con	173
+milli		con	174
+minus		con	175
+minute	con	176
+minutes	con	177
+noon		con	178
+o_clock	con	179
+Ofmerc	con	180
+Ofwater	con	181
+ohms		con	182
+orange	con	183
+Pascals	con	184
+per_hour	con	185
+per		con	186
+percent	con	187
+pico		con	188
+pink		con	189
+plus		con	190
+point		con	191
+pound		con	192
+pounds	con	193
+Psi		con	194
+purple	con	195
+r_p_m		con	196
+red		con	197
+second	con	198
+seconds	con	199
+silver	con	200
+Square	con	201
+start		con	202
+stop_w	con	203 	'this is the word "stop"
+switch	con	204
+tan		con	205
+temp_is	con	206 	'temperature is
+t_curr_t_is	con	207 	'the current time is
+the_current	con	208
+the_outside	con	209
+t_speed_is	con	210 	'the speed is
+the		con	211
+thee		con	212
+times		con	213
+up		con	214
+volt		con	215
+volts		con	216
+white		con	217
+wire		con	218
+yard		con	219
+yards		con	220
+yellow	con	221
+y_speed_is	con	222 	'your speed is
+the_date	con	223
+is_more	con	224
+please_wait	con	225
+please	con	226
+is_less	con	227
+thank_you	con	228
+than		con	229
+and_w		con	230	'this is the word "and"
+are_closed	con	231
+are_down	con	232
+are_off	con	233
+are_on	con	234
+are_open	con 235
+are_up	con	236
+is_closed	con 237
+is_down	con	238
+is_off	con	239
+
+'
+' Aliases for I/O definitions
+'
+RECEIVE_LINE	con	1
+TRANSMIT_LINE	con	2
+NBAUD2400		con 396
+'============================================
+' I/O Definitions
+'NBAUD2400
+out14  = 0
+output 	14	'reset line
+input 	3	'busy line
+out1	= 1				'WARNING if RECEIVE_LINE is not 1, this line must be changed accordingly!!!!
+output 	RECEIVE_LINE	'receive
+input 	TRANSMIT_LINE	'transmit
+'============================================
+' Aliases for QV commands
+'
+QV_DIRECT	con	$F0
+QV_STOP	con	$F6
+QV_SLEEP	con	$F8
+QV_VOLUME	con	$FC
+QV_RESET	con	$FD
+QV_REVISION	con	$FE
+QV_TYPE	con	$FF
+'============================================
+' variables for say_number program
+'
+znumber 	var 	word
+zdigit	var	word
+ztmp		var	word
+ztmp1		var	word
+'
+' variable for say_date program
+'
+zcentury	var	bit	' 0 for 19xx, 1 for 20xx
+zyear		var	byte	' number from 0 to 99
+zmonth	var	nib	' 1 for January, 2 for February, etc...
+zday		var	byte	' day of the month: 1 through 31
+zdayweek	var	nib	' day of the week: 1 for Monday, 2 for Tuesday,...
+'
+' variables for say_time program
+'
+zam_pm	var	bit	' 0 for a.m. 1 for p.m.
+zhour		var	nib	' hour from 1 to 12
+zmin		var	byte	' minute: from 0 to 59
+'============================================
+' Program start
+'============================================
+gosub DoReset	'Reset the QV Module
+'-------
+' Test say_number
+'-------
+znumber =65530	'change value of number here to hear other numbers
+gosub say_number  'module says" sixy five thousand five hundred thirty"
+pause 2000
+'-------
+gosub getQvRevision
+'debug HEX? ztmp	'uncomment this line to see Revision Number in Debug Window
+gosub getQvType
+'debug HEX? ztmp	'uncomment this line to see Type Number in Debug Window
+'-------
+ztmp=1
+loopVolume:
+if ztmp> 31 then endLoopVolume
+gosub QVSetVolume
+serout RECEIVE_LINE,NBAUD2400,[switch]	' Module says "switch" 32 times from lowest to highest volume
+gosub WaitNotBusy
+ztmp =ztmp + 5
+goto loopVolume
+endLoopVolume:
+'-------
+' Test say_date
+'-------
+zcentury=1
+zyear =1
+zmonth=1
+zday=19
+zdayweek=5
+'
+' the date defined here is Friday ,January 19, 2001
+'
+gosub say_date	'Module says "Friday ,January 19, 2001"
+pause 2000
+'-------
+' Test say_time
+'-------
+zhour=11
+zmin = 52
+zam_pm= 1
+'
+' the time defined here is 11:00 pm
+'
+gosub say_time	'Module says" the current time is eleven fifty two, p.m."
+
+end_program:	'Program stops here
+end
+'
+'
+'
+'***************
+' subroutines  *
+'***************
+say_number:
+'
+' subroutine to speak the number contained in the variable znumber
+' the maximum  value of this variable is 65535
+'
+	ztmp = znumber
+	if ztmp >0 then strictly_pos
+	serout RECEIVE_LINE,NBAUD2400,[num0]
+	gosub WaitNotBusy
+	return
+strictly_pos:
+	zdigit = ztmp /1000
+	if(zdigit = 0) then next_test100
+	gosub say_2dnumber
+	serout RECEIVE_LINE,NBAUD2400,[NUM1000]	'say "thousand"
+	gosub WaitNotBusy
+next_test100:
+	ztmp=ztmp - (zdigit * 1000)
+	zdigit =ztmp /100	' the hundreds
+	if zdigit = 0 then next_test_10
+	serout RECEIVE_LINE,NBAUD2400,[zdigit]	
+	gosub WaitNotBusy
+	serout RECEIVE_LINE,NBAUD2400,[NUM100]	'say "hundred"
+	gosub WaitNotBusy
+next_test_10:
+	zdigit = ztmp - (zdigit * 100)
+	gosub say_2dnumber	'only a 2 digit number left
+	return
+'**********
+say_2dnumber
+'
+' subroutine to speak a non zero 2 digit number contained in zdigit
+'
+	if zdigit >20 then more_than_20
+	if zdigit =0 then ret_say_2dnumber
+	serout RECEIVE_LINE,NBAUD2400,[zdigit]
+	gosub WaitNotBusy
+	return
+more_than_20:
+	ztmp1= zdigit / 10	'tens
+	serout RECEIVE_LINE,NBAUD2400,[ztmp1 +num18]	
+	gosub WaitNotBusy
+	ztmp1 = zdigit - (ztmp1 * 10)
+	if(ztmp1 = 0) then ret_say_2dnumber
+	serout RECEIVE_LINE,NBAUD2400,[ztmp1]	
+	gosub WaitNotBusy
+ret_say_2dnumber:	
+	return
+'**********
+say_date:
+	if zdayweek > 7 then skip_day_week
+	serout RECEIVE_LINE,NBAUD2400,[monday + zdayweek -1]	
+	gosub WaitNotBusy
+skip_day_week
+	if zmonth > 12 then skip_month
+	serout RECEIVE_LINE,NBAUD2400,[January + zmonth -1]	
+	gosub WaitNotBusy
+skip_month:
+	if(zday > 31) then skip_day
+	if( zday =0) then skip_day
+skip_day:
+	zdigit=zday
+	gosub say_2dnumber
+if(zcentury = 1) then say_2000
+	serout RECEIVE_LINE,NBAUD2400,[NUM19]	
+	gosub WaitNotBusy
+	goto say_year_digits
+say_2000:
+	serout RECEIVE_LINE,NBAUD2400,[NUM2000]	
+	gosub WaitNotBusy
+
+say_year_digits:
+	if(zyear =0) then skip_year
+	zdigit=zyear
+	gosub say_2dnumber
+skip_year:
+return
+
+'**********
+say_time:
+'
+' subroutine to say time in 12 hour format (plus a.m. or p.m)
+'
+' the hour is contained in variable zhour (1-12)
+' the minutes are in variable zmin (0-59)
+' the variable zam_pm (1 bit) contains a.m. (0) or p.m. (1)
+'
+if(zhour =0) then skip_time	'hour invalid, don't talk
+if(zhour > 12) then skip_time	'hour invalid, don't talk
+if(zmin > 59) then skip_time	'minutes invalid, don't talk
+serout RECEIVE_LINE,NBAUD2400,[t_curr_t_is]	'say: the current time is	
+gosub WaitNotBusy
+zdigit=zhour
+gosub say_2dnumber
+zdigit=zmin
+'
+' several cases
+'
+if(zmin=0) then say_am_pm	' don't say "zero" for minutes
+if(zmin>=10) then say_minutes
+say_oh:
+'
+' here, single digit minutes, we say "oh" first
+'
+serout RECEIVE_LINE,NBAUD2400,[let_o]	
+gosub WaitNotBusy
+say_minutes:
+gosub say_2dnumber
+say_am_pm:
+if(zam_pm =0) then say_am
+say_pm:
+	serout RECEIVE_LINE,NBAUD2400,[p_m]	
+	gosub WaitNotBusy
+	goto skip_time
+say_am:
+	serout RECEIVE_LINE,NBAUD2400,[a_m]	
+	gosub WaitNotBusy
+	goto skip_time
+skip_time:
+return
+'**********
+WaitNotBusy:
+'
+' wait till the QV Module is finished talking
+' at which point IN3 = 1
+'
+hold:	if IN3 = 0 then hold
+	return
+'**********
+DoReset:
+out14 = 0	'do a reset
+pause 100	'
+out14 = 1	
+pause 2000	'wait while the QV module counts its phrases
+return
+'**********
+GetQVRevision:
+'
+' queries revision number of QV Module
+' stores it in variable ztmp
+'
+serout RECEIVE_LINE,NBAUD2400,[QV_REVISION]
+serin TRANSMIT_LINE,NBAUD2400,[ztmp]
+return
+'**********
+GetQVType:
+'
+' queries type of QV Module
+' stores it in variable ztmp
+'
+serout RECEIVE_LINE,NBAUD2400,[QV_TYPE]
+serin TRANSMIT_LINE,NBAUD2400,[ztmp]
+return
+'**********
+QVSetVolume:
+'
+' sets volume of QV module with value (0--31) stored in ztmp
+'
+if ztmp <32 then volume_OK
+ztmp=31
+volume_OK
+serout RECEIVE_LINE,NBAUD2400,[QV_VOLUME]
+serout RECEIVE_LINE,NBAUD2400,[ztmp]
+return
+

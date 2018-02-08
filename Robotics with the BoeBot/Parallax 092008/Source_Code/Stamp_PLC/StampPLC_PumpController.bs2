@@ -1,0 +1,265 @@
+' =========================================================================
+'
+'   File....... StampPLC_PumpController.BS2
+'   Purpose.... Dual Pump Controller.  Example program.
+'
+'   Author..... John Barrowman, Parallax
+'   E-mail..... support@parallax.com
+'   Started.... 27 JUN 2003
+'   Updated.... 27 JUN 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+'
+' -----[ Program Description ]---------------------------------------------
+'   This program controls two pumps to maintain tank level.  When the level
+'   falls below setpoint #1, the pump with the fewest number of hours is
+'   started.  If the level should continue falling to setpoint#2, the other
+'   pump is started as well.  During pump startup, the pump's aux contact
+'   and flow sensor are monitored TO determine whether or not the pump
+'   actually started.  If a failure does occur, that pump is immediately
+'   shutdown and flagged as out-of-commission, and the other pump starts.
+'   While all of this is going on, data is logged on pump runtimes, tank
+'   level AND the serial port is monitored for commands and queries.
+'
+'   Note: To more easily see this program work, you can change the constant
+'         in "Timer_Logic" from 3600 to 3 or so.  This will effectively
+'         speed time up so you can watch all aspects of this program work.
+'         Also, you may wish to enable the DEBUG statements too.
+'
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+ADC_clk          PIN     0         ' A/D clock input
+S_Rclk           PIN     0         ' HC165 clock input
+latch            PIN     1         ' Latch input for HC165
+S_Rdin           PIN     2         ' HC165 data input
+ADC_cs           PIN     3         ' A/D chip select input
+ADC_Dout         PIN     4         ' A/D Data out
+ADC_Din          PIN     5         ' A/D Data in
+PumpA            PIN     8         ' 1 turns on Pump A
+PumpB            PIN     9         ' 1 turnd on Pump B
+
+
+' -----[ Constants ]-------------------------------------------------------
+T1200           CON     813
+T2400           CON     396
+T9600           CON     84
+T19200          CON     32
+Baud            CON     T9600
+
+' -----[ Variables ]-------------------------------------------------------
+tankLevel        VAR     Word         ' Actual level of the tank
+timer            VAR     Word         ' Sets the periodicity
+runTimeA         VAR     Byte         ' # hours that Motor A has run
+runTimeB         VAR     Byte         ' # hours that Motor B has run
+inputs           VAR     Byte         ' Inputs 1 - 8 from the HC165
+tmp              VAR     Byte         ' Temporary work variable
+ptr              VAR     Byte         ' Points to the current record
+keyIn            VAR     Byte         ' Variable for keyboard input
+pumpStatus       VAR     Byte         ' Status of both pumps
+setPoint1        VAR     Byte         ' If level <, start 1 pump
+setPoint2        VAR     Byte         ' If level <, start 2 pumps
+startCode        VAR     Nib          ' Desired pump configuration
+                                      ' Inputs via HC165
+flowA            VAR     Inputs.BIT0  '1 = Flow  OK, 0 = No Flow
+flowB            VAR     Inputs.BIT1
+auxContactA      VAR     Inputs.BIT2  '1 = Motor ON, 0 = Motor off
+auxContactB      VAR     Inputs.BIT3
+                                      ' Bit variables
+pumpAStatus      VAR     pumpStatus.LOWNIB
+pumpBStatus      VAR     pumpStatus.HIGHNIB
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+Records    DATA  0(256)               ' Data table for records.  Note! when
+                                      ' the pointer > 64, the old data will
+                                      ' be overwritten by new data because
+                                      ' each record = 4 bytes.
+' -----[ Notes ]-----------------------------------------------------------
+'                        Pump Status Definition
+'                   0      OK Off           8         FAILED no flow
+'                   1      OK On            9         FAILED no aux contact
+'                  2-7     undefined       A-F        undefined
+'
+'                        Start Codes defined
+'                         1   PumpA desired
+'                         2   PumpB desired
+'                         3   Both pumps desired
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+  Ptr = 0                             ' Set record pointer to the start
+  setPoint1 = 100                     ' First low level setpoint
+  setPoint2 =  50                     ' Second low level setpoint
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  SERIN 16, Baud, 1000, Control_Level, [keyIn]
+  SELECT keyIn
+    CASE "A"
+      SEROUT 16, Baud, [CR, "Runtime A:", DEC runTimeA, CR]
+    CASE "B"
+      SEROUT 16, Baud, [CR, "Runtime B:", DEC runTimeB, CR]
+    CASE "a"
+      runTimeA = 0
+      SEROUT 16, Baud, [CR, "Runtime A cleared", CR]
+    CASE "b"
+      runTimeB = 0
+      SEROUT 16, Baud, [CR, "Runtime B cleared", CR]
+    CASE "D"
+      IF ptr > 0 THEN
+        SEROUT 16, Baud, [CR, "Tank Level Report", CR, CR]
+        FOR tmp = 0 TO (ptr-4 MIN 1) STEP 4
+          READ tmp+3,keyIn
+          SEROUT 16, Baud, ["Hour: ", DEC3 tmp/4,
+                            "  Tank Level: ", DEC3 keyIn, CR]
+        NEXT
+        READ tmp-3,keyIn
+        READ tmp-2,tmp
+        SEROUT 16, Baud, ["Pump A Runtime: ", DEC3 keyIn,
+                          " Pump B Runtime: ", DEC3 tmp, CR, CR]
+      ELSE
+        SEROUT 16, Baud, [CR, "No data yet!", CR, CR]
+      ENDIF
+    CASE ELSE
+      SEROUT 16, Baud, [" : Invalid command", BELL, CR, CR]
+   ENDSELECT
+
+Control_Level:
+  GOSUB Read_Tank_Level
+  GOSUB Control_Pumps
+'  GOSUB Debug_Data
+  GOSUB Error_Handler
+  GOSUB Timer_Logic
+  GOTO Main
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Timer_Logic:
+  Timer = Timer + 1
+  DEBUG ?Timer
+  IF Timer > 3600 THEN
+'    DEBUG CR, "Data Recorded!  Pointer = ",HEX2 ptr, CR
+    GOSUB Record_Data
+    Timer = 0
+    IF (pumpAStatus = 1) THEN runTimeA = runTimeA + 1
+    IF (pumpBStatus = 1) THEN runTimeB = runTimeB + 1
+  ENDIF
+  RETURN
+
+Debug_Data:
+  DEBUG "Status: ", HEX2 PumpStatus, CR
+  RETURN
+
+Record_Data:
+  WRITE Ptr+0,PumpStatus
+  WRITE Ptr+1,RunTimeA
+  WRITE Ptr+2,RunTimeB
+  WRITE Ptr+3,tankLevel.LOWBYTE
+  Ptr = Ptr + 4
+  RETURN
+
+Stop_Pumps:
+  HIGH PumpA: PumpAStatus = 0
+  HIGH PumpB: PumpBStatus = 0
+  RETURN
+
+Error_Handler:
+  SELECT  startCode
+    CASE  1
+      IF PumpAStatus > 7 THEN GOSUB StartB
+    CASE  2
+      IF PumpBStatus > 7 THEN GOSUB StartA
+  ENDSELECT
+  RETURN
+
+StartA:
+  IF (PumpAStatus = 0) THEN
+    LOW PumpA
+    GOSUB GetDigitalInputs
+    IF AuxContactA = 0 THEN
+      PAUSE 2000
+      GOSUB GetDigitalInputs
+      IF FlowA = 0 THEN
+        PumpAStatus = 1
+      ELSE
+        PumpAStatus = 8
+        HIGH PumpA
+      ENDIF
+    ELSE
+      PumpAStatus = 9
+      HIGH PumpA
+    ENDIF
+  ENDIF
+  RETURN
+
+StartB:
+  IF (PumpBStatus = 0) THEN
+    LOW PumpB
+    GOSUB GetDigitalInputs
+    IF AuxContactB = 0 THEN
+      PAUSE 2000
+      GOSUB GetDigitalInputs
+      IF FlowB = 0 THEN
+        PumpBStatus = 1
+      ELSE
+        PumpBStatus = 8
+        HIGH PumpB
+      ENDIF
+    ELSE
+      PumpBStatus = 9
+      HIGH PumpB
+    ENDIF
+  ENDIF
+  GOSUB Error_Handler
+  RETURN
+
+
+Control_Pumps:
+  SELECT tankLevel
+    CASE < setPoint2
+      startCode = 3
+      GOSUB StartA
+      GOSUB StartB
+    CASE < setPoint1
+      IF (pumpAStatus <> 1 AND pumpBStatus <>1) THEN
+        IF RunTimeA < RunTimeB THEN
+          startCode = 1
+          GOSUB StartA
+        ELSE
+          startCode = 2
+          GOSUB StartB
+        ENDIF
+      ENDIF
+    CASE ELSE
+      GOSUB Stop_Pumps
+  ENDSELECT
+  RETURN
+
+GetDigitalInputs:
+  LOW latch
+  PAUSE 1
+  HIGH latch
+  PAUSE 1
+  SHIFTIN S_Rdin,S_Rclk, LSBPRE, [Tmp]
+  RETURN
+
+Read_Tank_Level:                                'Reads tank level
+  LOW ADC_cs
+  PAUSE 1
+  SHIFTOUT ADC_Dout, ADC_Clk, MSBFIRST, [240]   'Tank Level
+  HIGH ADC_cs
+  PAUSE 1
+  LOW ADC_cs
+  PAUSE 1
+  SHIFTIN ADC_Din, ADC_Clk, MSBPRE, [tankLevel\12]
+  PAUSE 1
+  HIGH ADC_cs
+  tankLevel = tankLevel>>4                      'Divide it by 8
+'  DEBUG "Tank Level:", DEC3 tankLevel, " inches  "
+  RETURN

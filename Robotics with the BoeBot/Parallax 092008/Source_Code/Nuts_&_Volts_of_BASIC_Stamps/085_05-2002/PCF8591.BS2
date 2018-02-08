@@ -1,0 +1,206 @@
+' ==============================================================================
+'
+'   File...... PCF8591.BS2
+'   Purpose... PCF8591 [4 channel A2D, 1 channel D2A] Demo
+'   Author.... Jon Williams
+'   E-mail.... jonwms@aol.com
+'   Started... 31 MAR 2002
+'   Updated... 31 MAR 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' This program demonstates the Philips PCF8591 4-channel A2D plus 1-channel
+' D2A.  Channel 0 input is tied to the output of the D2A pin.  Channel 1 input
+' is tied to the wiper of a pot.  Channels 2 and 3 are tied to Vss.
+'
+' The PCF85591 uses a control byte after the Slave Address.  The control byte
+' data (see details in PCF8591 documentation) is used to enable the analog
+' output bit and set the kind of analog inputs.  In this demo, the analog output
+' bit is enabled and four single-ended analog inputs are used.
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+'
+SDA             CON     8                       ' I2C serial data line
+SCL             CON     9                       ' I2C serial clock line
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+DevType         CON     %1001 << 4              ' device type
+DevAddr         CON     %000 << 1               ' address = %000 -> %111
+Wr8591          CON     DevType | DevAddr | 0   ' write to device
+Rd8591          CON     DevType | DevAddr | 1   ' read from device
+
+ACK             CON     0                       ' acknowledge bit
+NAK             CON     1                       ' no ack bit
+
+D2A_Enable      CON     %01000000               ' enable analog output
+Auto_Inc        CON     %00000100               ' auto inc a2d channels
+
+MVPB            CON     $139C                   ' millivolts per bit factor
+
+Yes             CON     0
+No              CON     1
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+i2cSDA          VAR     Nib                     ' I2C serial data pin
+i2cCtrl         VAR     Byte                    ' device control byte
+i2cData         VAR     Word                    ' data to/from device
+i2cWork         VAR     Byte                    ' work byte for TX routine
+i2cAck          VAR     Bit                     ' ACK bit from device
+
+aOut            VAR     Byte                    ' analog out value (0 .. 255)
+aIn             VAR     Byte(4)                 ' analog input channels
+chan            VAR     Nib                     ' channel #
+mVolts          VAR     Word                    ' convert input to millivolts
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Initialize:
+  PAUSE 250                                     ' let DEBUG open
+  DEBUG CLS
+
+  i2cSDA = SDA                                  ' define SDA pin
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  DEBUG Home, "PCF8591 Demo"
+
+Set_D2A:
+  DEBUG Home, CR, CR, "D2A Out........ ", DEC aOut, "  ", CR
+  i2cCtrl = (D2A_Enable | Auto_Inc)
+  i2cData = aOut
+  GOSUB Write_D2A
+
+Get_A2D:
+  GOSUB Read_A2D                                ' read all A2D channels
+
+  FOR chan = 0 TO 3
+    DEBUG "Channel ", DEC1 chan, " In... ", DEC aIn(chan), "  ", Tab
+    mVolts = aIn(chan) */ MVPB
+    DEBUG "(", DEC mVolts DIG 3, ".", DEC3 mVolts, " volts)", CR
+  NEXT
+
+  PAUSE 500                                     ' delay between updates
+  aOut = aOut + 1                               ' increment analog output
+  GOTO Set_D2A                                  ' go again
+
+  END
+
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+' D2A value is passed in aOut
+
+Write_D2A:
+  GOSUB I2C_Start                               ' send Start
+  i2cWork = Wr8591                              ' send write command
+  GOSUB I2C_TX_Byte
+  IF (i2cAck = NAK) THEN Write_D2a              ' wait until not busy
+  i2cWork = i2cCtrl                             ' send device control byte
+  GOSUB I2C_TX_Byte
+  i2cWork = i2cData                             ' send analog value
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_TX_Byte                             ' force into DAC
+  GOSUB I2C_Stop
+  RETURN
+
+
+Read_A2D:
+  GOSUB I2C_Start                               ' send Start
+  i2cWork = Rd8591                              ' send write command
+  GOSUB I2C_TX_Byte
+  GOSUB I2C_RX_Byte                             ' start new conversion
+  GOSUB I2C_RX_Byte                             ' get channel 0
+  aIn(0) = i2cWork
+  GOSUB I2C_RX_Byte
+  aIn(1) = i2cWork
+  GOSUB I2C_RX_Byte
+  aIn(2) = i2cWork
+  GOSUB I2C_RX_Byte_Nak
+  aIn(3) = i2cWork
+  GOSUB I2C_Stop
+  RETURN
+
+
+' ------------------------------------------------------------------------------
+' Low Level I2C Subroutines
+' ------------------------------------------------------------------------------
+
+' --- Start ---
+
+I2C_Start:                                      ' I2C start bit sequence
+  INPUT i2cSDA
+  INPUT SCL
+  LOW i2cSDA                                    ' SDA -> low while SCL high
+
+Clock_Hold:
+  IF (Ins.LowBit(SCL) = 0) THEN Clock_Hold      ' device ready?
+  RETURN
+
+
+' --- Transmit ---
+
+I2C_TX_Byte:
+  SHIFTOUT i2cSDA,SCL,MSBFIRST,[i2cWork\8]      ' send byte to device
+  SHIFTIN i2cSDA,SCL,MSBPRE,[i2cAck\1]          ' get acknowledge bit
+  RETURN
+
+
+' --- Receive ---
+
+I2C_RX_Byte_Nak:
+  i2cAck = NAK                                  ' no ACK = high
+  GOTO I2C_RX
+
+I2C_RX_Byte:
+  i2cAck = ACK                                  ' ACK = low
+
+I2C_RX:
+  SHIFTIN i2cSDA,SCL,MSBPRE,[i2cWork\8]         ' get byte from device
+  SHIFTOUT i2cSDA,SCL,LSBFIRST,[i2cAck\1]       ' send ack or nak
+  RETURN
+
+
+' --- Stop ---
+
+I2C_Stop:                                       ' I2C stop bit sequence
+  LOW i2cSDA
+  INPUT SCL
+  INPUT i2cSDA                                  ' SDA --> high while SCL high
+  RETURN

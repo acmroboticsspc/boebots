@@ -1,0 +1,48 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - TestFrontIrObjectDetectors.bs2
+' This program tests the IR object detectors mounted on the X8 and X9 headers
+' on the front of the SumoBot.
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+IrLedLF        PIN     4                     ' Left IR LED connected to P4
+IrSenseLF      PIN     11                    ' Left IR detector to P11
+
+IrLedRF        PIN     15                    ' Right IR LED connected to P15
+IrSenseRF      PIN     14                    ' Right IR detector to P14
+
+' -----[ Constants ]----------------------------------------------------------
+
+IrFreq     CON     38500                     ' IR LED transmit frequency
+
+' -----[ Variables ]----------------------------------------------------------
+
+irLF       VAR     Bit                       ' State of Left Front IR
+irRF       VAR     Bit                       ' State of Right Front IR
+
+' -----[ Initialization ]-----------------------------------------------------
+
+DEBUG CLS, "FRONT IR DETECTORS", CR,         ' Display heading
+           "Left   Right", CR,
+           "----   -----", CR
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+DO                                           ' DO...LOOP repeats indefinitely
+
+  FREQOUT IrLedLF, 1, IrFreq                 ' Left IRLED shines IR light
+  irLF = ~IrSenseLF                          ' Save IR receiver output
+
+  FREQOUT IrLedRF, 1, IrFreq                 ' Repeat for right IRLED/receiver
+  irRF = ~IrSenseRF
+
+  DEBUG CRSRX, 1, BIN1 irLF,                 ' Display object detect bits
+        CRSRX, 9, BIN1 irRF
+
+  PAUSE 100                                  ' Delay for slower PCs
+
+LOOP
+

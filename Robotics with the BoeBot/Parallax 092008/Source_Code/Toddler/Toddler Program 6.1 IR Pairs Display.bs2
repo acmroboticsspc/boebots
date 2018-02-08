@@ -1,0 +1,40 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 6.1: Infrared Pairs Display
+' Test program for the infrared emitters / detectors
+' {$STAMP BS2}
+' {$PBASIC 2.5} 
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+lEmitter        CON     4
+rEmitter        CON     15
+
+lInput          VAR     in11
+rInput          VAR     in14
+
+' -----[ Variables ]-------------------------------------------------------
+
+lDetector       VAR     Bit             ' Two bit variables for saving IR
+rDetector       VAR     Bit             ' detector output values. 
+
+' -----[ Initialization ]--------------------------------------------------
+
+OUTPUT lEmitter                         ' signals to function as outputs
+OUTPUT rEmitter
+
+' -----[ Main Code ]-------------------------------------------------------
+
+DO
+                                        ' Detect object on the left.
+  FREQOUT lEmitter, 1, 38500            ' Send freqout signal - left IR LED
+  lDetector = lInput                    ' Store IR detector output in RAM.
+                                        ' Detect object on the right.
+  FREQOUT rEmitter, 1, 38500            ' Repeat for the right IR pair.
+  rDetector = rInput
+
+  DEBUG home, "Left= ", BIN1 lDetector
+  PAUSE 20
+  DEBUG "  Right= ", BIN1 rDetector
+  PAUSE 20
+
+LOOP

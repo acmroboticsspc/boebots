@@ -1,0 +1,83 @@
+' =========================================================================
+'
+'   File....... SW21-EX25-Mixed_IO.BS2
+'   Purpose.... Mixing 595 outputs and 165 inputs
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates the ability to use the 74HC595 and 74HC165
+' together with the fewest number of BASIC Stamp IO pins.  This is
+' accomplished by placing a 4.7K resistor between the data out (pin 7) of
+' the 74HC165 and the data in (pin 14) of the 74HC595.  The serial data
+' pin from the BASIC Stamp connects to the 74HC595.
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Clock           PIN     0                       ' shift clock
+SerData         PIN     1                       ' serial data
+Latch           PIN     2                       ' output latch (74HC595.12)
+Load            PIN     3                       ' input load (74HC165.1)
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+DelayTime       CON     100
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+xInputs         VAR     Byte                    ' external inputs
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  LOW Latch
+  HIGH Load
+  DEBUG CLS,
+        "XInputs   76543210", CR,
+        "-------   --------", CR,
+        "Status    ........"
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Get_165                               ' get inputs
+    GOSUB Put_595                               ' move to extended outputs
+    DEBUG CRSRXY, 10, 2, BIN8 xInputs           ' display current status
+    PAUSE DelayTime                             ' pad the loop a bit
+  LOOP
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Get_165:
+  PULSOUT Load, 5                               ' load inputs
+  SHIFTIN SerData, Clock, MSBPRE, [xInputs]     ' shift them in
+  RETURN
+
+
+Put_595:
+  SHIFTOUT SerData, Clock, MSBFIRST, [xInputs]  ' send inputs to 595
+  PULSOUT Latch, 5                              ' latch 595 outputs
+  INPUT SerData                                 ' float data I/O line
+  RETURN

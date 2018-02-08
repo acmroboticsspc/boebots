@@ -1,0 +1,135 @@
+' -----[ Title ]------------------------------------------------------
+'
+' File...... ds1994_timer.bsp
+' Purpose... Reading and Writing the Timer of DS1994 iButton  
+' Author.... Claus Kuehnel  
+' Started... 2001-08-13 
+' Updated... 
+
+' -----[ Program Description ]----------------------------------------
+'
+' This program demonstrates reading and writing DS1994 timer registers
+' via the internal ScratchPad RAM
+ 
+' -----[ Revision History ]-------------------------------------------
+'
+' 2001-08-13
+
+' -----[ Directives ]-------------------------------------------------
+'
+'{$STAMP BS2p} 			'specifies a BS2p
+
+' -----[ Constants ]--------------------------------------------------
+'
+OWpin		con 15		'1-wire device pin
+LED		con 12		'Pin for LED
+
+OW_FERst	con %0001		'Front-End Reset
+OW_BERst	con %0010		'Back-End reset
+OW_BitMode	con %0100	
+
+SkipROM	con $CC		'Skip ROM Command
+WriteScratch con $0F		'Write ScratchPad
+ReadScratch con $AA		'Read ScratchPad
+CopyScratch con $55		'Copy ScratchPad to Memory
+ReadMemory	con $F0		'Read Memory
+
+ControlReg	con $0201		'Timer Control Register
+RTCReg	con $0202		'RTC Register   $0202-$0206
+IntervReg	con $0207		'IntervallTimer $0207-$020B
+
+StartTimer	con %00010000 	'Start IntervalTimer
+StopTimer	con %01010000 	'Stop IntervalTimer
+
+     
+' -----[ Variables ]--------------------------------------------------
+'
+TargetAddr 	var word		'TargetAddress in NVRAM
+TA1 		var TargetAddr.LowByte
+TA2		var TargetAddr.HighByte
+EndingAddr	var byte		'EndingAddress
+TargetCont	var byte		'Content to save
+
+temp 		var byte(8)
+idx 		var nib
+    
+
+' -----[ Initialization ]---------------------------------------------
+'
+init:	pause 1000			'open debug window
+	low LED			'LED off
+	
+
+' -----[ Main Code ]--------------------------------------------------
+'
+Start:high LED	
+	TargetAddr = ControlReg	'Start of IntervalTimer
+	TargetCont = StartTimer
+	gosub WriteDS1994Reg
+	low LED
+	
+	debug cls
+	debug "TA:   ", hex2 TA2, hex2 TA1, cr
+	debug "EA:   ", hex2 EndingAddr, cr
+	debug "Data: ", hex2 temp, cr
+
+	TargetAddr = IntervReg	'Read IntervalTimer
+	gosub ReadDS1994Timer
+	gosub DisplayTimer
+	
+	TargetAddr = RTCReg	'Read RTC
+	gosub ReadDS1994Timer
+	gosub DisplayTimer
+
+	pause 2000			'Wait 2 sec
+
+	TargetAddr = IntervReg	'Read IntervalTimer
+	gosub ReadDS1994Timer
+	gosub DisplayTimer
+	
+	TargetAddr = RTCReg	'Read RTC
+	gosub ReadDS1994Timer
+	gosub DisplayTimer
+
+	TargetAddr = ControlReg	'Stop IntervalTimer
+	TargetCont = StopTimer
+	gosub WriteDS1994Reg
+
+	debug "TA:   ", hex2 TA2, hex2 TA1, cr
+	debug "EA:   ", hex2 EndingAddr, cr
+	debug "Data: ", hex2 temp, cr
+
+	pause 2000			'Wait 2 sec
+
+	TargetAddr = IntervReg	'Read IntervalTimer
+	gosub ReadDS1994Timer
+	gosub DisplayTimer
+	
+	TargetAddr =RTCReg	'Read RTC
+	gosub ReadDS1994Timer
+	gosub DisplayTimer
+
+	pause 5000			
+	goto start			'Play it again
+	
+
+' -----[ Subroutines ]------------------------------------------------
+'
+WriteDS1994Reg:
+	OWOUT OWpin, OW_FERst, [SkipROM, WriteScratch, TA1, TA2, TargetCont]
+	OWOUT OWpin, OW_FERst, [SkipROM, ReadScratch]
+	OWIN OWpin, OW_BERst, [TA1, TA2, EndingAddr, str temp\1 ]
+	OWOUT OWpin, OW_FERst, [SkipROM, CopyScratch, TA1, TA2, EndingAddr]
+	return
+
+ReadDS1994Timer:
+	OWOUT OWpin, OW_FERst, [SkipROM, ReadMemory, TA1, TA2]
+	OWIN OWpin, OW_BERst, [str temp\5]
+	return
+
+DisplayTimer
+	debug "TA:   ", hex2 TA2, hex2 TA1, cr
+	debug "Timer = ", hex2 temp(4), hex2 temp(3), hex2 temp(2), hex2 temp(1), cr
+	return
+
+' -----[ Data ]-------------------------------------------------------

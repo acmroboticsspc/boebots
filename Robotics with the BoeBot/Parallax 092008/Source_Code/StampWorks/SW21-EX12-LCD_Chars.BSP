@@ -1,0 +1,152 @@
+' =========================================================================
+'
+'   File....... SW21-EX12-LCD_Chars.BSP
+'   Purpose.... Create and use customer characters on the LCD
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 15 AUG 2006
+'
+'   {$STAMP BS2p}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates custom character creation and animation on a
+' character LCD.
+'
+' The connections for this program conform to the BS2p-family LCDCMD,
+' LCDIN, and LCDOUT instructions.  Use this program for the BS2p, BS2pe,
+' or BS2px.  There is a separate program for the BS2, BS2e, and BS2sx.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+E               PIN     1                       ' Enable pin
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+LcdCls          CON     $01                     ' clear the LCD
+LcdHome         CON     $02                     ' move cursor home
+LcdCrsrL        CON     $10                     ' move cursor left
+LcdCrsrR        CON     $14                     ' move cursor right
+LcdDispL        CON     $18                     ' shift chars left
+LcdDispR        CON     $1C                     ' shift chars right
+LcdDDRam        CON     $80                     ' Display Data RAM control
+LcdCGRam        CON     $40                     ' Character Generator RAM
+LcdLine1        CON     $80                     ' DDRAM address of line 1
+LcdLine2        CON     $C0                     ' DDRAM address of line 2
+
+
+#DEFINE _NotLcdReady = ($STAMP < BS2P)
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+char            VAR     Byte                    ' character sent to LCD
+newChar         VAR     Byte
+idx1            VAR     Byte                    ' loop counters
+idx2            VAR     Nib
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+Msg1            DATA    "THE BASIC STAMP "      ' preload EE with messages
+Msg2            DATA    " IS VERY COOL! ", 3
+
+CC0             DATA    %01110                  ' mouth 0
+                DATA    %11111
+                DATA    %11100
+                DATA    %11000
+                DATA    %11100
+                DATA    %11111
+                DATA    %01110
+                DATA    %00000
+
+CC1             DATA    %01110                  ' mouth 1
+                DATA    %11111
+                DATA    %11111
+                DATA    %11000
+                DATA    %11111
+                DATA    %11111
+                DATA    %01110
+                DATA    %00000
+
+CC2             DATA    %01110                  ' mouth 2
+                DATA    %11111
+                DATA    %11111
+                DATA    %11111
+                DATA    %11111
+                DATA    %11111
+                DATA    %01110
+                DATA    %00000
+
+Smiley          DATA    %00000                  ' smiley face
+                DATA    %01010
+                DATA    %01010
+                DATA    %00000
+                DATA    %10001
+                DATA    %01110
+                DATA    %00110
+                DATA    %00000
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  #IF _NotLcdReady #THEN
+    #ERROR "Please use BS22 version: SW21-EX12-LCD_Chars.BS2"
+  #ENDIF
+
+  PAUSE 100                                     ' let the LCD settle
+
+Lcd_Setup:
+  LCDCMD E, %00110000 : PAUSE 5                 ' 8-bit mode
+  LCDCMD E, %00110000 : PAUSE 0
+  LCDCMD E, %00110000 : PAUSE 0
+  LCDCMD E, %00100000 : PAUSE 0                 ' 4-bit mode
+  LCDCMD E, %00101000 : PAUSE 0                 ' multi-line mode
+  LCDCMD E, %00001100 : PAUSE 0                 ' on, no crsr, no blink
+  LCDCMD E, %00000110                           ' inc crsr, no disp shift
+
+Download_Chars:                                 ' download custom chars
+  LCDCMD E, LcdCGRam                            ' point to CG RAM
+  FOR idx1 = CC0 TO (Smiley + 7)                ' build 4 custom char
+    READ idx1, char                             ' get byte from EEPROM
+    LCDOUT E, 0, [char]                         ' put into LCD CG RAM
+  NEXT
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  LCDCMD E, LcdCls                              ' clear the LCD
+  PAUSE 250
+
+  FOR idx1 = 0 TO 15                            ' get message from EEPROM
+    READ (Msg1 + idx1), char                    ' read a character
+    LCDOUT E, 0, [char]                         ' write it
+  NEXT
+  PAUSE 1000                                    ' wait 2 seconds
+
+Animation:
+  FOR idx1 = 0 TO 15                            ' cover 16 characters
+    READ (Msg2 + idx1), newChar                 ' get new char from Msg2
+    FOR idx2 = 0 TO 4                           ' 5 characters in  cycle
+      char = LcdLine2 + idx1                    ' set new DDRAM address
+      LCDCMD E, char                            ' move cursor position
+      LOOKUP idx2, [0, 1, 2, 1, newChar], char  ' get animation "frame"
+      LCDOUT E, 0, [char]                       ' write "frame"
+      PAUSE 100                                 ' animation delay
+    NEXT
+  NEXT
+  PAUSE 2000
+
+  GOTO Main                                     ' do it all over
+
+
+' -----[ Subroutines ]-----------------------------------------------------

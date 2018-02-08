@@ -1,0 +1,106 @@
+; APP023.SRC - A software FIFO
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+
+  WATCH   FIFOCnt, 8, UDEC
+  WATCH   Head,    8, UDEC
+  WATCH   Tail,    8, UDEC
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+
+org     $08
+Head    ds 1                            ; FIFO head pointer
+Tail    ds 1                            ; FIFO tail pointer
+FIFOCnt ds 1                            ; Current number of items the FIFO
+Temp    ds 2                            ; Temporary storage
+FsrSave ds 1                            ; Temporary storage for FSR
+TestVal ds 1                            ; Utility variables for testing
+
+org     $30
+FIFO    = $                             ; 16 bytes for FIFO memory
+        ds 16
+org     $000
+
+;** Subroutine writes the contents of w into the FIFO
+;
+; Input:   w = value
+;  
+; Changes: Temp, FSRSave, Head, and FIFOCnt
+;
+WriteFIFO
+  snb  FIFOCnt.4                        ; If FIFO is "full", no action
+    ret
+  mov  Temp, w                          ; Save the value for later
+  mov  FsrSave, fsr                     ; Save the FSR
+  mov  w, #FIFO                         ; Indirectly address the FIFO-Puffer
+  add  w, Head                          ;  using the Head pointer
+  mov  fsr, w
+  mov  ind, Temp                        ; Save the value to the FIFO
+  inc  Head                             ; Point Head to next free storage
+  clrb Head.4                           ; If Head = 16, "circle" around to 0
+  inc  FIFOCnt                          ; Increment the item count
+  mov  fsr, FsrSave                     ; Restore the FSR
+  ret
+
+;** Subroutine reads the FIFO and returns the value in w
+;
+; Returns:  Value in w
+;  
+; Changes:  Temp+1, FSRSave, Tail, FIFOCnt
+;
+; NOTE:     Temp+1 is used for temporary storage of the retrieved
+;           value here to avoid conflicts when ReadFIFO is called
+;           from the mainline program and gets interrupted by the ISR,
+;           calling WriteFIFO to store a new value.
+;
+ReadFIFO
+  test FIFOCnt                          ; If FIFOCnt = 0, the
+  snz                                   ; FIFO is "empty",
+    ret                                 ; no action
+  mov  FsrSave, fsr                     ; Save the FSR
+  mov  w, #FIFO                         ; Indirectly address the FIFO-Puffer
+  add  w, Tail                          ; using the Head pointer 
+  mov  fsr, w    
+  mov  Temp+1, ind                      ; Read the value from the FIFO
+  inc  Tail                             ; Set Tail to next location
+  clrb Tail.4                           ; If Tail = 16, "circle" around to 0
+  dec  FIFOCnt                          ; Decrement the item count
+  mov  fsr, FsrSave                     ; Restore the FSR
+  mov  w, Temp+1                        ; Copy the value to w
+  ret
+
+ 
+org     $100
+
+;** Mainline program to test the FIFO **************************
+;
+Start
+  clr    fsr                            ; Clear data memory
+ClearData
+  sb     fsr.4
+    Setb fsr.3
+  clr    ind
+  ijnz   fsr, ClearData 
+
+Loop
+  inc  TestVal                          ; Generate test data
+  mov w, TestVal
+  call WriteFIFO                        ; Write to FIFO 
+  inc  TestVal                          ; Generate more test data 
+  mov w, TestVal
+  call WriteFIFO                        ; Write to FIFO again
+
+  clr w
+  call ReadFIFO                         ; Read from FIFO
+  jmp Loop                              ; Repeat forever...

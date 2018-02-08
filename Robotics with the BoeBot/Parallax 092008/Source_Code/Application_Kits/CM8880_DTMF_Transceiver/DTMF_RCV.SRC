@@ -1,0 +1,153 @@
+; Program DTMF_RCV.SRC
+; PIC uses the CM8880 to receive and decode DTMF tones for display
+; on an LCD Serial Backpack-equipped LCD module (9600 bps) or terminal.
+
+CS      =       rb.6    ; Chip select, active low.
+RS      =       rb.4    ; Register select bit. High = registers selected.
+RW      =       rb.5    ; Read/Write bit. Low = write.
+
+decode  =       1000b   ; Control register settings for DTMF receive.
+talk    =       0       ; TRIS value for talking to CM8880.
+listen  =       15      ; TRIS value for listening to CM8880.
+baud    =       18      ; Delay constant for 9600 baud at 4MHz.
+out_pin =       rb.7    ; Serial output pin for Backpack.
+LCDw    =       16      ; Width of the LCD screen
+LCDcls  =       1       ; LCD clear-screen command.
+I       =       254     ; LCD instruction toggle.
+
+        org     8       ; Variables above special-function registers.
+temp    ds      1       ; Temporary variable for delays, etc.
+temp2   ds      1       ; Temporary variable for delays, etc.
+cntrl   ds      1       ; Variable copy of data for control register.
+statdat ds      1       ; Variable copy of status register or data.
+LCDcol  ds      1       ; Current column of LCD screen for wrap.
+xbyte   ds      1       ; Byte for Serout to transmit.
+return  ds      1       ; Return address for clearAll routine.
+
+dt_flag =       statdat.2       ; Flag set when 8880 has decoded a tone.
+
+        device pic16c54,xt_osc,wdt_off,protect_off
+	reset start
+        org     0       ; Program origin.
+
+; ==========================
+;        SUBROUTINES
+; ==========================
+
+; Generates a brief delay to allow CM8880 to get settled after power-on.
+delay   clr     temp
+:loop   djnz    temp,:loop      ; Loop 256 times.
+        ret                     ; Return.
+
+; Table to correlate DTMF values 0-15 to printable symbols
+symbols jmp     pc+w
+        retw    'D','1','2','3','4','5','6','7','8','9','0'
+        retw    '*','#','A','B','C'
+
+; Accepts data to be written to the pair of four-bit control registers in
+; the variable "cntrl." Data for register 1 must be in the lower nybble;
+; register 2 in the upper nybble.
+set_controls
+        mov     w,cntrl         ; Get the control value.
+        AND     w,#00001111b    ; Strip upper four bits
+        OR      w,#00011000b    ; Set register-select, clear CS, set RS2.
+        mov     rb,w            ; Write to output, (CS low).
+        setb    CS              ; Deselect to complete the 1st write.
+        mov     w,<>cntrl       ; Get nybble-swapped control value.
+        AND     w,#00001111b    ; Strip upper four bits
+        OR      w,#00010000b    ; Set register-select, clear CS.
+        mov     rb,w            ; Write to output, (CS low).
+        setb    CS              ; Deselect to complete the 2nd write.
+        ret
+
+; Piggybacks on "get_status" below to get data from the CM8880.
+get_data
+        clrb    RS              ; Select data
+        skip                    ; Skip first instruction (setb RS)
+                                ; of get_status below.
+
+; Gets the contents of the 8880's status register and stores 'em
+; to the variable "statdat." The port TRIS (data direction) must
+; be set to input before calling this routine.
+get_status
+        setb    RS              ; Select the status register.
+:data   setb    RW              ; Set to read.
+        clrb    CS              ; Activate chip.
+        mov     statdat,#15     ; Bit mask for 4-bit data.
+        AND     statdat,rb      ; Get lower 4 lsbs of rb (data).
+        setb    CS              ; Deselect chip.
+        ret
+
+; Sends a byte of data serially through out_pin at 9600 bps (assuming a
+; 4-MHz clock). Drives the LCD Serial Backpack, or terminal software
+; running on a PC.
+Serout
+:xmit	clc			; Set up start bit.
+	call	emitBit 	; Send start bit.
+	mov	temp2,#8	; Send 8 data bits.
+:bits	rr	xbyte		; Rotate bit into carry.
+	call	emitBit 	; Send the data bit.
+	djnz	temp2,:bits	; All 8 bits sent? No: send more bits.
+	rr	xbyte		; Rotate data back into original position.
+	stc			; Set up stop bit.
+	call	emitBit 	; Send the stop bit.
+        ret                     ; Yes: return.
+
+; Send bit and generate time delays for Serout.
+emitBit
+        movb    out_pin,/c      ; Inverted output.
+        mov     temp,#baud      ; Baud-rate delay.
+:loop   jmp     $+1             ; Two-cycle nops for time delay.
+        djnz    temp,:loop      ; Number of trips through loop
+        nop                     ; Pad to exact timing.
+        ret                     ; Set by baud rate in temp3.
+
+; Resets the LCD position counter and clears the LCD screen.
+; Before jumping to this subroutine, the program must store
+; the return address in the variable "return." This procedure
+; is necessary because Serout uses both levels of the built-in
+; call stack--this allows us to simulate one more level. Be
+; careful to ensure that the return address isn't greater than 255.
+clearAll
+        clr     LCDcol          ; Reset LCD column counter.
+        mov     xbyte,#I        ; Toggle LCD to instruction mode.
+        call    Serout          ; Send it serially.
+        mov     xbyte,#LCDcls   ; Clear the LCD screen.
+        call    Serout          ; Send.
+        mov     xbyte,#I        ; Toggle LCD back to data mode.
+        call    Serout          ; Send.
+        mov     w,return        ; Point to return address.
+        jmp     w               ; Go there.
+
+; ==========================
+;        MAIN PROGRAM
+; ==========================
+
+start
+        mov     rb,#127         ; Bits 0-6 high to deselect CM8880.
+        mov     !rb,#talk       ; Set port to output.
+        call    delay           ; Wait for things to settle down.
+        mov     cntrl,#decode   ; Set control register for decoding.
+        call    set_controls    ; Write settings to control registers.
+        mov     return,#:loop   ; Save return address.
+        jmp     clearAll        ; Jump to clear routine.
+:loop
+        mov     !rb,#listen     ; Set port to input.
+        call    delay
+        call    get_status      ; Check the status register.
+        jnb     dt_flag,:loop   ; No tone detected, loop.
+        inc     LCDcol          ; Point to next LCD position.
+        cjb     LCDcol,#LCDw,:nocls     ; If its > LCD width, clear..
+        mov     return,#:nocls  ; Save return address.
+        jmp     clearAll        ; Jump to clear routine.
+:nocls  call    get_data        ; Get the data.
+        mov     w,statdat
+        call    symbols         ; Look up dtmf digit in table.
+        mov     xbyte,w         ; Write the digit to the display.
+        call    Serout
+        goto    :loop           ; Do it again.
+
+
+
+
+

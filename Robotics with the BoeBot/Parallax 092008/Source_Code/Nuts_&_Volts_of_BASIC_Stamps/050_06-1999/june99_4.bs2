@@ -1,0 +1,593 @@
+'Program Listing 50.1: june99_4.bs2
+'
+'JUNE99.BS2 - Dual power supply and user interface code listing. This 
+'source code implements a user interface consisting of a 2x8 LCD screen 
+'operating in 4 bit mode, and a 4x4 keypad. The LCD is driven directly 
+'with a BASIC Stamp 2 while the keypad is encoded by a MEMKey serial 
+'keypad encoder. LCD display data is stored in the MEMKey's user 
+'accessible EEPROM. Further modifications to this code were included to 
+'implement a digitally controlled dual power supply. The supplies 
+'parameters were reduced from a maximum of 20.0V to 10.0V in order to 
+'maintain resolutions with eight-bit A/D and D/A (digital pot) devices.
+'
+'
+' LCD constants
+RS   	CON 	12       	' Register Select (1 = char)
+E    	CON 	13      	' LCD Enable pin (1 = enabled)
+'
+'LCD control characters
+ClrLCD 	CON 	$01          	' clear the LCD
+CrsrHm 	CON 	$02           	' move cursor to home position
+CrsrLf 	CON 	$10           	' move cursor left
+CrsrRt 	CON 	$14           	' move cursor right
+DispLf 	CON 	$18           	' shift displayed chars left
+DispRt 	CON 	$1C          	' shift displayed chars right
+DDRam  	CON 	$80           	' Display Data RAM control
+'
+' LCD Variables
+Char 	VAR 	Byte        	' Character sent to LCD
+'
+' MEMKey pin assignments 
+TM   	CON 	0           	' To Master
+FM   	CON 	1           	' From Master
+KEY	CON	2		' Key press notification pin	
+'
+' MEMKey variables
+Index	VAR	Byte		' For next loop variable
+KeyVal	VAR	Byte		' Storage for key values
+B_1	VAR	Byte		' Variable storage byte
+B_2	VAR	Byte		' Variable storage byte	
+B_3	VAR	Byte		' Variable storage byte	
+B_4	VAR	Byte		' Variable storage byte	
+B_5	VAR	Byte		' Variable storage byte	
+B_6	VAR	Byte		' Variable storage byte	
+B_7	VAR	Byte		' Variable storage byte	
+B_8	VAR	Byte		' Variable storage byte	
+B_9	VAR	Byte		' Variable storage byte	
+'
+' MEMKey constants
+Baud 	CON 	396         	' Baud rate = 2400
+PConfig	CON	$0E		' Program configuration command
+Config	CON	$00		' Disable typematic, disable auto
+PDBounce CON	$04		' Program debounce command
+DBounce	CON	$0A		' Set debounce for 25ms
+Peeprom	CON	$08		' Program user EEPROM command
+Reeprom	CON	$09		' Read user EEPROM command	
+Pkeyval	CON	$0A		' Program key value command
+Rkeyval	CON	$0B		' Read key value command
+Default	CON	$11		' Resets MEMKey to default values
+Rbuffer	CON	$00		' Read key in buffer
+'
+'Serial Device Pin Assignments
+Clk	CON	14		' Serial clock control pin
+Dat	CON	15		' Serial data control pin
+CS_ad1	CON	4		' Chip select for A/D one	
+CS_ad2	CON	5		' Chip select for A/D two
+CS_pot	CON	6		' Chip select for digital pot.
+
+'
+'Serial Device Variables
+DSpots 	VAR	WORD		' Storage word for pot values
+DSpots1 VAR	DSpots.lowbyte	' Voltage control pot for V1
+DSpots2 VAR	DSpots.highbyte' Voltage control pot for V2
+Analog1	VAR	WORD		' Analog working register
+Analog2	VAR	WORD		' Analog working register
+AD_in1  VAR	BYTE		' Results from A/D read of V1
+AD_in2	VAR	BYTE		' Results from A/D read of V2
+Working	VAR	WORD		' Working register f
+
+'
+'LED pin assignment
+LED_control	CON	7	'Out of regulation LED indicator			
+'
+'*************************************************************************
+' This routine initializes the BASIC Stamp, LCD, DS1267-010, and MEMKey.
+
+' Initialize the BS2
+BS2_ini:  
+	DirH = %01111111      	' set pins 8-15 direction
+	OutH = %00000000      	' clear the pins
+	DirL = %11110010	' set pins 0-7 direction
+	OutL = %10110010 
+'Initialize digital potentiometers
+	DSpots = $FFFF	' Initialize V1 and V2 to 3V each
+	GOSUB SetPotValue
+'
+' Initialize the LCD (Hitachi HD44780 controller)
+LCD_ini: 
+	OutC = %0011        	' 8-bit mode
+	PULSOUT E, 1
+	PAUSE 5
+	PULSOUT E, 1
+	PULSOUT E, 1
+	OutC = %0010        	' 4-bit mode
+	PULSOUT E, 1
+	Char = 40        	' Set for 2 line operation
+	GOSUB LCDcmd           
+	Char = 12        	' Shift cursor right
+	GOSUB LCDcmd           
+	Char = 6        	' Increment DDRAM after write
+	GOSUB LCDcmd           
+	Char = 1        	' Clear LCD screen
+	GOSUB LCDcmd           
+
+'
+' Initialize the MEMKey 
+MEMKey_ini:
+	HIGH	FM		' Make sure FM is high
+	PAUSE 2000         	' Let the system power settle
+	SEROUT 	FM,Baud,[PConfig,Config]
+				' Configure MEMKey for Polled Mode		
+	PAUSE	15		' Pause 10ms for EEPROM access	 
+	SEROUT 	FM,Baud,[PDBounce,DBounce]	
+				' Program debounce value		
+	PAUSE	15		' Pause 10ms for EEPROM access	 
+'	GOSUB	Reset		' Run this when using a new MEMKey
+'
+'
+'Initialize output voltage and display
+	GOSUB	DisplayLCD	' Recall display
+	GOSUB	UpdateSupply	' Modify output voltages
+'*************************************************************************
+MainProgram:            
+	If IN2 <> 1 Then MainProgram	' Check the KEY pin for a logic high
+	GOSUB	KeyFind	' Poll for a key press
+	GOSUB 	ModeSelect	' Start user interface interaction
+	GOSUB	UpdateSupply
+	GOTO 	MainProgram	
+'
+'
+'*************************************************************************
+' -----[ Subroutines ]---------------------------------------------------- 
+'*************************************************************************
+'LCD commands, such as address pointer, are sent via LCDcmd, characters 
+'are sent with the LCDwr routine. This routine and LCD initialization 
+'routines taken from a previous author's Stamp Applications code listing. 
+'I believe it was Jon Williams who wrote the original code. 
+'
+LCDcmd: 
+	LOW RS            	' Enter command mode
+				' then write the character
+LCDwr: 
+	OutC = Char.HIGHNIB   	' Output high nibble
+	PULSOUT E, 1        	' Strobe the Enable line
+	OutC = Char.LOWNIB     ' Output low nibble
+	PULSOUT E, 1 
+	HIGH RS   		' Return to character mode
+	RETURN
+'*************************************************************************
+'All display data including voltage levels is stored in the MEMkey's 
+'EEPROM in locations $00-$0F. Whenever the display is updated each 
+'character is read from EEPROM and then sent to the LCD. The leading zeros 
+'for the voltage evels one both line one and line two are displayed as 
+'ASCII " "(space). This makes the display look a little nicer. If this 
+'display update routine is too slow for your design you can just update 
+'the voltage levels. 
+'
+DisplayLCD:
+Line1:
+	Char = $80		' Display line one
+	GOSUB	LCDcmd
+	For Index 	= $00 to $07
+		SEROUT FM,Baud,[Reeprom,Index]
+				' Read EEPROM command	
+		SERIN     TM,Baud,[B_1]	' Display value is read
+		If Index <> $04 then TestAn1A	
+' Translate ASCII tens value into decimal
+		Analog1 = (B_1 - 48) * 100	
+TestAn1A:
+		If Index <> $05 then TestAn1B		
+' Translate ASCII ones value into decimal
+		Analog1 = Analog1 + (B_1 -48 * 10)
+TestAn1B:
+		If Index <> $07 then TestAn1C		
+' Translate ASCII tenths value into decimal
+		Analog1 = Analog1 + (B_1 -48)	
+TestAn1C:
+		Char      = B_1
+		If Index <> $04 then Continue1		
+' Test for leading zero
+		If Char <> $30 then Continue1		
+' If ASCII zero then
+		Char = " "		' replace with blank space	
+Continue1:
+		GOSUB LCDwr
+	Next	
+Line2:
+	Char	=          $C0		' Display line two
+	GOSUB	LCDcmd
+	For Index = $08 to $0F
+		SEROUT FM,Baud,[Reeprom,Index]	
+' Read EEPROM command	
+		SERIN    TM,Baud,[B_1]		' Display value is read
+		Char     = B_1
+		If Index <> $0C then TestAn2A		
+' Translate ASCII tens value into decimal
+		Analog2 = (B_1 - 48) * 100	
+TestAn2A:
+		If Index <> $0D then TestAn2B	
+' Translate ASCII ones value into decimal
+		Analog2 = Analog2 + (B_1 -48 * 10)
+TestAn2B:
+		If Index <> $0F then TestAn2C	
+' Translate ASCII tenths value into decimal
+		Analog2 = Analog2 + (B_1 -48)
+TestAn2C:
+	If Index <> $0C then Continue2	' Test for leading zero
+		If Char <> $30 then Continue2	' If ASCII zero then
+		Char = " "	' replace with blank space	
+Continue2:
+		GOSUB LCDwr
+		Next	
+	Analog1 = Analog1 * 256 / 200	' Analog1 is the desired AD_in1 value
+	Analog2 = Analog2 * 256 / 200	' Analog2 is the desired AD_in2 value
+	RETURN
+'*************************************************************************
+' The Reset subroutine returns the MEMKey to it's initial settings. It 
+'also resets the LCD display values. Upon initial power up of this design
+'a "GOSUB Reset" should be placed prior to entering the MainProgram code 
+'space.After the EEPROM has been initialized the "GOSUB Reset" may be 
+'commented out or deleted. By doing this the last values displayed, prior 
+'to a power down, will be the values loaded on power up.	
+'
+Reset:
+	SEROUT FM,Baud,[Default]	'Reset MEMKey to default settings
+	PAUSE	 200	
+	SEROUT FM,Baud,[PConfig,Config] 'Configure MEMKey for Polled Mode		
+	PAUSE	15	' Pause 10ms for EEPROM access	 
+	SEROUT FM,Baud,[PDBounce,DBounce] ' Program debounce value		
+	PAUSE	15	' Pause 10ms for EEPROM access	 
+
+			' Update key values and display values
+	For Index = $00 to $0F
+LOOKUP Index, [$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F],B_1 
+LOOKUP Index,["1","2","3","A","4","5","6","B","7","8","9","C","*","0","#","D"],B_2 
+LOOKUP Index,["V","1",":"," ","0","5",".","0","V","2",":"," ","0","5",".","0"],B_3 
+		SEROUT FM,Baud,[Peeprom,B_1,B_3]
+		PAUSE    15				
+		SEROUT FM,Baud,[Pkeyval,B_1,B_2]
+		PAUSE    15	
+	Next
+	RETURN
+'*************************************************************************
+'ModeSelect determines which voltage is being adjusted, or if a reset 
+'command has been implemented. The scroll-up and scroll-down modes have 
+'not yet been implemented. The scroll 
+' functions can be defined once the 
+'voltage control method has been proved in the lab.a
+' 
+ModeSelect:
+	If KeyVal = "A" then AdjustV1	
+' Adjust voltage one has been selected
+	If KeyVal = "B" then AdjustV2	
+' Adjust voltage two has been selected
+	If KeyVal = "D" then ResetSupply	
+' A reset command has been entered
+	RETURN		
+' Any key other than A,B, or D was pressed and can be ignored
+AdjustV1:
+	SEROUT FM,Baud,[Peeprom,$03,">"]	' Load a ">" into EEPROM
+	PAUSE	15	
+	GOSUB	DisplayLCD ' Display the ">" next to voltage being adjusted
+	B_2 = $04	    ' Start EEPROM address at voltage values 
+AdjV1Continue:
+	GOSUB	KeyFind	' Wait for the next keypress
+	If KeyVal = "C" then AdjV1Done	
+' If a "C" was pressed then were done adjusting	
+	If KeyVal > "9" then AdjV1Over	
+' Check to if A,,B,C,D key was pressed by accident
+	If KeyVal = "#" then AdjV1Over	
+' Check to see if pound key was preseed
+	If KeyVal = "*" then AdjV1Over	
+' Check to see if asterisk key was pressed
+	SEROUT FM,Baud,[Peeprom,B_2,KeyVal] 
+' Store numeric 0-9 in current EEPROM address
+	PAUSE	15
+	GOTO AdjV1Again
+AdjV1Over:
+	SEROUT FM,Baud,[Peeprom,B_2,"0"]	
+' If keypress was "A","B", or "D" return a "0"	
+	PAUSE	15
+AdjV1Again:
+	GOSUB DisplayLCD	' Update display with the latest key press
+	B_2 = B_2 + 1		' Increment EEPROM address pointer
+	If B_2 = $06 then AdjV1Again	
+' If EEPROM pointed at "." then increment again
+	If B_2 = $08 then AdjustV1	
+' If line2 pointed at then reset EEPROM pointer
+	GOTO	AdjV1Continue	 
+AdjV1Done:		
+	GOSUB Limits	' Make sure values are within limits
+	RETURN
+AdjustV2:
+	SEROUT FM,Baud,[Peeprom,$0B,">"]	
+' Comments for second line are the same except all 
+	PAUSE	15	' EEPROM pointers are 8 greater than line 1
+	GOSUB	DisplayLCD	
+	B_2 = $0C
+AdjV2Continue:
+	GOSUB	KeyFind
+	If KeyVal = "C" then AdjV2Done
+	If KeyVal > "9" then AdjV2Over
+	If KeyVal = "#" then AdjV2Over
+	If KeyVal = "*" then AdjV2Over
+	SEROUT FM,Baud,[Peeprom,B_2,KeyVal]
+	PAUSE	15
+	GOTO AdjV2Again	
+AdjV2Over:
+	SEROUT FM,Baud,[Peeprom,B_2,"0"]
+	PAUSE	15
+AdjV2Again:
+	GOSUB DisplayLCD
+	B_2 = B_2 + 1
+	If B_2 = $0E then AdjV2Again
+	If B_2 = $10 then AdjustV2
+	GOTO	AdjV2Continue
+AdjV2Done:		
+	GOSUB Limits
+	RETURN
+ResetSupply:
+	GOSUB	Reset	' Implement reset command
+	GOSUB DisplayLCD	' Update display
+	RETURN
+'*************************************************************************
+'Keyfind looks for a logic high on the KEY pin (IN2). If one is present 
+'then the Read Key Buffer command for the MEMKey is implemented. There is 
+'enough RAM allotted in the SERIN command to read a maximum buffer size of 
+'8 bytes. It is likely that only one key value will be returned since the 
+'typematic rate has been truned off in the MEMKey. The SERIN "escape 
+'clause" has been set to 50ms to ensure that the serial communication does 
+'not hang up the program. Once this subroutine is entered it will not
+'exit until a key has been pressed. When it does exit the key value will 
+'be loaded into the KeyVal variable. 
+'
+KeyFind:
+		If IN2 <> 1 Then KeyFind	
+' Check the KEY pin for a logic high
+		SEROUT FM,Baud,[Rbuffer]	
+' Read buffer command
+		SERIN	 TM,Baud,50,DoneBuffer,[KeyVal,B_3,B_4,B_5,B_6,B_7,B_8,B_9]
+DoneBuffer:
+		SEROUT FM,Baud,[Rbuffer]	
+' If there is a fast key press don't accept it
+		PAUSE    40
+		If IN2 <> 0 then DoneBuffer	
+' Wait for KEY pin to go to logic low
+		RETURN
+'*************************************************************************
+' The Limits subroutine checks entered values for out of range or mis-
+'keyed entries. If either voltage input is greater than 10.0 or less than 
+'03.0 then the values are forced to either the minimum or maximum values 
+'accepted. Prior to this routine being exited the ">" character
+'that was loaded next to the adjusted voltage is replaced with a space 
+'character.
+'
+Limits:
+		SEROUT FM,Baud,[Reeprom,$04]		
+' Read tens character of voltage on line 1
+		SERIN TM,Baud,[B_1]	
+		If B_1 > "0" then ZeroOnesV1		
+' Check to see if tens is greater than "1"
+		If B_1 = "0" then TestOnesV1		
+' Check to see if tens is a zero
+		GOTO    NextLimit
+ZeroOnesV1:
+		SEROUT FM,Baud,[Peeprom,$04,"1"]	
+' If tens is greater than "1" then force display 
+		PAUSE    15		' to "10.0". The "." is not adjusted	
+		SEROUT FM,Baud,[Peeprom,$05,"0"]
+		PAUSE    15
+		SEROUT FM,Baud,[Peeprom,$07,"0"]
+		PAUSE    15
+		GOTO NextLimit
+TestOnesV1:
+		SEROUT FM,Baud,[Reeprom,$05]		
+' If tens is "0" the read ones character
+		SERIN TM,Baud,[B_1]
+		If B_1 > "2" then NextLimit		
+' Check to see if ones is less than "3"
+		SEROUT FM,Baud,[Peeprom,$05,"3"]	
+' If so then force display to "03.0"
+		PAUSE    15
+		SEROUT FM,Baud,[Peeprom,$07,"0"]
+		PAUSE    15
+NextLimit:		    
+		SEROUT FM,Baud,[Reeprom,$0C]		
+' Test voltage on line 2 as line one was tested
+		SERIN TM,Baud,[B_1]
+		If B_1 > "0" then ZeroOnesV2
+		If B_1 = "0" then TestOnesV2
+		GOTO    DoneLimit
+ZeroOnesV2:
+		SEROUT FM,Baud,[Peeprom,$0C,"1"]
+		PAUSE    15
+		SEROUT FM,Baud,[Peeprom,$0D,"0"]
+		PAUSE    15
+		SEROUT FM,Baud,[Peeprom,$0F,"0"]
+		PAUSE    15
+		GOTO    DoneLimit
+TestOnesV2:
+		SEROUT FM,Baud,[Reeprom,$0D]
+		SERIN TM,Baud,[B_1]
+		If B_1 > "2" then DoneLimit
+		SEROUT FM,Baud,[Peeprom,$0D,"3"]
+		PAUSE    15
+		SEROUT FM,Baud,[Peeprom,$0F,"0"]
+		PAUSE    15
+DoneLimit:
+		SEROUT FM,Baud,[Peeprom,$03," "]	
+' Replace either ">" with a " "(space)
+		PAUSE    15	
+		SEROUT FM,Baud,[Peeprom,$0B," "]
+		PAUSE    15	
+		GOSUB    DisplayLCD
+		RETURN
+'*************************************************************************
+' The UpdateSupply routine uses the Analog1 and Analog2 values to 
+'approximate the appropriate digital potentiometer settings. Once the 
+'potentiometer is adjusted a For Next loop is used to trim the output 
+'voltages. If the desired A/D measurement stored in the Analog register 
+'matches the actual A/D reading in the AD_in register the no adjustments 
+'to the digital pot are made. Otherwise the potentiometer setting is 
+'incremented or decremented to trim the voltage until the A/D reading is 
+'in line with the desired value. Trimming is attempted 10 times, with 50ms 
+'allotted for settling time between adjustments. I found that this system 
+'lacked resolution at voltages above about 8.5V. For this reason if the 
+'digital pot setting is less than 20 I settle for a an A/D match within 2 
+'bits of the desired value (± 160mV). If, after trimming is attempted, the 
+'desired A/D value is not reached then the program jumps to 
+'an out of regulation section. This portion of the code updates the 
+'display to the actual voltage output, and lights the "out of regulation" 
+'LED to inform the user that the output voltage has been adjusted.
+' 
+UpdateSupply:
+	LOW	LED_control
+	DSpots1 = (2376/(Analog1 - 28)) -14		
+' Equation to estimate the desired pot setting(V1)
+	DSpots2 = (2304/(Analog2 - 28)) -14	
+' Equation to estimate the desired pot setting(V2)
+	GOSUB	SetPotValue		' Update pot settings	
+'
+TrimV1:
+	For Index = 1 to 10		' Trim voltage 10 times
+		GOSUB	ReadAnalogs		
+		If AD_in1 = Analog1 then DoneV1	
+' If on first 7 trims then adj. by 1s 
+		If Index < 8 then NoMinV1
+		If DSpots1 > 20 then NoMinV1	
+' If pot setting > 20 then adj. by 1s
+		If AD_in1 = (Analog1+2) then DoneV1
+' Otherwise accept +/- 2 bits as accurate
+		If AD_in1 = (Analog1-2) then DoneV1
+NoMinV1:
+		If AD_in1 > Analog1 then IncDSpots1	
+' Reduce output voltage
+		DSpots1 = DSpots1 - 1
+		GOTO	DoneV1
+IncDSpots1:
+		DSpots1 = DSpots1 + 1		
+' Increase output voltage
+			
+DoneV1:
+		If AD_in2 = Analog2 then DoneV2	
+' V2 follows same adjustment rules as V1 
+		If Index < 8 then NoMinV2
+		If DSpots2 > 20 then NoMinV2 
+		If AD_in2 = (Analog2+2) then DoneV2
+		If AD_in2 = (Analog2-2) then DoneV2
+NoMinV2:
+		If AD_in2 > Analog2 then IncDSpots2
+		DSpots2 = DSpots2 - 1
+		GOTO	DoneV2
+IncDSpots2:
+		DSpots2 = DSpots2 + 1
+			
+DoneV2:
+		GOSUB	SetPotValue	' Update pot settings after trimming
+		Pause	50		' Allow 50ms for voltages to settle
+	NEXT				' Trim up to 10 times	
+'
+	GOSUB	ReadAnalogs		' Read in analog voltages 
+	If AD_in1 = Analog1 then TestOutOfReg2	
+' Find the differences between desired
+	Working = Analog1 - AD_in1	' and actual A/D readings
+	If Working < 3 then TestOutOfReg2	' If < 3 then all OK
+	Working = ~Working 			
+' If > 3 see if AD_in was > Analog by complimenting
+	If Working < 3 then TestOutOfReg2		
+' If compliment < 3 then all OK
+	GOTO OutOfReg1			' Not OK so out of regulation
+TestOutOfReg2:
+	If AD_in2 = Analog2 then DoneOOR2		
+' Test analog and AD_in 2 for settings
+	Working = Analog2 - AD_in2
+	If Working < 2 then DoneOOR2
+	Working = ~Working 
+	If Working < 2 then DoneOOR2
+	GOTO OutOfReg2
+DoneOOR2:
+	GOSUB	DisplayLCD		' Update display values
+	RETURN	
+'
+OutOfReg1:
+	HIGH	LED_control			' Light out of range LED
+	If AD_in1 < 129 then NoChangeAD_in1	' Make sure A/D is under 10V
+	AD_in1 = 128				
+NoChangeAD_in1:	
+	Working = (AD_in1 * 200) / 256	
+' Translate actual A/D value to ASCII
+	B_1 = (Working / 100) + 48		
+' Calculate ASCII hundreds digit from AD meas.
+	SEROUT FM,Baud,[Peeprom,$04,B_1]	
+' Program MEMKey EEPROM with new value
+	PAUSE	15
+	B_2 = (Working / 10)			
+' Calculate ASCII tens digit from AD meas.		
+	If B_2 < 10 then SkipSub1
+	B_2 = B_2 - 10
+SkipSub1:
+	B_2 = B_2 + 48
+	SEROUT FM,Baud,[Peeprom,$05,B_2]	
+' Program MEMKey EEPROM with new value		
+	PAUSE	15
+	If Working < 100 then SkipSub2
+	Working = Working - 100
+SkipSub2:
+'			
+	B_3 = (Working - ((Working/10)*10)) + 48	
+' Calculate ASCII ones digit from AD meas.
+	SEROUT FM,Baud,[Peeprom,$07,B_3]	
+' Program MEMKey EEPROM with new value
+	PAUSE	15
+	GOTO TestOutOfReg2
+		
+OutOfReg2:
+	If AD_in2 < 129 then NoChangeAD_in2	' Update V2 as V1 was updated
+	AD_in2 = 128
+NoChangeAD_in2:
+	Working = (AD_in2 * 200) / 256
+	B_1 = (Working / 100) + 48
+	SEROUT FM,Baud,[Peeprom,$0C,B_1]
+	PAUSE	15
+	B_2 = (Working / 10)
+	If B_2 < 10 then SkipSub3
+	B_2 = B_2 - 10
+SkipSub3:
+	B_2 = B_2 + 48
+	SEROUT FM,Baud,[Peeprom,$0D,B_2]
+	PAUSE	15
+	If Working < 100 then SkipSub4
+	Working = Working - 100
+SkipSub4:
+			
+	B_3 = (Working - ((Working/10)*10)) + 48
+	SEROUT FM,Baud,[Peeprom,$0F,B_3]
+	PAUSE	15
+	GOTO DoneOOR2
+'
+'*************************************************************************
+' The SetPotValue shifts the pots settings out to the DS1267-010.
+'
+SetPotValue:
+	HIGH CS_Pot
+	PULSOUT Clk,10
+	SHIFTOUT Dat,Clk,msbfirst,[DSpots\16]
+	LOW CS_Pot
+	PAUSE	10
+	RETURN
+'*************************************************************************
+' The ReadAnalogs routine reads in the actual output voltages from the 
+'ADC0831 8 bit A/Ds.
+' 
+ReadAnalogs:
+	LOW CS_ad1	 
+	SHIFTIN Dat,Clk,2,[AD_in1\9]
+	HIGH	CS_ad1
+'
+	LOW CS_ad2	 
+	SHIFTIN Dat,Clk,2,[AD_in2\9]
+	HIGH	CS_ad2
+	RETURN
+'*************************************************************************
+END:
+'

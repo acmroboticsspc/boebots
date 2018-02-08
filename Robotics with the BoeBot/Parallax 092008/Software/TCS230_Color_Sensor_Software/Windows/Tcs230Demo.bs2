@@ -1,0 +1,54 @@
+'{$STAMP BS2}
+ 
+'Define port pins
+
+EN	con	1
+A0	con	2
+S0	con	3
+S1	con	4
+S2	con	5
+S3	con	6
+nLED	con	7
+OUT	con	8
+
+'Define count periods for each color.
+'Adjust these for a reading just under 255
+'  for a white sheet of paper.
+
+pRED	con	12
+pGREEN	con	8
+pBLUE	con	6
+
+'Define variables for color results.
+
+RED	var	word
+GREEN	var	word
+BLUE	var	word
+
+'Program starts here.
+
+Start:	low	A0	'For Unit 0; use high for Unit 1.
+	high	S0	'Maximum output rate.
+	high	S1	'        "
+	low	nLED	'Turn on LED.
+	high	EN	'Enable sensor output.
+
+MainLp:	gosub	Color		'Get the color data.
+	debug	"R", dec3 RED	'Output it.
+	debug	" G", dec3 GREEN
+	debug	" B", dec3 BLUE
+	debug	cr
+	goto	MainLp		'Back for more.
+
+'Color: Read all three color components.
+
+Color:	low	S2		   'Address the red output.
+	low	S3
+	count	OUT, pRED, RED	   'Read the red component.
+	high	S3		   'Address the blue output.
+	count	OUT, pBLUE, BLUE   'Read the blue component.
+	high	S2		   'Address the green output.
+	count	OUT, pGREEN, GREEN 'Read the green component.
+	return
+
+	end

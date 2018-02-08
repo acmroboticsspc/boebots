@@ -1,0 +1,131 @@
+'Program Listing 49.1 - LCD_399.BS2 Graphic LCD Code
+'LCD_399.BS2 - This program is used to control a BS2 based
+'device to record bit maps to the RAMPack B and then relay
+'them to a Scott Edwards Electronics G12032 Graphics LCD.
+'
+'Variables used for RECORD mode
+RecordAddress	VAR	Word		'Address to start recording at
+RecHigh		VAR	RecordAddress.highbyte
+RecLow		VAR	RecordAddress.lowbyte
+StopAddress	VAR	Word		'Address where recording stopped
+StopHigh	VAR	StopAddress.highbyte	
+StopLow		VAR	StopAddress.lowbyte	
+'
+'Variables used for RUN mode
+DisplayEnd	VAR	Word		'Final display address
+DisEndHigh	VAR	DisplayEnd.highbyte	
+DisEndLow	VAR	DisplayEnd.lowbyte	
+BlockStart	VAR	Word		'Start address for current screen
+StartHigh	VAR	BlockStart.highbyte
+StartLow	VAR	BlockStart.lowbyte
+BlockEnd	VAR	Word		'End address for current screen	
+EndHigh	VAR	BlockEnd.highbyte
+EndLow		VAR	BlockEnd.lowbyte
+'
+'G12032 Graphic LCD constants
+ClrLCD		CON	12		'Clear LCD command
+BLiteOn		CON	14		'Turn on backlight LCD command
+'
+'I/O pin lables
+FMEN		CON	15		'FM enable
+FMBS2		CON	14		'FM on BS2	
+TMEN		CON	13		'TM enable
+TMBS2		CON	12		'TM on BS2
+R_W		CON	11		'RPB read/write pin
+MODE		CON	10		'RPB FIFO mode select pin	
+'
+'********************************************************************
+Initialize:
+	PAUSE	1000			'Allow time for power up	
+	HIGH	MODE			'Normal operation mode
+	HIGH	R_W			'Default to Read mode
+	HIGH	FMEN			'Disable outside serial data
+	HIGH	TMEN			'Disable serial data to LCD
+	PAUSE	100			
+	GOTO	MainProgram		
+'********************************************************************
+'RECORD MODE: The record subroutine records data from the serial
+'input device in the RAMPack B. The DIP switch settings for switches
+'1-6 determine where the recording starts at in RAM. While in
+'record mode the RAMPack B is placed in FIFO mode. This causes all
+'data sent in 8N1 9600 baud format to be stored sequentially in RAM.
+'Mutiple screens can be stored in RAM with the software for storing
+'bit maps at the "www.seetron.com" downloads website. Debug 
+'statements are used to indicate the start location of the recording
+'and the final location recorded to.
+'
+RecordMode:
+	RecordAddress = INL		'Find start address from DIP switch
+	RecordAddress = RecordAddress&%00111111
+	RecordAddress = RecordAddress * 483
+	Debug	"StartAddr = ", DEC RecordAddress,cr
+	Debug	"recording",cr	
+	SEROUT FMBS2,84,[$55,$05,RecHigh,RecLow]
+	INPUT	FMBS2
+	LOW	FMEN			'Enable outside serial data
+	LOW	R_W			'Place FIFO in write mode
+	LOW	MODE			'Place RPB in FIFO mode
+KeepRecording:
+	If IN6 = 0 Then KeepRecording 'Stay in FIFO until record ends
+	HIGH	MODE			'Exit FIFO mode
+	HIGH	R_W			'Default to FIFO Read mode 
+	HIGH	FMEN			'Disable outside serial data
+	PAUSE	10			 
+	SEROUT FMBS2,84,[$55,$07]	'Read end of FIFO pointer
+	SERIN	TMBS2,84,[StopHigh,StopLow]
+	Debug	"StopAddr = ", DEC StopAddress,cr
+	RETURN
+'********************************************************************
+'STOP MODE: The stop subroutine checks to see if the RECORD mode
+'is requested. If it is not desired then this routine returns to 
+'the main menu.
+' 
+StopMode:
+	If NOT IN6 = 0 Then NoRecordMode
+	GOSUB	RecordMode
+NoRecordMode:
+	RETURN
+'********************************************************************
+'RUN MODE: The run subroutine makes use of the DIP switches 1-6
+'in a manner similar to the RECORD mode. The DIP switches are read
+'and from this value the number of screens to display is determined.
+'The bit map data is sent to the G12032 LCD in 480 byte blocks.
+'When the DisplayEnd variable is equal to the EndBlock variable
+'then the RUN routine is exited. In between sending screens to the
+'LCD this routine checks for a STOP Mode by testing switch 8. If
+'a stop is requested then this routine is exited immediately.
+' 
+RunMode:
+	DisplayEnd = INL		'Read DIP switch
+	DisplayEnd = DisplayEnd&$003F	'zero all but switches 1-6
+	DisplayEnd = DisplayEnd + 1	'# screens = switch value + 1
+	DisplayEnd = DisplayEnd * 483	'Final address = # screens * 483
+	BlockStart = 0
+	LOW	TMEN			'Enable serial data to LCD
+FrameDelay:
+	PAUSE	700			'Allow time for data to get to LCD
+	If IN7 = 1 Then ContinueFrame	'Test for STOP mode
+	RETURN
+ContinueFrame:	
+	SEROUT TMBS2,84,[ClrLCD,BLiteOn]
+	SEROUT TMBS2,84,[$1B,"DG"]	'Send commands to G12032 LCD
+	INPUT	TMBS2
+	PAUSE	250
+	BlockEnd = BlockStart + 483	'Find end of bock address
+	BlockStart = BlockStart + 3	'Bypass stored command bytes
+	SEROUT	FMBS2,84,[$55,$02,StartHigh,StartLow,EndHigh,EndLow]
+	BlockStart = BlockEnd		'Update start address
+	If BlockStart = DisplayEnd then DisplayDone
+	GOTO FrameDelay
+DisplayDone:
+	PAUSE	550			'Allow time for data to get to LCD
+	HIGH	TMEN			'Disable serial data to LCD
+	RETURN
+'********************************************************************
+MainProgram:
+	If NOT IN7 = 0 Then NoStopMode 'Test for STOP mode
+	GOSUB	StopMode
+	goto	MainProgram
+NoStopMode:
+	GOSUB  RunMode			'Run display 
+	goto	MainProgram

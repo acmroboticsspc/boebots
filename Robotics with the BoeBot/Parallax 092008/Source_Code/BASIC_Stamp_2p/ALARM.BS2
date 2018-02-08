@@ -1,0 +1,71 @@
+' -----[ Title ]------------------------------------------------------
+'
+' File......alarm.BS2
+' Purpose...alarm-message by phone with BS2 and modem  
+' Author....Klaus Zahnert  
+' Started...95.12.10  
+' Updated...01.09.20 
+
+' -----[ Program Description ]----------------------------------------
+' alarm or any other importand event  is marked with one input-pin
+' going  high. In this case modem is initialised, makes connection with
+' dial and gives alarm to remote station. The connection between sta-
+' tions is tested by DCD-signal. Alternative alarm is giving for
+' connection is  failured  after dial.
+ 
+' -----[ Revision History ]-------------------------------------------
+'
+' 
+
+' -----[ Constants ]--------------------------------------------------
+'       
+         txdpin    con 6         'direct connect. (without line-drv.)
+         dcdpin    con 7         'connected with modem/DCD-output 
+         sirenpin  con 15        'output to siren/LED
+         alarm     con 4711      'typical number of alarm-message
+         bdmd      con 84+$4000  '9600 Baud,8n1, inverted mode 
+         delay     con 1000      'wait for branch
+
+' -----[ Variables ]--------------------------------------------------
+'       
+         contact   var   IN14    'pullup to Vcc with chain of closed
+					   'contacts to GND. Going high with 
+                                 'opening one ore more contacts
+					   
+
+' -----[ Initialization ]---------------------------------------------
+'       
+         DIRS = $8000            'output sirenpin
+         low sirenpin            'no siren
+
+
+
+' -----[ Main Code ]--------------------------------------------------
+'
+        
+start: if contact = 1  then message		'alarm if any switch off
+       goto start                        
+        
+message: serout txdpin,bdmd, ["ATZ",10,13]	 'modem standard init
+	pause 2000
+ 	serout txdpin,bdmd, ["ATDT 1234567",10,13] 'dial remote station
+ 	pause 2000 
+
+ 	serout txdpin\dcdpin,bdmd,delay,siren,["ALARM = ",dec alarm,10,13]
+						   'out alarm-message
+                                                    
+ 	pause 3000                                      
+ 	serout txdpin,bdmd,10,["+++"]			 'ret. to command-mode
+ 	pause 3000
+ 	serout txdpin,bdmd,["ATH",10,13]		 'hang up 
+         
+ 	goto start         
+           
+siren:high 15						 'siren/LED on 
+	goto start    		'try again alarm-message if contact = high
+                        
+end          
+
+' -----[ Subroutines ]------------------------------------------------
+'no
+

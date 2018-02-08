@@ -1,0 +1,636 @@
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... QV306M4P.BS2
+' Purpose... Quadravox QV306M4P (preprogrammed) Demonstration
+' Author.... Michel Stella (Quadravox) and Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 
+' Updated... 6 January 2003 
+' Updated by.Stephen Swanson
+' {$STAMP BS2}
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates the Quadravox QV306M4P, preprogrammed
+' sound module.  The "P" version contains 240 professionally recorded
+' phrases (numbers, letters and technical words).
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+' 1/6/03 : Updated by Stephen Swanson
+'               - improved numeric parsing algorithms
+'               - added signed number capability
+'               - added stored sentence subroutine
+'		- corrected pin out error
+
+
+' -----[ Connections ]-----------------------------------------------------
+'
+' QV306M4P Connections:
+'
+'  1 (RxD)		Stamp.P1
+'  2 (TxD)		Stamp.P2
+'  3 (Busy)		Stamp.P3
+'  4 (BR1)		Ground
+'  5 (BR0)		Ground
+'  7 (+5)		+5 volts
+'  8 (Gnd)		Ground
+' 14 (Reset)		Stamp.P0
+' 15 (Sp-)		8 ohm speaker -
+' 16 (Sp+)		8 ohm speaker +
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+QV_RST		CON	0			' QV306M4.14
+QV_RX		CON	1			' QV306M4.1
+QV_TX		CON	2			' QV306M4.2
+QV_BUSY		VAR	In3			' QV306M4.3
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+T2400		CON	396			' 2400 baud, true
+IsBusy		CON	0
+
+' ** QV306M4 Command Set **
+
+QV_Direct	CON	$F0			' QV modes
+QV_Stop		CON	$F6
+QV_Sleep	CON	$F8
+QV_Volume	CON	$FC
+QV_Reset	CON	$FD			' software reset
+QV_Rev		CON	$FE			' module revision
+QV_Type		CON	$FF			' module type
+
+
+' -----[ Vocabulary ]------------------------------------------------------
+'
+_zero		CON	0			' message # in QV306M4P
+_one		CON	1
+_two		CON	2
+_three		CON	3
+_four		CON	4
+_five		CON	5
+_six		CON	6
+_seven		CON	7
+_eight		CON	8
+_nine		CON	9
+_ten		CON	10
+_eleven		CON	11
+_twelve		CON	12
+_thirteen	CON	13
+_fourteen	CON	14
+_fifteen	CON	15
+_sixteen	CON	16
+_seventeen	CON	17
+_eighteen	CON	18
+_nineteen	CON	19
+_twenty		CON	20
+_thirty		CON	21
+_forty		CON	22
+_fifty		CON	23
+_sixty		CON	24
+_seventy	CON	25
+_eighty		CON	26
+_ninety		CON	27
+_hundred	CON	28
+_thousand	CON	29
+_million	CON	30
+_billion	CON	31
+_2000		CON	32			' "two thousand"
+_am		CON	33
+_pm		CON	34
+_a		CON	35
+_alpha		CON	36
+_b		CON	37
+_bravo		CON	38
+_c		CON	39
+_charlie	CON	40
+_d		CON	41
+_delta		CON	42
+_e		CON	43
+_echo		CON	44
+_f		CON	45
+_fox		CON	46
+_g		CON	47
+_golf		CON	48
+_h		CON	49
+_hotel		CON	50
+_i		CON	51
+_india		CON	52
+_j		CON	53
+_juliet		CON	54
+_k		CON	55
+_kilo		CON	56
+_l		CON	57
+_lima		CON	58
+_m		CON	59
+_mike		CON	60
+_n		CON	61
+_november1	CON	62
+_o		CON	63
+_oscar		CON	64
+_p		CON	65
+_papa		CON	66
+_q		CON	67
+_quebec		CON	68
+_r		CON	69
+_romeo		CON	70
+_s		CON	71
+_sierra		CON	72
+_t		CON	73
+_tango		CON	74
+_u		CON	75
+_uniform	CON	76
+_v		CON	77
+_victor		CON	78
+_w		CON	79
+_whiskey	CON	80
+_x		CON	81
+_xray		CON	82
+_y		CON	83
+_yankee		CON	84
+_z		CON	85
+_zulu		CON	86
+_monday		CON	87
+_tuesday	CON	88
+_wednesday	CON	89
+_thursday	CON	90
+_friday		CON	91
+_saturday	CON	92
+_sunday		CON	93
+_january	CON	94
+_february	CON	95
+_march		CON	96
+_april		CON	97
+_may		CON	98
+_june		CON	99
+_july		CON	100
+_august		CON	101
+_september	CON	102
+_october	CON	103
+_november2	CON	104
+_december	CON	105
+_amp		CON	106
+_amps		CON	107
+_bars		CON	108
+_bit		CON	109
+_bits		CON	110
+_black		CON	111
+_blue		CON	112
+_brown		CON	113
+_byte		CON	114
+_bytes		CON	115
+_cable		CON	116
+_celcius	CON	117
+_centimeter	CON	118
+_centimetrs	CON	119
+_cents		CON	120
+_chip		CON	121
+_connector	CON	122
+_cubic		CON	123
+_degrees	CON	124
+_divided_by	CON	125
+_dollars	CON	126
+_down		CON	127
+_equals		CON	128
+_fahrenheit	CON	129
+_farads		CON	130
+_feet		CON	131
+_foot		CON	132
+_gallons	CON	133
+_gigahertz	CON	134
+_go		CON	135
+_gold		CON	136
+_good_aft	CON	137			' "good afternoon"
+_good_morn	CON	138			' "good morning"
+_goodbye	CON	139
+_gram		CON	140
+_grams		CON	141
+_gray		CON	142
+_green		CON	143
+_hello		CON	144
+_hertz		CON	145
+_hour		CON	146
+_hours		CON	147
+_inch		CON	148
+_inches		CON	149
+_indoor_tmp	CON	150			' "indoor temperature"
+_is		CON	151
+_key		CON	152
+_kilobit	CON	153
+_kilobits	CON	154
+_kilobyte	CON	155
+_kilohm		CON	156
+_kilometer	CON	157
+_kilometers	CON	158
+_kiloohms	CON	159
+_light		CON	160
+_liters		CON	161
+_mega		CON	162
+_megabytes	CON	163
+_megaohms	CON	164
+_megohms	CON	165
+_meter		CON	166
+_meters		CON	167
+_micro		CON	168
+_micron		CON	169
+_microns	CON	170
+_midnight	CON	171
+_mile		CON	172
+_miles		CON	173
+_milli		CON	174
+_minus		CON	175
+_minute		CON	176
+_minutes	CON	177
+_noon 		CON	178
+_oclock		CON	179
+_of_Merc 	CON	180			' "of Mercury"
+_of_Water	CON	181
+_ohms 		CON	182
+_orange		CON	183
+_pascals	CON	184
+_per_hour 	CON	185
+_per		CON	186
+_percent	CON	187
+_pico 		CON	188
+_pink		CON	189
+_plus		CON	190
+_point		CON	191
+_pound		CON	192
+_pounds		CON	193
+_psi		CON	194
+_purple		CON	195
+_rpm		CON	196
+_red		CON	197
+_second		CON	198
+_seconds 	CON	199
+_silver 	CON	200
+_square		CON	201
+_start		CON	202
+_stop		CON	203
+_switch		CON	204
+_tan		CON	205
+_temp_is	CON	206			' "temperature is"
+_t_cur_t_is	CON	207			' "the current time is"
+_t_currnt	CON	208			' "the current"
+_t_outside	CON	209			' "the outside"
+_t_speed_is	CON	210			' "the speed is"
+_the		CON	211
+_thee 		CON	212
+_times		CON	213
+_up		CON	214
+_volt		CON	215
+_volts		CON	216
+_white		CON	217
+_wire		CON	218
+_yard 		CON	219
+_yards 		CON	220
+_yellow		CON	221
+_y_spd_is	CON	222			' "your speed is"
+_the_date	CON	223
+_is_more	CON	224
+_pls_wait	CON	225			' "please wait"
+_please		CON	226
+_is_less	CON	227
+_thank_you	CON	228
+_than		CON	229
+_and		CON	230
+_are_closed	CON	231
+_are_down	CON	232
+_are_off	CON	233
+_are_on		CON	234
+_are_open	CON	235
+_are_up		CON	236
+_is_closed	CON	237
+_is_down	CON	238
+_is_off		CON	239
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+phrase		VAR	Byte			' phrase to say
+command		VAR	Byte			' command to QV306
+addr		VAR	Word
+result		VAR	Word
+test		VAR	Nib
+temp		VAR	Word
+
+qvNumber	VAR	Word
+qvDigit		VAR	Byte			' 0..99
+
+qvDay		VAR	Nib			' 0 = Monday, 6 = Sunday
+qvDate		VAR	Byte			' 0..31
+qvMonth		VAR	Nib			' 1 = Jan, 12 = Dec
+qvYear		VAR	Byte			' 0..99
+qvCentury	VAR	Bit			' 0 = 19xx, 1 = 20xx
+
+qvHours		VAR	Nib			' 1..12
+qvMinutes	VAR	Byte			' 0..59
+qvAMPM		VAR	Bit			' 0 = PM, 1 = PM
+
+qvVolume	VAR	Byte			' 0..31
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+Sentence1	DATA	_two,_gallons,_equals,_seven,_point,_six,_liters,$FF
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Splash_Screen:
+  DEBUG CLS
+  DEBUG "QV306M4P Demonstration",CR
+  DEBUG "----------------------",CR
+  DEBUG "Initializing...",CR
+
+Initialize:
+  LOW QV_RST					' reset the QV306M4
+  PAUSE 100
+  HIGH QV_RST
+  PAUSE 2000					' let QV306 count phrases
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Show_Device:
+  GOSUB QV_GetType
+  DEBUG "Type/Rev: ",HEX2 result,"/"
+  GOSUB QV_GetRevision
+  DEBUG HEX2 result,CR,CR
+
+Unsigned_Demo:
+  DEBUG "Unsigned numbers: "
+  FOR test = 0 TO 4
+    LOOKUP test,[0,7,19,400,65535],qvNumber
+    DEBUG DEC qvNumber,"  "
+    GOSUB Say_Unsigned
+    PAUSE 500
+  NEXT
+  DEBUG CR
+  PAUSE 2000
+
+Signed_Demo:
+  DEBUG "Signed numbers: "
+  FOR test = 0 TO 4
+    LOOKUP test,[-8,-20,-258,-5000,-30207],qvNumber
+    DEBUG SDEC qvNumber,"  "
+    GOSUB Say_Signed
+    PAUSE 500
+  NEXT
+  DEBUG CR
+  PAUSE 2000
+
+Time_Demo:
+  qvHours = 10
+  qvMinutes = 7
+  qvAMPM = 0					' AM
+  DEBUG "Time: ",DEC qvHours,":",DEC2 qvMinutes," "
+  DEBUG "A"+(qvAMPM * 15),"M",CR
+  GOSUB Say_Time12
+  PAUSE 2000
+
+Date_Demo:
+  qvDay = 3					' Thursday		
+  qvDate = 29
+  qvMonth = 3
+  qvYear = 1
+  qvCentury = 1
+  DEBUG "Day: ",DEC qvDay,CR
+  DEBUG "Date: M=",DEC qvMonth," D=",DEC qvDate
+  DEBUG " Y=",DEC (19 + qvCentury),DEC2 qvYear,CR
+  GOSUB Say_Day_And_Date
+  PAUSE 2000
+
+Sentence_Demo:
+  DEBUG "Sentence: Two gallons equals 7.6 liters",CR
+  addr = Sentence1
+  GOSUB Say_Sentence
+  PAUSE 2000
+
+Volume_Demo:
+  DEBUG "Volume demo"
+  phrase = _hello
+  FOR qvVolume = 5 TO 30 STEP 5
+    GOSUB Set_Volume
+    GOSUB Say_Phrase
+    DEBUG "."
+  NEXT
+  PAUSE 2000
+
+  DEBUG CR,CR,"Putting module to sleep",CR
+  SEROUT QV_RX,T2400,[QV_Sleep]
+  DEBUG "Done."
+  
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+' **********************
+' Get device information
+' **********************
+'
+QV_GetType:
+  result = 0
+  SEROUT QV_RX,T2400,[QV_Type]
+  SERIN  QV_TX,T2400,2000,NoType,[result]
+NoType:
+  RETURN
+
+QV_GetRevision:
+  result = 0
+  SEROUT QV_RX,T2400,[QV_Rev]
+  SERIN  QV_TX,T2400,2000,NoRev,[result]
+NoRev:
+  RETURN
+
+
+' ************************
+' Say an individual phrase
+' ************************
+'
+Say_Phrase:
+  IF (QV_Busy = IsBusy) THEN Say_Phrase	' wait until not busy
+  SEROUT QV_RX,T2400,[phrase]			' say the phrase
+  RETURN
+
+
+' **********************************************
+' Say a sentence
+' - "addr" holds starting EE address of sentence
+' - speaks until phrase > 239
+' **********************************************
+'
+Say_Sentence:
+  READ addr,phrase				' get a phrase from EEPROM
+  IF (phrase > 239) THEN Done_Talking		' $FF is EOM flag
+
+QV306_Busy1:
+  IF (QV_Busy = IsBusy) THEN QV306_Busy1	' wait for Busy to release
+  SEROUT QV_RX,T2400,[phrase]			' say the phrase
+  addr = addr + 1				' point to next phrase
+  GOTO Say_Sentence				' say it
+
+Done_Talking:
+  RETURN
+
+
+' **********************
+' Say an unsigned number
+' **********************
+'
+Say_Unsigned:
+  temp = qvNumber
+
+Say_Number:
+  qvDigit = temp / 1000				' get thousands
+  IF (qvDigit = 0) THEN Say_100s
+  GOSUB Say_Value_XX
+  phrase = _thousand
+  GOSUB Say_Phrase
+
+Say_100s:
+  qvDigit = temp // 1000 / 100			' get hundreds
+  IF (qvDigit = 0) THEN Say_10s
+  GOSUB Say_Val_0TO19
+  phrase = _hundred
+  GOSUB Say_Phrase  
+
+Say_10s:
+  qvDigit = temp // 100				' get tens and ones
+  IF (qvDigit = 0) & (qvNumber > 0) THEN Say_Num_Done
+  GOSUB Say_Value_XX			
+
+Say_Num_Done:
+  RETURN
+
+
+' *******************
+' Say a signed number
+' *******************
+'
+Say_Signed:
+  IF (qvNumber.Bit15 = 0) THEN Say_Unsigned
+  phrase = _minus
+  GOSUB Say_Phrase
+  temp = ABS(qvNumber)
+  GOTO Say_Number
+
+
+' ********************
+' Say a 2-digit number
+' ********************
+'
+Say_Value_XX:
+  IF (qvDigit < 20) THEN Say_Val_0TO19		' skip if less than 20
+  phrase = (qvDigit / 10) + _eighteen		' calculate 10s message #
+  GOSUB Say_Phrase				' say 10s
+  qvDigit = qvDigit // 10			' calculate 1s message #
+  IF (qvDigit = 0) THEN Say_Val_Done		' skip if zero
+
+Say_Val_0TO19:
+  phrase = qvDigit
+  pause 1000
+  GOSUB Say_Phrase
+
+Say_Val_Done:
+  RETURN
+
+
+' ****************
+' Say 12-hour time
+' ****************
+'
+Say_Time12:
+  IF (qvHours < 1) OR (qvHours > 12) THEN Skip_Time
+  IF (qvMinutes > 59) THEN Skip_Time
+
+  phrase = _t_cur_t_is				' "The current time is..."
+  GOSUB Say_Phrase
+
+Say_Hours:
+  qvDigit = qvHours
+  GOSUB Say_Value_XX
+
+Say_Oh:
+  IF (qvMinutes > 9) THEN Say_Minutes
+  phrase = _o					' as in 3:09 (three-oh-nine)
+  GOSUB Say_Phrase
+
+Say_Minutes:
+  qvDigit = qvMinutes
+  GOSUB Say_Value_XX
+
+Say_AMPM:
+  phrase = _am + qvAMPM
+  GOSUB Say_Phrase
+
+Skip_Time:
+  RETURN
+
+
+' ***************************
+' Say the day and date
+' - no range checking on date
+' - 1900 = "19 hundred"
+' - 190x = "19-oh-x"
+' ***************************
+'
+Say_Day_And_Date:
+  IF (qvDay > 6) THEN Say_Month			' skip day if out-of-range
+  phrase = qvDay + _monday
+  GOSUB Say_Phrase
+  PAUSE 250
+
+Say_Month:
+  phrase = _january + qvMonth - 1
+  GOSUB Say_Phrase
+
+Say_Date:
+  qvDigit = qvDate				' 0..31
+  GOSUB Say_Value_XX
+
+Say_Year:
+  IF (qvCentury = 1) THEN Year2K
+  phrase = _nineteen
+  GOSUB Say_Phrase
+
+Check_Year00:
+  IF (qvYear > 0) THEN Check_Year0X
+  phrase = _hundred
+  GOSUB Say_Phrase
+  GOTO Year_Done
+  
+Check_Year0X:
+  IF (qvYear > 9) THEN Say_YearXX
+  phrase = _o					' say "oh"
+  GOSUB Say_Phrase
+  GOTO Say_YearXX
+
+Year2K:
+  phrase = _2000
+  GOSUB Say_Phrase
+
+Say_YearXX:
+  qvDigit = qvYear
+  GOSUB Say_Value_XX
+
+Year_Done:
+  RETURN
+
+  
+' *****************
+' Set module volume
+' *****************
+'
+Set_Volume:
+  IF (QV_Busy = IsBusy) THEN Set_Volume		' wait for Busy to release
+  SEROUT QV_RX,T2400,[QV_Volume]
+  SEROUT QV_RX,T2400,[qvVolume // 32]		' volume range is 0..31
+  RETURN
+

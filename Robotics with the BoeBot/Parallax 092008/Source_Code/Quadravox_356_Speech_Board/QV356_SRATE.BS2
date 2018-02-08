@@ -1,0 +1,475 @@
+' ==============================================================================
+'
+'   File...... QV356_SRATE.BS2
+'   Purpose... QV356M4 Sample/Playback Rate Demonstration
+'   Author.... Parallax
+'   E-mail.... stamptech@parallaxinc.com
+'   Started...
+'   Updated... 01 MAY 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+
+' This program demonstrates the controlled recording a playback capability of
+' the QV356M4 BOE-Bot Speech Board.
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+'
+Term_SIO        CON     16                      ' DEBUG terminal I/O
+QV_SIO          CON     11                      ' serial I/O for QV356
+QV_Busy         VAR     In11                    ' high when QV356 is busy
+Mix_Out         CON     10                      ' output to QV356 mixer
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+'
+QV_Direct       CON     $F0                     ' play mode
+QV_MixOn        CON     $F1                     ' enable mix of pin 10 sounds
+QV_SetRate      CON     $F2                     ' set sample rate (0..3)
+QV_MixOff       CON     $F3                     ' disable mix of pin 10 sounds
+QV_Record       CON     $F4                     ' record mode (do note use)
+QV_PlayUsr      CON     $F5                     ' play user message
+QV_Stop         CON     $F6                     ' stop playback
+QV_RecUsr       CON     $F7                     ' record user message
+QV_Sleep        CON     $F8                     ' power down
+QV_OpenStr      CON     $F9                     ' open string
+QV_CloseStr     CON     $FA                     ' close string
+QV_PlayStr      CON     $FB                     ' play string
+QV_Volume       CON     $FC                     ' set volume (0..7)
+QV_Reset        CON     $FD                     ' software reset
+
+QV_80k          CON     $00                     '  - 8.0 kHz (best quality)
+QV_64k          CON     $01                     '  - 6.4 kHz
+QV_53k          CON     $02                     '  - 5.3 kHz
+QV_40k          CON     $03                     '  - 4.0 kHz
+
+QV_RecOn        CON     $01                     ' start recording
+QV_RecOff       CON     $00                     ' stop recording
+
+N2400           CON     16780                   ' 2400-8-N-1, inverted (QV356)
+T9600           CON     84                      ' 9600-8-N-1 (matches DEBUG)
+
+MoveTo          CON     2                       ' move cursor to x,y
+LF              CON     10                      ' line feed
+ClrRt           CON     11                      ' clear to right
+ClrDown         CON     12                      ' clear down
+
+Std_Volume      CON     4                       ' good volume for demo
+
+
+' ------------------------------------------------------------------------------
+' QV356M4 Standard Vocabulary
+' ------------------------------------------------------------------------------
+
+_0              CON       0                     ' 0f.wav
+_1              CON       1                     ' 1f.wav
+_2              CON       2                     ' 2f.wav
+_3              CON       3                     ' 3f.wav
+_4              CON       4                     ' 4f.wav
+_5              CON       5                     ' 5f.wav
+_6              CON       6                     ' 6f.wav
+_7              CON       7                     ' 7f.wav
+_8              CON       8                     ' 8f.wav
+_9              CON       9                     ' 9f.wav
+_10             CON      10                     ' 10f.wav
+_11             CON      11                     ' 11f.wav
+_12             CON      12                     ' 12f.wav
+_13             CON      13                     ' 13f.wav
+_14             CON      14                     ' 14f.wav
+_15             CON      15                     ' 15f.wav
+_16             CON      16                     ' 16f.wav
+_17             CON      17                     ' 17f.wav
+_18             CON      18                     ' 18f.wav
+_19             CON      19                     ' 19f.wav
+_20             CON      20                     ' 20f.wav
+_30             CON      21                     ' 30f.wav
+_40             CON      22                     ' 40f.wav
+_50             CON      23                     ' 50f.wav
+_60             CON      24                     ' 60f.wav
+_70             CON      25                     ' 70f.wav
+_80             CON      26                     ' 80f.wav
+_90             CON      27                     ' 90f.wav
+_100            CON      28                     ' 100seq.wav
+_1000           CON      29                     ' 1000seq.wav
+_million        CON      30                     ' 10e6seq.wav
+_billion        CON      31                     ' 10e9seq.wav
+_2000           CON      32                     ' 2000.wav
+_about          CON      33                     ' about.wav
+_accelerate     CON      34                     ' accelerate.wav
+_accelerating   CON      35                     ' accelerating.wav
+_acquire        CON      36                     ' acquire.wav
+_acquiring      CON      37                     ' acquiring.wav
+_activated      CON      38                     ' activated.wav
+_active         CON      39                     ' active.wav
+_aft            CON      40                     ' aft.wav
+_all            CON      41                     ' all.wav
+_am             CON      42                     ' am.wav
+_amps           CON      43                     ' amps.wav
+_area           CON      44                     ' area.wav
+_assistance     CON      45                     ' assistance.wav
+_attempted      CON      46                     ' attempted.wav
+_attempting     CON      47                     ' attempting.wav
+_attempts       CON      48                     ' attempts.wav
+_back           CON      49                     ' back.wav
+_base           CON      50                     ' base.wav
+_battery        CON      51                     ' battery.wav
+_begin          CON      52                     ' begin.wav
+_bit            CON      53                     ' bit.wav
+_bits           CON      54                     ' bits.wav
+_bump           CON      55                     ' bump.wav
+_byte           CON      56                     ' byte.wav
+_bytes          CON      57                     ' bytes.wav
+_calibrate      CON      58                     ' calibrate.wav
+_calibrating    CON      59                     ' calibrating.wav
+_calibration    CON      60                     ' calibration.wav
+_can            CON      61                     ' can.wav
+_centimeters    CON      62                     ' centimeters.wav
+_charge         CON      63                     ' charge.wav
+_charging       CON      64                     ' charging.wav
+_check          CON      65                     ' check.wav
+_clean          CON      66                     ' clean.wav
+_close          CON      67                     ' close.wav
+_close1         CON      68                     ' close1.wav
+_closed         CON      69                     ' closed.wav
+_closing        CON      70                     ' closing.wav
+_complete       CON      71                     ' complete.wav
+_connect        CON      72                     ' connect.wav
+_connecting     CON      73                     ' connecting.wav
+_connection     CON      74                     ' connection.wav
+_corrupt        CON      75                     ' corrupt.wav
+_course         CON      76                     ' course.wav
+_dark           CON      77                     ' dark.wav
+_deactivated    CON      78                     ' deactivated.wav
+_deactivating   CON      79                     ' deactivating.wav
+_decelerate     CON      80                     ' decelerate.wav
+_decelerating   CON      81                     ' decelerating.wav
+_decrease       CON      82                     ' decrease.wav
+_decreasing     CON      83                     ' decreasing.wav
+_detect         CON      84                     ' detect.wav
+_detected       CON      85                     ' detected.wav
+_dirty          CON      86                     ' dirty.wav
+_disabled       CON      87                     ' disabled.wav
+_disabling      CON      88                     ' disabling.wav
+_down           CON      89                     ' down.wav
+_empty          CON      90                     ' empty.wav
+_enabled        CON      91                     ' enabled.wav
+_enabling       CON      92                     ' enabling.wav
+_encoder        CON      93                     ' encoder.wav
+_end            CON      94                     ' end.wav
+_error          CON      95                     ' error.wav
+_excuse_me      CON      96                     ' excuse me.wav
+_fail           CON      97                     ' fail.wav
+_failed         CON      98                     ' failed.wav
+_fast           CON      99                     ' fast.wav
+_feet           CON     100                     ' feet.wav
+_fire           CON     101                     ' fire.wav
+_flame          CON     102                     ' flame.wav
+_follow         CON     103                     ' follow.wav
+_following      CON     104                     ' following.wav
+_for            CON     105                     ' for.wav
+_forward        CON     106                     ' forward.wav
+_found          CON     107                     ' found.wav
+_full           CON     108                     ' full.wav
+_functioning    CON     109                     ' functioning.wav
+_good_bye       CON     110                     ' good-bye.wav
+_halt           CON     111                     ' halt.wav
+_has            CON     112                     ' has.wav
+_heat           CON     113                     ' heat.wav
+_hello          CON     114                     ' hello.wav
+_help           CON     115                     ' help.wav
+_high           CON     116                     ' high.wav
+_I              CON     117                     ' I.wav
+_in             CON     118                     ' in.wav
+_inches         CON     119                     ' inches.wav
+_increase       CON     120                     ' increase.wav
+_increasing     CON     121                     ' increasing.wav
+_infrared       CON     122                     ' infrared.wav
+_input          CON     123                     ' input.wav
+_inside         CON     124                     ' inside.wav
+_is             CON     125                     ' is.wav
+_left           CON     126                     ' left.wav
+_leg            CON     127                     ' leg.wav
+_legs           CON     128                     ' legs.wav
+_light          CON     129                     ' light.wav
+_line           CON     130                     ' line.wav
+_locate         CON     131                     ' locate.wav
+_located        CON     132                     ' located.wav
+_locating       CON     133                     ' locating.wav
+_lost           CON     134                     ' lost.wav
+_low            CON     135                     ' low.wav
+_lower          CON     136                     ' lower.wav
+_main           CON     137                     ' main.wav
+_maximum        CON     138                     ' maximum.wav
+_meters         CON     139                     ' meters.wav
+_method         CON     140                     ' method.wav
+_minimum        CON     141                     ' minimum.wav
+_mode           CON     142                     ' mode.wav
+_motor          CON     143                     ' motor.wav
+_motors         CON     144                     ' motors.wav
+_moving         CON     145                     ' moving.wav
+_my             CON     146                     ' my.wav
+_need           CON     147                     ' need.wav
+_no             CON     148                     ' no.wav
+_not            CON     149                     ' not.wav
+_object         CON     150                     ' object.wav
+_objects        CON     151                     ' objects.wav
+_of             CON     152                     ' of.wav
+_okay           CON     153                     ' okay.wav
+_oops           CON     154                     ' oops!.wav
+_open           CON     155                     ' open.wav
+_opening        CON     156                     ' opening.wav
+_operate        CON     157                     ' operate.wav
+_operating      CON     158                     ' operating.wav
+_opponent       CON     159                     ' opponent.wav
+_ouch           CON     160                     ' ouch!.wav
+_output         CON     161                     ' output.wav
+_outside        CON     162                     ' outside.wav
+_passed         CON     163                     ' passed.wav
+_point          CON     164                     ' point.wav
+_possible       CON     165                     ' possible.wav
+_primary        CON     166                     ' primary.wav
+_probable       CON     167                     ' probable.wav
+_program        CON     168                     ' program.wav
+_program1       CON     169                     ' program1.wav
+_proper         CON     170                     ' proper.wav
+_properly       CON     171                     ' properly.wav
+_proximity      CON     172                     ' proximity.wav
+_raise          CON     173                     ' raise.wav
+_ready          CON     174                     ' ready.wav
+_rear           CON     175                     ' rear.wav
+_reverse        CON     176                     ' reverse.wav
+_right          CON     177                     ' right.wav
+_room           CON     178                     ' room.wav
+_run            CON     179                     ' run.wav
+_running        CON     180                     ' running.wav
+_scan           CON     181                     ' scan.wav
+_scanning       CON     182                     ' scanning.wav
+_search         CON     183                     ' search .wav
+_searching      CON     184                     ' searching.wav
+_secondary      CON     185                     ' secondary.wav
+_seek           CON     186                     ' seek.wav
+_seeking        CON     187                     ' seeking.wav
+_sensor         CON     188                     ' sensor.wav
+_sensors        CON     189                     ' sensors.wav
+_servo          CON     190                     ' servo.wav
+_servos         CON     191                     ' servos.wav
+_slipping       CON     192                     ' slipping.wav
+_slow           CON     193                     ' slow.wav
+_slowing        CON     194                     ' slowing.wav
+_sonar          CON     195                     ' sonar.wav
+_stall          CON     196                     ' stall.wav
+_stalled        CON     197                     ' stalled.wav
+_station        CON     198                     ' station.wav
+_stop           CON     199                     ' stop.wav
+_stuck          CON     200                     ' stuck.wav
+_subject        CON     201                     ' subject.wav
+_system         CON     202                     ' system.wav
+_systems        CON     203                     ' systems.wav
+_target         CON     204                     ' target.wav
+_to             CON     205                     ' to.wav
+_track          CON     206                     ' track.wav
+_tracks         CON     207                     ' tracks.wav
+_turn           CON     208                     ' turn.wav
+_turning        CON     209                     ' turning.wav
+_uh_oh          CON     210                     ' uh_oh.wav
+_up             CON     211                     ' up.wav
+_volts          CON     212                     ' volts.wav
+_wall           CON     213                     ' wall.wav
+_wheel          CON     214                     ' wheel.wav
+_wheels         CON     215                     ' wheels.wav
+_whisker        CON     216                     ' whisker.wav
+_will_i_dream   CON     217                     ' will I dream.wav
+_word           CON     218                     ' word.wav
+_words          CON     219                     ' words.wav
+
+LastWord        CON     219
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+'
+response        VAR     Byte                    ' menu response
+qvData          VAR     Byte                    ' data for module
+idx             VAR     Byte                    ' loop counter
+eeAddr          VAR     Word                    ' ee address of word
+rate            VAR     Nib                     ' current sample rate
+rate80          VAR     rate.Bit0
+rate64          VAR     rate.Bit1
+rate53          VAR     rate.Bit2
+rate40          VAR     rate.Bit3
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+Sent1           DATA    _scanning, _operating, _system, _for, _error, $FF
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Initialize:
+  PAUSE 250                                     ' let DEBUG open
+  DEBUG CLS
+  DEBUG "Initializing QV356", CR
+  SEROUT QV_SIO, N2400, [QV_Reset]              ' reset sound board
+  rate80 = 1                                    ' default sample rate
+  PAUSE 500                                     ' required -- do not change
+  SEROUT QV_SIO, N2400, [QV_Volume, Std_Volume] ' set initial volume
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  DEBUG CLS
+  DEBUG "=============================================", CR
+  DEBUG " QV356M4 Sample / Playback Rate Demonstration ", CR
+  DEBUG "=============================================", CR
+  DEBUG CR
+  DEBUG "[1] 8.0 kHz (", 32 + (rate80 * 10),")", CR
+  DEBUG "[2] 6.4 kHz (", 32 + (rate64 * 10),")", CR
+  DEBUG "[3] 5.3 kHz (", 32 + (rate53 * 10),")", CR
+  DEBUG "[4] 4.0 kHz (", 32 + (rate40 * 10),")", CR
+  DEBUG "[5] Play Sentence (uses standard vocabulary)", CR
+  DEBUG "[6] Record User Message", CR
+  DEBUG "[7] Playback User Message", CR
+  DEBUG CR
+  DEBUG "--> "
+
+  SERIN Term_SIO, T9600, [response]
+  PAUSE 500
+  LOOKDOWN response, ["1234567"], response
+  IF (response > 6) THEN Main
+  IF (response < 4) THEN Set_Rate
+  BRANCH (response - 4), [Sentence, Record, Playback]
+  GOTO Main
+
+Set_Rate:
+  rate = 1 << response
+  SEROUT QV_SIO, N2400, [QV_SetRate, response]  ' set new rate
+  PAUSE 5
+  GOTO Main
+
+
+Sentence:
+  DEBUG CLS
+  DEBUG "Playing sentence at selected rate."
+  eeAddr = Sent1
+  GOSUB Say_Sentence
+  GOSUB Wait_Until_Not_Busy
+  GOTO Main
+
+
+Record:
+  DEBUG CLS
+  DEBUG "Record user message at selected rate.", CR, CR
+  DEBUG "Press [Space] to start recording", CR
+  DEBUG "-- wait for LED to light solid", CR
+  DEBUG "-- press any key to stop", CR, CR
+
+  SERIN Term_SIO, T9600, [response]             ' wait for [Space]
+  IF (response <> 32) THEN Record
+  idx = 0
+  SEROUT QV_SIO, N2400, [QV_RecUsr]             ' start recording
+  PAUSE 5
+
+Rec_Wait:
+  idx = idx + 1                                 ' update coutner
+  IF (idx = 240) THEN Rec_Stop                  ' allow up to 12 seconds
+  SERIN Term_SIO, T9600, 50, Rec_Wait, [response]
+
+Rec_Stop:
+  SEROUT QV_SIO, N2400, [QV_RecOff]             ' stop recording
+  PAUSE 5
+  GOTO Main
+
+
+Playback:
+  DEBUG CLS
+  DEBUG "Playing user message at selected rate"
+  SEROUT QV_SIO, N2400, [QV_PlayUsr]
+  PAUSE 5
+  GOSUB Wait_Until_Not_Busy
+  GOTO Main
+
+  END
+
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+' ****************************************************
+' Makes serial line an input and checks for Busy state
+' -- this line will be low when not busy
+' ****************************************************
+
+Wait_Until_Not_Busy:
+  INPUT QV_SIO                                  ' make comm an input
+  IF QV_Busy THEN Wait_Until_Not_Busy           ' wait until busy goes low
+  RETURN
+
+
+' ************************************
+' Say a single word
+' -- make sure QV356 is in Direct Mode
+'    before calling this routine
+' ************************************
+
+Say_Word:
+  GOSUB Wait_Until_Not_Busy
+  IF (qvData > LastWord) THEN Say_Word_Exit     ' say only valid words
+  SEROUT QV_SIO, N2400, [qvData]                ' say word
+
+Say_Word_Exit:
+  RETURN
+
+
+' **************************************
+' Say a sentence
+' -- point to sentence in EE with eeAddr
+' -- limit is 40 words (no checking)
+' **************************************
+
+Say_Sentence:
+  GOSUB Wait_Until_Not_Busy
+  SEROUT QV_SIO, N2400, [QV_OpenStr]            ' open string buffer
+  PAUSE 5
+
+Get_Word:
+  READ eeAddr, qvData                           ' read word from sentence data
+  IF (qvData = $FF) THEN Play_Buffer            ' sentence done?
+  IF (qvData > LastWord) THEN Get_Word          ' no -- is word valid?
+  SEROUT QV_SIO, N2400, [qvData]                ' yes, send word to buffer
+  PAUSE 5
+  eeAddr = eeAddr + 1                           ' increment word address
+  GOTO Get_Word                                 ' get next word
+
+Play_Buffer:
+  SEROUT QV_SIO, N2400, [QV_CloseStr]           ' close string buffer
+  PAUSE 5
+  SEROUT QV_SIO, N2400, [QV_PlayStr]            ' play the buffer
+
+Say_Sentence_Exit:
+  RETURN

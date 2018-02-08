@@ -1,0 +1,194 @@
+' -----[ Title ]-----------------------------------------------------------
+' Gripper Program 2.6: Autonomous Object Pickup and Dropoff
+'{$STAMP BS2}
+'{$PBASIC 2.5}
+
+' -----[ Program Description ]---------------------------------------------
+' Boe-Bot Gripper spins, finds object, goes and picks it up, then moves
+' and sets it down.  This repeats over and over.
+'
+' Revision History
+' Based on Gripper Program 1.5, updates include:
+' - Both new and old gripper servos are supported.
+'   Set #DEFINE NewGripServo = 1 for newer servo, = 0 for older.
+'    Newer are marked "standard", older are marked "STD"
+' - Both new and old wheel servos are supported.
+'   Set #DEFINE NewWheelServo = 1 for newer servo, = 0 for older.
+'   Newer are marked "continuous rotation", older marked "PM" (Pre-Modified)
+' - PBASIC 2.5
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+GripServo      PIN     14                    ' Gripper servo on P14
+LeftServo      PIN     13                    ' Left wheel servo on P13
+RightServo     PIN     12                    ' Right wheel servo on P12
+LeftIRPin      PIN     11                    ' Left IR detector/emitter
+ClosingIRPin   PIN     10                    ' Closing IR detector/emitter
+RightIRPin     PIN     9                     ' Right IR detector/emitter
+
+' -----[ Constants ]-------------------------------------------------------
+
+' Choose your type of wheel servo.  1 for newer, 0 for older.
+#DEFINE NewWheelServo = 1                    ' Newer continuous rotation servo
+'#DEFINE NewWheelServo = 0                   ' Older pre-modified servo
+
+' Choose your type of gripper servo.  1 for newer, 0 for older.
+#DEFINE NewGripServo = 1                     ' Newer standard servo
+'#DEFINE NewGripServo = 0                    ' Older STD servo
+
+#IF (NewWheelServo = 1) #THEN                ' Newer continuous rotation servo
+  ClockWise    CON     650                   ' Clockwise wheel rotation
+  CtrClkWise   CON     850                   ' Counter clockwise wheel rotation
+  CWSlow       CON     730                   ' Clockwise, but slower
+  CtrCWSlow    CON     770                   ' Counter clockwise, but slower
+  TravelPulses CON     20                    ' Num pulses for fwd/back travel
+  TurnPulses   CON     25                    ' Num pulses for turning
+#ELSE                                        ' For older pre-modified servo
+  ClockWise    CON     500                   ' Clockwise wheel rotation
+  CtrClkWise   CON     1000                  ' Counter clockwise wheel rotation
+  CWSlow       CON     650                   ' Clockwise, but slower
+  CtrCWSlow    CON     860                   ' Counter clockwise, but slower
+  TravelPulses CON     40                    ' Num pulses for fwd/back trav
+  TurnPulses   CON     50                    ' Num pulses for turning
+#ENDIF
+
+#IF (NewGripServo = 1) #THEN                 ' For newer Standard gripper servo
+  StepSize     CON     20                    ' Step size for gripper servo
+#ELSE                                        ' For older STD gripper servo
+  StepSize     CON     10                    ' Step size for gripper servo
+#ENDIF
+
+CloseGripper   CON     700                   ' Replace with values
+OpenGripper    CON     1200                  '   for your gripper
+Object         CON     0                     ' IR value=0 when object detected
+
+' -----[ Variables ]-------------------------------------------------------
+
+leftIRVal      VAR     Bit                   ' Stores left IR reading
+rightIRVal     VAR     Bit                   ' Stores right IR reading
+closingIRVal   VAR     Bit                   ' Stores closing IR reading
+
+pulses         VAR     Word                  ' Quantity of pulses to servo
+pulsewidth     VAR     Word                  ' Width of pulse sent to servo
+
+' -----[ Initialization ]--------------------------------------------------
+
+GOSUB Open                                   ' Open the gripper
+
+' -----[ Main Routine ]----------------------------------------------------
+
+Main:
+DO
+  GOSUB Look_For_Object                      ' Spin around to look for object
+  GOSUB Center_On_Object                     ' When found,center gripper on it
+  GOSUB Move_Object                          ' Pick up object and move it
+LOOP
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Look_For_Object:
+  DO
+    GOSUB Left_Pulse                         ' Spin left 1 pulse
+    PAUSE 15                                 ' Slow the spin down
+    GOSUB Read_LR_IRs                        ' Check left/right IR sensors
+  LOOP UNTIL ((rightIRVal = Object) OR (leftIRVal = Object))
+  RETURN
+
+Center_On_Object:
+  DO
+    GOSUB Forward_Pulse                      ' Forward one pulse
+    GOSUB Zero_In                            ' Move left or right
+    GOSUB Read_Closing_IR                    ' Check closing IR sensor
+  LOOP UNTIL (closingIRVal = Object)         ' Until object is in gripper
+  RETURN
+
+Move_Object:
+  GOSUB Close                                ' Close gripper to pick up item
+  GOSUB Backward                             ' Backup and move to new location
+  GOSUB Right
+  GOSUB Open                                 ' Open gripper to drop item
+  GOSUB Backward                             ' Move away
+  GOSUB Left
+  RETURN
+
+Zero_In:                                     ' Zero in on the object
+  GOSUB Read_LR_IRs                          ' Read left & right IR sensor
+  IF (leftIRVal  = Object) THEN
+    GOSUB Left_Pulse                         ' If object's on left, move left
+  ELSEIF (rightIRVal = Object) THEN          '  to center up on it.
+    GOSUB Right_Pulse                        ' If object's on right, move rt
+  ENDIF
+  RETURN
+
+Forward_Pulse:                               ' Send only 1 pulse to servos
+  PULSOUT RightServo, CWSlow
+  PULSOUT LeftServo,  CtrCWSlow
+  RETURN
+
+Left_Pulse:
+  PULSOUT RightServo, CWSlow
+  PULSOUT LeftServo,  CWSlow
+  RETURN
+
+Right_Pulse:
+  PULSOUT RightServo, CtrCWSlow
+  PULSOUT LeftServo,  CtrCWSlow
+  RETURN
+
+Forward:                                     ' Move Boe-Bot a set distance
+  FOR pulses = 1 TO TravelPulses
+    PULSOUT RightServo, ClockWise
+    PULSOUT LeftServo,  CtrClkWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Backward:
+  FOR pulses = 1 TO TravelPulses
+    PULSOUT RightServo, CtrClkWise
+    PULSOUT LeftServo,  ClockWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Left:
+  FOR pulses = 1 TO TurnPulses
+    PULSOUT RightServo, ClockWise
+    PULSOUT LeftServo,  ClockWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Right:
+  FOR pulses = 1 TO TurnPulses
+    PULSOUT RightServo, CtrClkWise
+    PULSOUT LeftServo,  CtrClkWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Read_LR_IRs:                                 ' Read Left & Right IR sensors
+  FREQOUT LeftIRPin, 1, 38500                ' Send signal to left IR
+  leftIRVal = LeftIRPin                      ' Record return
+  FREQOUT RightIRPin, 1, 38500               ' Send signal to right IR
+  rightIRVal = RightIRPin                    ' Record return
+  RETURN
+
+Read_Closing_IR:                             ' Read Closing IR sensor
+  FREQOUT ClosingIRPin, 1, 38500             ' Send signal to closing IR
+  closingIRVal = ~ClosingIRPin               ' Record return,due to mechanics,
+  RETURN                                     ' invert logic to match LR IRs.
+
+Open:                                        ' Open the gripper
+  FOR pulsewidth = CloseGripper TO OpenGripper STEP StepSize
+    PULSOUT GripServo, pulsewidth
+    PAUSE 20
+  NEXT
+  RETURN
+
+Close:                                       ' Close the gripper
+  FOR pulsewidth = OpenGripper TO CloseGripper STEP StepSize
+    PULSOUT GripServo, pulsewidth
+    PAUSE 20
+  NEXT
+  RETURN

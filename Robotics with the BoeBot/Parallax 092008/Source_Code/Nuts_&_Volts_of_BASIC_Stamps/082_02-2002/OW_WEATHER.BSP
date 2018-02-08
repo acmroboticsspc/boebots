@@ -1,0 +1,413 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' File...... OW_WEATHER.BSP
+' Purpose... 1-Wire Weather Station Interface
+' Author.... Jon Williams / Parallax (portions by Tim Bitson)
+' E-mail.... jonwms@aol.com
+' Started... 13 DEC 2001
+' Updated... 06 JAN 2002
+
+' { $STAMP BS2p }
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program reads and displays the sensors from a Dallas 1-Wire Weather
+' Station.
+'
+' NOTE: The 1-Wire bus requires a very stiff pull-up -- 1 kOhm or less.
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+' 15 DEC 2001 - Version 1 working
+' 06 JAN 2002 - Updated error handling for bad wind vane
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+OWpin           CON     15                      ' 1-Wire bus
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+' 1-Wire Support
+'
+OW_NoRst        CON     %0000                   ' no Reset
+OW_FERst        CON     %0001                   ' Front-End Reset
+OW_BERst        CON     %0010                   ' Back-End Reset
+OW_BitMode      CON     %0100
+OW_HighSpd      CON     %1000
+
+ReadROM         CON     $33                     ' read ID, serial num, CRC
+MatchROM        CON     $55                     ' look for specific device
+ODMatchROM      CON     $69                     ' overdrive match rom
+SkipROM         CON     $CC                     ' skip rom (one device)
+SearchROM       CON     $F0                     ' search
+
+' DS1820 control
+'
+CnvrtTemp       CON     $44                     ' do temperature conversion
+RdScratch       CON     $BE                     ' read scratchpad
+
+' DS2423 control
+'
+ReadMemCntr     CON     $A5                     ' read memory + counter
+
+' DS2450 control
+'
+ReadMem         CON     $AA                     ' read memory
+WriteMem        CON     $55                     ' write memory
+Convert         CON     $3C                     ' do conversion
+
+NoDevice        CON     %11                     ' no device present
+CommOkay        CON     1
+NoComm          CON     0
+
+Celsius         CON     0
+Fahrenheit      CON     1
+TMode           CON     Fahrenheit              ' temperature display mode
+DegSym          CON     176
+
+MoveTo          CON     2                       ' DEBUG cursor positioning
+LF              CON     10                      ' linefeed
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+devCheck        VAR     Nib                     ' device check return ocde
+commStat        VAR     Bit                     ' comm status
+sensor          VAR     Nib                     ' current sensor to display
+eeAddr          VAR     Word                    ' string pointer in EE
+char            VAR     Byte                    ' character to print
+idx             VAR     Nib                     ' loop counter
+romData         VAR     Byte(8)                 ' ROM data to devices
+
+tempIn          VAR     Word                    ' raw temperature
+sign            VAR     tempIn.Bit11            ' 1 = negative temperature
+tLo             VAR     tempIn.LowByte
+tHi             VAR     tempIn.HighByte
+tSign           VAR     Bit
+tempC           VAR     Word                    ' Celsius
+tempF           VAR     Word                    ' Fahrenheit
+
+cntrA           VAR     Word                    ' wind count start
+cntrB           VAR     tempIn                  ' wind count end
+rps             VAR     tempC                   ' revs per second
+speed           VAR     tempF                   ' wind speed
+
+crc16           VAR     tempIn
+verify          VAR     char
+direction       VAR     tempC
+dFlag           VAR     tempF.LowByte
+
+rjNum           VAR     Word                    ' number to right justify
+width           VAR     Nib                     ' width of field
+rjSign          VAR     Bit
+digits          VAR     Nib
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+DS1820          DATA    $10,$15,$32,$09,$00,$08,$00,$A9         ' temp sensor
+DS2423          DATA    $1D,$82,$43,$01,$00,$00,$00,$6F         ' wind speed
+DS2450          DATA    $20,$AF,$FF,$00,$00,$00,$00,$5E         ' wind direction
+
+CommUp          DATA    "... Up", 0
+CommDn          DATA    ". Down", 0
+
+WindDir         DATA    "    N", 0, "  NNE", 0, "   NE", 0, "  ENE", 0
+                DATA    "    E", 0, "  ESE", 0, "   SE", 0, "  SSE", 0
+                DATA    "    S", 0, "  SSW", 0, "   SW", 0, "  WSW", 0
+                DATA    "    W", 0, "  WNW", 0, "   NW", 0, "  NNW", 0
+
+BadDir          DATA    "Error", 0
+
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  DEBUG CLS                                     ' open DEBUG window
+  PAUSE 250
+
+Splash_Screen:
+  DEBUG Home
+  DEBUG "==================================", CR
+  DEBUG " BS2p <--> 1-Wire Weather Station ", CR
+  DEBUG "==================================", CR
+
+Charge_Station:
+  INPUT OWpin
+  IF (Ins.LowBit(OWpin) = 0) THEN Bus_Shorted   ' possible wiring problem
+
+  HIGH OWpin
+  DEBUG MoveTo, 0, 4, "Charging station..."
+  FOR idx = 10 TO 1
+    DEBUG MoveTo, 20, 4, DEC idx, "  "
+    PAUSE 1000
+  NEXT
+  INPUT OWpin
+  DEBUG MoveTo, 0, 4, REP " "\25
+
+Weather_Labels:
+  DEBUG MoveTo, 0, 4, "Comm.......... "
+  DEBUG MoveTo, 0, 6, "( ) Temperature... ", CR
+  DEBUG MoveTo, 0, 7, "( ) Wind Speed.... ", CR
+  DEBUG MoveTo, 0, 8, "( ) Direction..... ", CR
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  GOSUB Comm_Status                             ' check 1-Wire comm
+  IF (commStat = CommOkay) THEN Show_Sensors
+  PAUSE 2000
+  GOTO Initialize                               ' "reboot" if comm went down
+
+Show_Sensors:
+  GOSUB Flag_Sensor                             ' show sensor in use
+  BRANCH sensor, [Show_Temp, Show_Wind_Speed, Show_Wind_Dir]
+
+Main2:
+  sensor = sensor + 1 // 3                      ' select next sensor
+  GOTO Main
+  END
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'
+
+' *******************************************************
+' A shorted condition on the 1-Wire bus has been detected
+' -- we can't charge the station cap in this condition
+' *******************************************************
+'
+Bus_Shorted:
+  DEBUG CLS, "The 1-Wire bus is shorted.", CR
+  DEBUG "Please repair before continuing.", CR
+  END
+
+
+' ****************************
+' Print status of 1-Wire comms
+' ****************************
+'
+Comm_Status:
+  eeAddr = CommUp                               ' assume bus is up
+  commStat = CommOkay
+  GOSUB Device_Check                            ' check bus for devices
+  IF (devCheck <> NoDevice) THEN Print_Comm
+  eeAddr = CommDn
+  commStat = NoComm
+  DEBUG MoveTo, 19, 6, REP " "\15               ' clear station data if down
+  DEBUG MoveTo, 19, 7, REP " "\15
+  DEBUG MoveTo, 19, 8, REP " "\15
+
+Print_Comm:
+  DEBUG MoveTo, 12, 4                           ' show comm status
+  GOSUB Print_String
+  RETURN
+
+
+' ************************************
+' Check for presence of 1-Wire devices
+' -- does not search for ROM codes
+' ************************************
+'
+Device_Check:
+  devCheck = 0
+  OWOUT OWpin, OW_FERst, [SearchROM]
+  OWIN  OWpin, OW_BitMode, [devCheck.Bit1,devCheck.Bit0]
+  RETURN
+
+
+' **********************
+' Indicate sensor in use
+' **********************
+'
+Flag_Sensor:
+  DEBUG MoveTo, 1, 6, " "                       ' clear previous mark
+  DEBUG MoveTo, 1, 7, " "
+  DEBUG MoveTo, 1, 8, " "
+  DEBUG MoveTo, 1, (6 + sensor), "*"            ' mark current sensor
+  RETURN
+
+
+' ********************************
+' Transfer OW serial number to RAM
+' -- point to SN with eeAddr
+' ********************************
+'
+Load_SN:
+  FOR idx = 0 TO 7                              ' load ROM pattern
+    READ (eeAddr + idx), romData(idx)
+  NEXT
+  RETURN
+
+
+' ********************************
+' Retrieve and display temperature
+' ********************************
+'
+Show_Temp:
+  eeAddr = DS1820                               ' load device serial number
+  GOSUB Load_SN
+
+  OWOUT OWpin, OW_FERst,[MatchROM, STR romData\8, CnvrtTemp]
+
+  HIGH OWpin                                    ' extra juice during conversion
+  PAUSE 750
+  INPUT OWpin
+
+  OWOUT OWpin, OW_FERst,[MatchROM, STR romData\8, RdScratch]
+  OWIN  OWpin, OW_BERst,[tLo, tHi]
+
+  tSign = sign                                  ' save sign bit
+  tempIn = tempIn >> 1                          ' round to whole degrees
+  IF (tSign = 0) THEN NoNeg1
+  tempIn = tempIn | $FF00                       ' extend sign bits for negs
+
+NoNeg1:
+  tempC = tempIn                                ' save Celsius value
+  tempIn = tempIn */ $01CC                      ' multiply by 1.8
+  IF (tSign = 0) THEN NoNeg2                    ' if neg, extend sign bits
+  tempIn = tempIn | $FF00
+
+NoNeg2:
+  tempF = tempIn + 32                           ' finish C -> F conversion
+
+  DEBUG MoveTo, 19, 6                           ' move cursor to temp display
+  rjNum = tempF                                 ' prep for right justified print
+  width = 5                                     ' five digits wide
+  GOSUB RJ_Print
+  DEBUG " ", DegSym, "F"
+  GOTO Main2
+
+
+' *******************************
+' Retrieve and display wind speed
+' -- mph = rps * 2.453
+' *******************************
+'
+Show_Wind_Speed:
+  eeAddr = DS2423
+  GOSUB Load_SN
+
+  ' get starting count
+  '
+  OWOUT OWpin, OW_FERst, [ODMatchROM]
+  OWOUT OWpin, OW_HighSpd, [STR romData\8, ReadMemCntr, $DF, $01]
+  OWIN  OWpin, (OW_HighSpd | OW_BERst), [cntrA.LowByte, cntrA.LowByte, cntrA.HighByte]
+
+  PAUSE 2500                                    ' = revs for 5 seconds
+  GOSUB Comm_Status
+  IF (commStat = CommOkay) THEN Get_End_Count
+  GOTO Main2                                    ' abort if comm down
+
+  ' get ending count
+  '
+Get_End_Count:
+  OWOUT OWpin, OW_FERst, [ODMatchROM]
+  OWOUT OWpin, OW_HighSpd, [STR romData\8, ReadMemCntr, $DF, $01]
+  OWIN  OWpin, (OW_HighSpd | OW_BERst), [cntrB.LowByte, cntrB.LowByte, cntrB.HighByte]
+
+Calc_CPS:
+  rps = cntrB - cntrA                           ' get diffential count
+  IF (cntrB >= cntrA) THEN Calc_Speed
+  rps = rps + $FFFF                             ' correct for rollover
+
+Calc_Speed:
+  speed = rps */ $04E7                          ' rps * 4.906 (tenths @ 5 seconds)
+  DEBUG MoveTo, 19, 7
+  width = 3                                     ' width of whole portion
+  rjNum = speed / 10                            ' get whole portion
+  GOSUB RJ_Print                                ' print it
+  DEBUG ".", DEC1 speed, " mph "                ' then print tenths
+  GOTO Main2
+
+
+' ***********************************
+' Retrieve and display Wind direction
+' ***********************************
+'
+Show_Wind_Dir:
+  eeAddr = DS2450
+  GOSUB Load_SN
+  OWOUT OWpin, OW_FERst, [MatchROM, STR romData\8, WriteMem, $08, $00]
+
+  FOR idx = 1 TO 4                              ' setup four channels
+    OWOUT OWpin, OW_NoRst, [$08]                ' 8-bit values
+    OWIN  OWpin, OW_NoRst, [crc16.LowByte, crc16.HighByte, verify]
+    OWOUT OWpin, OW_NoRst, [$01]                ' 5.12 volt scale
+    OWIN  OWpin, OW_NoRst, [crc16.LowByte, crc16.HighByte, verify]
+  NEXT
+
+Start_Conversion:
+  OWOUT OWpin, OW_FERst, [MatchROM, STR romData\8, Convert, $0F, $55]
+  OWIN  OWpin, OW_NoRst, [crc16.LowByte, crc16.HighByte]
+
+  HIGH OWpin                                    ' juice during conversion
+  PAUSE 10
+  INPUT OWpin
+
+Get_A2D:
+  OWOUT OWpin, OW_FERst, [MatchROM, STR romData\8, ReadMem, $00, $00]
+  OWIN  OWpin, OW_BERst, [STR romData\8]
+
+Calc_Direction:
+  FOR idx = 0 TO 3                              ' convert readings to word
+    direction.LowNib(idx) = romData(idx * 2 + 1) / 90
+  NEXT
+
+  ' convert word to 1 of 16
+
+  dFlag = 99                                    ' preset for error inidcation
+  LOOKDOWN direction, [$2220,$1220,$1222,$1122,$2122,$2112,$2212,$2211], dFlag
+  IF (dFlag < 8) THEN Show_Direction            ' found in first table
+
+  LOOKDOWN direction, [$2221,$0221,$0222,$0022,$2022,$2002,$2202,$2200], dFlag
+  dFlag = dFlag + 8                             ' adjust for second table
+
+Show_Direction:
+  DEBUG MoveTo, 19, 8
+  eeAddr = BadDir
+  IF (dFlag < 16) THEN Good_Dir                 ' found in either table?
+  GOTO Dir_To_Screen
+
+Good_Dir:
+  eeAddr = WindDir + (6 * dFlag)                ' address of direction string
+
+Dir_To_Screen:
+  GOSUB Print_String
+  GOTO Main2
+
+
+' ******************************
+' Print a right-justified number
+' ******************************
+'
+RJ_Print:
+  rjSign = rjNum.Bit15
+  rjNum = ABS(rjNum)
+  digits = width
+  LOOKDOWN rjNum,<[0,10,100,1000,65535],digits
+  DEBUG REP " "\(width-digits-1), 13 * rjSign + " ", DEC rjNum
+  RETURN
+
+
+' ***************************************
+' Print string at current cursor position
+' -- point to string with eeAddr
+' -- string is zero-terminated
+' ***************************************
+'
+Print_String:
+  READ eeAddr, char                             ' get character from EEPROM
+  IF (char = 0) THEN Print_String_Done          ' if 0, string is done
+  DEBUG char                                    ' print it
+  eeAddr = eeAddr + 1                           ' point to next character
+  GOTO Print_String
+
+Print_String_Done:
+  RETURN

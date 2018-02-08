@@ -1,0 +1,74 @@
+' -----[ Title ]------------------------------------------------------
+'
+' File...... ds1920.bsp
+' Purpose... Measuring of Temperature with DS1920 iButton
+' Author.... Claus Kuehnel  
+' Started...  
+' Updated... 
+
+' -----[ Program Description ]----------------------------------------
+'
+' This program demonstrates the periodic measuring of ambient 
+' temperature with DS1920 iButton and calculation of high-resolution
+' temperature value in degree C.
+
+' -----[ Revision History ]-------------------------------------------
+'
+' 2001-08-11
+
+' -----[ Directives ]-------------------------------------------------
+'
+'{$STAMP BS2p} 			'specifies a BS2p
+
+' -----[ Constants ]--------------------------------------------------
+'
+OWpin		con 15	'1-wire device pin
+LED		con 12	'Pin for LED
+
+OW_FERst	con %0001	'Front-End Reset
+OW_BERst	con %0010	'Back-End reset
+OW_BitMode	con %0100	
+
+SkipROM	con $CC	'Skip ROM Command
+ReadScratch con $BE	'Read ScratchPad
+ConverT	con $44	'Convert Temparture
+     
+' -----[ Variables ]--------------------------------------------------
+'
+temp 	var word 	'Temperature Value
+CRem 	var byte 	'Counts remaining value
+CPerC var byte 	'Counts per degree C value    
+
+' -----[ Initialization ]---------------------------------------------
+'
+init:	pause 1000		'open debug window
+	low LED		'LED off
+
+' -----[ Main Code ]--------------------------------------------------
+'
+Start:'Send Convert Temperature command
+	OWOUT OWpin, OW_FERst, [SkipROM, ConverT]
+	high LED
+	debug cls 
+
+CheckForDone: 'Wait until conversion is done
+	PAUSE 25
+	OWIN OWpin, OW_BitMode, [Temp] 	
+	'debug bin temp			'uncomment to see conversion time
+	IF Temp = 0 THEN CheckForDone 	
+	
+	'Send Read ScratchPad command
+	OWOUT OWpin, OW_FERst, [SkipROM, ReadScratch] 
+	OWIN OWpin, OW_BERst, [Temp.LOWBYTE,Temp.HIGHBYTE,CRem,CRem,CRem,CRem,CRem,CPerC]
+	debug cr,"Temperature count (0.5°C) is ", dec Temp
+	
+	'Calculate temperature with higher resolution in degrees C
+	Temp = Temp>>1*100-25+((CPerC*100-(CRem*100))/CPerC)
+	DEBUG cr,"Actual Temperature is ", DEC Temp/100, ".", DEC2 Temp-(Temp/100*100), " C", CR
+	low LED
+	pause 5000		'next measurement in 5 sec
+	GOTO Start
+
+' -----[ Subroutines ]------------------------------------------------
+
+' -----[ Data ]-------------------------------------------------------

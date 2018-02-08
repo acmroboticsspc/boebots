@@ -1,0 +1,158 @@
+' =========================================================================
+'
+'   File....... PWM_Pal_Demo.BS2
+'   Purpose.... PWM Pal Demo Program
+'   Author..... Jon Williams
+'   E-mail..... jwilliams@parallax.com
+'   Started....
+'   Updated.... 19 JUN 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+
+' Demonstrates the features of the Parallax PWM Pal co-processor.
+'
+' NOTE: Do not connect DC motors directly to the Stamp/PWM Pal.  A buffer
+'       (transistor, MOSFET, etc.) must be used to handle motor currents.
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+PpPin           PIN     0                       ' PWM Pal Serial I/O
+RunMotor        PIN     8                       ' motor run input
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+T9600           CON     84
+T19200          CON     32
+T38400          CON     6
+PpBaud          CON     T38400
+
+Yes             CON     1                       ' for active-high
+No              CON     0
+
+MinSpeed        CON     25                      ' minimum DC to spin motor
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+mSpeed          VAR     Byte                    ' duty cycle (0 - 100%)
+tOn             VAR     Word                    ' pwm timing
+tOff            VAR     Word                    ' pwm timing
+runCount        VAR     Word                    ' motor run cycles
+update          VAR     Bit                     ' update DEBUG screen?
+ledState        VAR     Nib                     ' LED color
+lastLed         VAR     Nib                     ' last LED color
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Setup:
+  SEROUT PpPin, PpBaud, ["!PWMSP", %00000001]   ' enable counter 1
+  SEROUT PpPin, PpBaud, ["!PWMX1"]              ' clear counter 1
+  SEROUT PpPin, PpBaud, ["!PWMSS", %00010001]   ' enable motor & ctrl
+
+  update = Yes
+  lastLed = 5
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    ' check motor control
+    '
+    IF (RunMotor = Yes) THEN                    ' button pressed?
+      IF (mSpeed < 100) THEN
+        mSpeed = mSpeed + 1 MIN MinSpeed        ' update speed
+        GOSUB Set_Motor_Speed
+        update = Yes
+      ENDIF
+    ELSEIF (mSpeed > 0) THEN
+      mSpeed = 0
+      update = Yes
+    ENDIF
+
+    ' get button counter
+    '
+    SEROUT PpPin, PpBaud, ["!PWMC1"]
+    SERIN  PpPin, PpBaud, [runCount.BYTE0, runCount.BYTE1]
+
+    ' update screen
+    '
+    IF (update) THEN
+      DEBUG HOME,
+            "Speed.... ", DEC mSpeed, CLREOL, CR,
+            "Cycles... ", DEC runCount, CLREOL
+
+      ' modify LED for speed
+      '
+      LOOKDOWN mSpeed, <=[24, 80, 95, 100], ledState
+      IF (ledState <> lastLed) THEN
+        ON ledState GOSUB Led_Off, Led_Green, Led_Yellow, Led_Red
+        lastLed = ledState
+      ENDIF
+      update = No
+    ENDIF
+    PAUSE 100                                   ' ramp/scan delay
+   LOOP
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Set_Motor_Speed:
+  IF (mSpeed < 100) THEN
+    tOn = mSpeed                                ' set duty cycle
+    tOff = 100 - mSpeed
+  ELSE
+    tOn = $FFFF                                 ' full on for 100%
+    tOff = $0001
+  ENDIF
+
+  SEROUT PpPin, PpBaud, ["!PWMM1",
+                         tOn.BYTE0, tOn.BYTE1,
+                         tOff.BYTE0, tOff.BYTE1]
+  RETURN
+
+
+Led_Off:
+  SEROUT PpPin, PpBaud, ["!PWMSS", %00010001]
+  RETURN
+
+
+Led_Green:
+  SEROUT PpPin, PpBaud, ["!PWMM3", $FF, $FF, $01, $00]
+  SEROUT PpPin, PpBaud, ["!PWMM4", $01, $00, $FF, $FF]
+  SEROUT PpPin, PpBaud, ["!PWMSP", %01000001]
+  SEROUT PpPin, PpBaud, ["!PWMSS", %11010001]
+  RETURN
+
+
+Led_Yellow:
+  SEROUT PpPin, PpBaud, ["!PWMM3", $12, $00, $04, $00]
+  SEROUT PpPin, PpBaud, ["!PWMM4", $04, $00, $12, $00]
+  SEROUT PpPin, PpBaud, ["!PWMSP", %01000001]
+  SEROUT PpPin, PpBaud, ["!PWMSS", %11010001]
+  RETURN
+
+
+Led_Red:
+  SEROUT PpPin, PpBaud, ["!PWMM3", $01, $00, $FF, $FF]
+  SEROUT PpPin, PpBaud, ["!PWMM4", $FF, $FF, $01, $00]
+  SEROUT PpPin, PpBaud, ["!PWMSP", %10000001]
+  SEROUT PpPin, PpBaud, ["!PWMSS", %11010001]
+  RETURN

@@ -1,0 +1,47 @@
+' Experiment to find best speed setting for a motor.
+
+' The RCTIME function is used to read the setting of a variable resistor
+' on P15. This value is used to set a new speed by multiplying it with
+' FACTOR and the result sent to the PC screen so the user can see the 
+' value being tested. This SPEED value is sent to the Little Step-U 
+' and it is instructed to move 100 steps clockwise. 
+' The program pauses for 500ms and the sequence is repeated.
+' The {G} command tells the Little Step-U to move 100 steps clockwise
+' from the current position, monitoring both inputs and if one of them
+' is pulled low, stop. The program begins by pulling IP2 (P13) low so that
+' if the motor is running at a slow speed, resetting the BASIC STAMP will
+' also stop the current move. This is because 100 steps at 1 or 2 steps
+' per second takes a long time and soon gets boring.
+
+
+' Little Step-U connected as follows
+'	serial in	p10
+'	busy		p12
+'	IP2		p13
+
+factor	con	2			'Pot -> speed factor
+
+pot		var	word			'Result of RCTIME
+speed		var	word			'Calculated speed value
+
+input	12					'BUSY from Little Step-U
+output 13
+
+low 13					'Force a break of current move
+pause 1					' if resert button pressed
+high 13
+
+loop:
+if IN12 = 1 then loop			'Wait till not busy
+
+high 15					'Discharge cap for 1ms
+pause 1
+rctime 15,1,pot				'Measure discharge on P15
+speed = pot * factor			'Adjust value to suit speed range
+debug ? speed				'Send value to PC
+
+serout 10,396,["{A",dec speed, "}"]	'Set new speed
+serout 10,396,["{G100}"]		'Relative move with IPs as stops
+
+pause 500
+goto loop

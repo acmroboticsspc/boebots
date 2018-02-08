@@ -1,0 +1,105 @@
+; Program DIAL.SRC
+; PIC controls a CM8880 to generate DTMF tones.
+; Note that there are no delays between CS clear and set actions when
+; the program strobes data into or out of the CM8880. The reason is that
+; all of the 8880's timing parameters are in the 10s of nanoseconds.
+; Also, this program polls the CM8880's transmit-ready flag between
+; DTMF bursts, so it sends consistent 100-ms tones regardless of PIC
+; clock speed.
+
+CS      =       rb.6    ; Chip select, active low.
+RS      =       rb.4    ; Register select bit. High = registers selected.
+RW      =       rb.5    ; Read/Write bit. Low = write.
+
+dials   =       1011b   ; Control register setting for normal dialing (100ms).
+talk    =       0       ; TRIS value for talking to CM8880.
+listen  =       15      ; TRIS value for listening to CM8880.
+
+        org     8       ; Variables above special-function registers.
+temp    ds      1       ; Temporary variable for delays, etc.
+digit   ds      1       ; Index for dialing digits from table.
+cntrl   ds      1       ; Variable copy of data for control register.
+stats   ds      1       ; Variable copy of status register
+
+xm_rdy  =       stats.1 ; Flag set when 8880 is ready to send DTMF.
+
+        device pic16c54,xt_osc,wdt_off,protect_off
+	reset start
+        org     0       ; Program origin.
+
+; ==========================
+;        SUBROUTINES
+; ==========================
+
+; A table of numbers to dial.
+dial_these
+	jmp	pc+w
+	retw	4,5,9,0,6,2,3
+
+; Generates a brief delay to allow CM8880 to get settled after power-on.
+delay   clr     temp
+:loop   djnz    temp,:loop      ; Loop 256 times.
+        ret                     ; Return.
+
+; Accepts data to be written to the pair of four-bit control registers in
+; the variable "cntrl." Data for register 1 must be in the lower nybble;
+; register 2 in the upper nybble.
+set_controls
+        mov     w,cntrl         ; Get the control value.
+        AND     w,#00001111b    ; Strip upper four bits
+        OR      w,#00011000b    ; Set register-select, clear CS, set RS2.
+        mov     rb,w            ; Write to output, (CS low).
+        setb    CS              ; Deselect to complete the 1st write.
+        mov     w,<>cntrl       ; Get nybble-swapped control value.
+        AND     w,#00001111b    ; Strip upper four bits
+        OR      w,#00010000b    ; Set register-select, clear CS.
+        mov     rb,w            ; Write to output, (CS low).
+        setb    CS              ; Deselect to complete the 2nd write.
+        ret
+
+; Gets the contents of the 8880's status register and stores 'em
+; to the variable "stats." The port TRIS (data direction) must
+; be set to input before calling this routine.
+get_status
+        setb    RW              ; Set to read.
+        setb    RS              ; Select the status register.
+        clrb    CS              ; Activate chip.
+        mov     stats,#15       ; Bit mask for 4-bit data.
+        AND     stats,rb        ; Get lower 4 lsbs of rb (data).
+        setb    CS              ; Deselect chip.
+        ret
+
+; Dials a DTMF digit represented by the lower four bits of the
+; w register. Converts a value of "0" to "10" in accordance with
+; the DTMF encoding scheme.
+dial_digit
+        AND     w,#15           ; Strip MSB, update z flag in the process.
+        snz                     ; If w=0, change it to 10 for proper..
+        mov     w,#10           ; ..DTMF encoding.
+        mov     rb,w            ; Write to output.
+        setb    CS              ; Terminate the write
+        ret
+
+; ==========================
+;        MAIN PROGRAM
+; ==========================
+
+start
+        mov     rb,#255         ; All bits high to deselect CM8880.
+        mov     !rb,#talk       ; Set port to output.
+        call    delay           ; Wait for things to settle down.
+        mov     cntrl,#dials    ; Set control register for dialing.
+        call    set_controls    ; Write settings to control registers.
+        clr     digit           ; Clear the digit counter to 0.
+:loop
+        mov     w,digit         ; Now, put the digit number into w..
+        call    dial_these      ; ..and get the next digit from the table.
+        call    dial_digit      ; Dial the digit stored in w.
+:hold   mov     !rb,#listen     ; Set port to input.
+        call    get_status      ; Get the status register in "stats."
+        jnb     xm_rdy,:hold    ; If transmitter's not ready, wait here.
+        mov     !rb,#talk       ; Restore port to output.
+        inc     digit           ; Point to the next digit in the table.
+        cjb     digit,#7,:loop  ; Stop when all digits have been dialed.
+        jmp     $               ; Freeze the program here--reset to rerun.
+

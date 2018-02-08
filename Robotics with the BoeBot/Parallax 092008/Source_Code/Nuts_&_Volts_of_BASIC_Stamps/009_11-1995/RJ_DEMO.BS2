@@ -1,0 +1,33 @@
+' Program Listing 9.1: RJ_DEMO.BS2 (Right-justified printing with Stamp 2)
+' This program demonstrates how to print numbers on the LCD Serial
+' Backpack with right justification. This means that the ones place
+' is always in the same location on the screen regardless of the
+' number of digits in the number. This program uses a Lookdown table
+' as a function that returns the number of decimal digits in a given
+' 16-bit value.
+I 	con 	254 		' Instruction toggle command.
+ClrLCD 	con 	1 		' Clear-LCD instruction.
+prn_at 	con 	140 		' Display RAM, address 13 (128+12).
+j 	var 	word 		' 16-bit counter variable.
+pos 	var 	byte 		' Cursor position to print at.
+numDig 	var 	nib 		' Number of digits of number.
+N96N 	con 	$4054 		' 9600 baud, inverted, no parity.
+low 0 				' Make the serial output low
+pause 1000 			' Let the LCD wake up.
+serout 0,N96N,[I,ClrLCD,I] 	' Clear the LCD.
+serout 0,N96N,["Number: "] 	' Print the fixed label.
+' The loop below counts from 0 to 20000 and dislays the current count
+' on the LCD Serial Backpack. The Lookdown table determines how many
+' digits are in the current value of the count in order to position
+' the printout aligned on the rightmost digit. It works by determining
+' whether a given number is less than 10 (1 digit); between 10 and 100
+' (2 digits), etc. The table is good for values from 0 to 65534.
+Loop:
+  for j = 0 to 20000 		' Count to 20,000.
+  lookdown j,< [0,10,100,1000,10000,65535],numDig 
+		' Get # of digits.
+  pos = prn_at - numDig 	' Adjust the screen position.
+  serout 0,N96N,[I,pos,I,DEC j," "] ' Print j at adjusted screen pos.
+  pause 50 			' Slow the count a little.
+next 				' Keep going to 20,000.
+goto Loop 			' Do it again.

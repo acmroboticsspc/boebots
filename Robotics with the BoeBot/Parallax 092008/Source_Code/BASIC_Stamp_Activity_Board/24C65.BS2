@@ -1,0 +1,100 @@
+'************************************************************************
+'*  Basic Stamp Activity Board Sample Program                   24LC65  *
+'*  9 September, 1997                                           (BS-2)  *
+'*                                                                      *
+'*  This program shows how to use the 24LC65 from Microchip Technology. *
+'*  Insert the 24LC65 into Socket A and position the jumpers accoring   *
+'*  to the drawing depicted in the Basic Stamp Activity Board Notes.    *
+'*  Power it up and hit 'Alt-R'.  This program demonstrates how to do   *
+'*  page reads and page writes to the device.                           *
+'************************************************************************
+
+EEadd	VAR	WORD		'Address to read from or write to in eeprom
+EEdata	VAR	BYTE		'Data read from or written to eeprom
+EEack	VAR	BIT
+i	VAR	BYTE			'Miscillaneous counter
+j	VAR	BYTE			'Miscillaneous counter
+EEclk	CON	14			'Eeprom clock line
+EEdat	CON	13			'Eeprom data line
+
+       OUTD = %0011                'Initialize: EEclk = High
+       DIRD = %0001                'Initialize: EEdat = Input
+	DEBUG "Writing...",CR		'Here's how to write a page...
+	FOR I = 0 TO 1
+	    EEAdd = I*16
+	    GOSUB SendAddr
+	    FOR J = 0 TO 15
+		EEData = 63-(I*16+J)
+		DEBUG "Addr: ", DEC4 EEAdd+J, "  Value: ", DEC3 EEData,CR
+		PAUSE 250
+		GOSUB SendData
+	    NEXT
+	    GOSUB SendStop
+	NEXT
+	PAUSE 1000
+
+	DEBUG "Reading...",CR	'Here's how to read a page...
+	FOR I = 0 TO 1
+	    EEAdd = I*16
+	    GOSUB SendAddr
+	    GOSUB InitRead
+	    FOR J = 0 TO 14	'For all but last byte...
+		DEBUG "Addr: ", DEC4 EEAdd+J, "  Value: "
+		GOSUB SeqRead
+		DEBUG DEC3 EEData,CR
+		PAUSE 250
+	    NEXT
+	    DEBUG "Addr: ", DEC4 EEAdd+J, "  Value: "
+	    GOSUB LastRead
+	    DEBUG DEC3 EEData,CR
+	    PAUSE 250
+	NEXT
+	debug "All Done!"
+	END
+'**************************************************************************
+SendAddr:
+	HIGH EEclk			'Send Start Condition
+	LOW EEdat			'Send 4-bit device code, 3-bits of
+	LOW EEclk			'null address, and 1 "write" opcode
+	SHIFTOUT EEdat,EEclk,MSBFIRST,[%10100000]
+	INPUT EEdat			'Then wait for the acknowledgment
+	HIGH EEclk			' (24C65 pulls dat line low)
+	EEAck = IN0(EEdat)		'If EEPROM not ready, try again
+	LOW EEclk
+	IF EEAck = 1 THEN SendAddr	' Shift out 16 bit address
+	SHIFTOUT EEdat,EEclk,MSBFIRST,[EEadd.HIGHBYTE,%0\1,EEadd.LOWBYTE,%0\1]
+       INPUT EEdat
+	RETURN
+'**************************************************************************
+InitRead:
+	HIGH EEclk			'Send start bit
+	LOW EEdat			'Send 4-bit device code, 3-bits of
+	LOW EEclk			'null address, and 1 "read" Opcode
+	SHIFTOUT EEdat,EEclk,MSBFIRST,[%10100001]
+	INPUT EEdat			'Then wait for the acknowledgment
+	HIGH EEclk			' (24C65 pulls dat line low)
+	EEAck = IN0(EEdat)
+	LOW EEclk
+	RETURN
+'**************************************************************************
+SendData:
+	SHIFTOUT EEdat,EEclk,MSBFIRST,[EEData,%0\1]
+	RETURN
+'**************************************************************************
+SeqRead:
+	SHIFTIN EEdat,EEclk,MSBPRE,[EEData]
+	SHIFTOUT EEdat,EEclk,MSBFIRST,[%0\1]
+	RETURN
+'**************************************************************************
+LastRead				'Special Acknowledg for last byte
+	SHIFTIN EEdat,EEclk,MSBPRE,[EEData]
+  	PULSOUT EEclk,1
+	GOSUB SendStop
+	RETURN
+'**************************************************************************
+SendStop
+	LOW EEdat			'Send Stop Condition
+	HIGH EEclk
+	HIGH EEdat
+	RETURN
+'**************************************************************************

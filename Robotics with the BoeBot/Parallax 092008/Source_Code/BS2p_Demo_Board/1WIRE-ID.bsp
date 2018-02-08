@@ -1,0 +1,73 @@
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... 1WIRE-ID.BSP
+' Purpose... Reads ROM data from 1-Wire device
+' Author.... Parallax
+' E-mail.... stamptech@parallaxinc.com
+' Started... 
+' Updated...  
+
+' {$STAMP BS2p}
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Reads 1-Wire device ROM pattern.  Data is displayed in DEBUG window
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+OWpin		CON	15				' 1-wire device pin
+
+' -----[ Constants ]-------------------------------------------------------
+'
+OW_FERst	CON	%0001				' Front-End Reset
+OW_BERst	CON	%0010				' Back-End Reset
+OW_BitMode	CON	%0100
+OW_HighSpd	CON	%1000
+ReadROM	CON	$33				' read ID, serial num, CRC
+SearchROM	CON	$F0				' search
+
+NoDevice	CON	%11				' no device present
+
+' -----[ Variables ]-------------------------------------------------------
+'
+idx		VAR	Byte				' loop counter
+romData	VAR	Byte(8)			' ROM data from DS1820
+devCheck	VAR	Nib				' device check return ocde
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Initialize:
+  PAUSE 1000						' let DEBUG window open
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Main:
+  DEBUG CLS
+  GOSUB DeviceCheck					' look for device
+  IF (devCheck <> NoDevice) THEN DisplayROM
+
+NoDeviceFound:
+  DEBUG "No 1-Wire device(s) present."
+  END
+
+DisplayROM:
+  DEBUG "Dallas 1-Wire ID : "
+  OWOUT OWpin,OW_FERst,[ReadROM]			' send Read ROM command
+  OWIN  OWpin,OW_BERst,[STR romData\8]		' read serial number & CRC
+
+  FOR idx = 0 TO 7
+    DEBUG HEX2 romData(idx)," "			' show ID, serial num, CRC
+  NEXT
+
+  END
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+' This subroutine checks to see if any 1-Wire devices are present on the
+' bus.  It does NOT search for ROM codes
+'
+DeviceCheck:
+  devCheck = 0
+  OWOUT OWpin,OW_FERst,[SearchROM]		' reset and start search
+  OWIN  OWpin,OW_BitMode,[devCheck.Bit1,devCheck.Bit0]
+  RETURN

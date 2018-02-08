@@ -1,0 +1,125 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' File...... MASTER.BS2
+' Purpose... Master Stamp Demo -- manages terminal, uses Slave Stamp
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started...
+' Updated... 08 DEC 2001
+
+' { $STAMP BS2 }
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+SIOpin          CON     14                      ' serial I/O
+FCpin           CON     15                      ' serial flow control
+Tpin            CON     16                      ' terminal I/O
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+N2400           CON     16780                   ' 2400-N81 inverted
+T9600           CON     84                      ' 9600-N81 true (matches DEBUG)
+
+Cmd_SetClock    CON     1                       ' commands for slave
+Cmd_SetC        CON     2
+Cmd_SetF        CON     3
+Cmd_GetTmTmp    CON     4
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+inByte          VAR     Byte                    ' input from user
+cmd             VAR     Byte                    ' user command
+hours           VAR     Byte                    ' clock hours (BCD)
+minutes         VAR     Byte                    ' clock minutes (BCD)
+temp            VAR     Word                    ' measured by slave
+tMode           VAR     Byte                    ' "C" or "F"
+digits          VAR     Nib                     ' for right justification
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  tMode = "C"                                   ' assume C until confirmed
+  SEROUT Tpin, T9600, [CLS]                     ' clear terminal window
+  SEROUT Tpin, T9600, ["Connecting..."]
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  GOSUB Get_TimeTemp                            ' get data from Slave
+  GOSUB Show_Menu                               ' display updated menu
+
+Get_Input:
+  SERIN Tpin, T9600, 5000, Main, [inByte]       ' wait 5 seconds for command
+  cmd = 99
+  LOOKDOWN inByte, ["tTcCfFrR"], cmd            ' convert letter to number
+  cmd = (cmd / 2) + 1
+  BRANCH cmd, [Main, Set_Time, Set_TMode, Set_TMode, Refresh]
+  GOTO Main
+
+Set_Time:
+  SEROUT Tpin, T9600, [CR, CR, "Hours   (0..23) --> "]
+  SERIN  Tpin, T9600, 5000, Refresh, [HEX3 hours]
+  hours = hours // $23
+  SEROUT Tpin, T9600, [CR, "Minutes (0..59) --> "]
+  SERIN  Tpin, T9600, 5000, Refresh, [HEX3 minutes]
+  minutes = minutes // $59
+  SEROUT SIOpin\FCpin, N2400, [Cmd_SetClock]
+  PAUSE 5
+  SEROUT SIOpin\FCpin, N2400, [hours, minutes]
+  GOTO Refresh
+
+Set_TMode:
+  SEROUT SIOpin\FCpin, N2400, [cmd]             ' send new temperature mode
+  GOTO Main
+
+Refresh:
+  DEBUG CLS                                     ' clear terminal before menu
+  GOTO Main                                     '   update
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'
+Get_TimeTemp:
+  SEROUT SIOpin\FCpin, N2400, [Cmd_GetTmTmp]
+  SERIN  SIOpin\FCpin, N2400, 500, Get_TTX, [hours, minutes]
+  SERIN  SIOpin\FCpin, N2400, 500, Get_TTX, [temp.LowByte, temp.HighByte, tMode]
+
+Get_TTX:
+  RETURN
+
+
+Show_Menu:
+  SEROUT Tpin, T9600, [Home]
+  SEROUT Tpin, T9600, ["========================", CR]
+
+  SEROUT Tpin, T9600, [HEX2 hours, ":", HEX2 minutes]
+  SEROUT Tpin, T9600, ["              "]
+  digits = 3
+  LOOKDOWN temp, <[0, 10, 100, 1000], digits
+  SEROUT Tpin, T9600, [REP " "\(3-digits), DEC temp]    ' right justify temp
+  SEROUT Tpin, T9600, ["°", tMode, CR]
+
+  SEROUT Tpin, T9600, ["========================", CR]
+  SEROUT Tpin, T9600, ["[T] Set Time", CR]
+  SEROUT Tpin, T9600, ["[C] Celcius Mode", CR]
+  SEROUT Tpin, T9600, ["[F] Fahrenheit Mode", CR]
+  SEROUT Tpin, T9600, ["[R] Refresh Screen", CR, CR]
+  SEROUT Tpin, T9600, ["-->  ", BkSp]
+  RETURN

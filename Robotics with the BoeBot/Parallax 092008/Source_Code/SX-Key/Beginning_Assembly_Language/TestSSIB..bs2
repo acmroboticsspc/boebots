@@ -1,0 +1,48 @@
+' Assembly Language Tutorial with the SX Microcontroller
+' TestSSIB.bs2
+' BASIC Stamp program to test SSIB
+
+'{$STAMP BS2}
+'{$PBASIC 2.5}
+
+
+Baudrate CON 32
+
+' Use the next 2 lines when using inv mode serial
+' low 12
+' low 13
+
+' Use next 2 lines when using non inv mode serial
+HIGH 12
+HIGH 13
+
+' Read starting numbers
+DEBUG "sync A "
+SERIN 14\12,Baudrate,[DEC W3]
+DEBUG "B "
+SERIN 14\13,Baudrate,[DEC W4]
+DEBUG "Complete",CR
+
+
+Top:
+  W3=W3+1   ' calculate expected next numbers
+  W4=W4-1
+  PAUSE 1000   ' do some "work" (pause really)
+
+  ' read numbers
+  SERIN 14\12,Baudrate,[DEC W1]
+  SERIN 14\13,Baudrate,[DEC W2]
+  DEBUG "A:",DEC W1,CR
+  DEBUG "B:",DEC W2,CR
+
+  ' see if they met our expectations
+  IF (W1=W3) THEN TestB
+  DEBUG "Channel A mismatch. Expected ",DEC W3, " got ", DEC W1,CR
+  W3=W1
+
+
+TestB:
+ IF (W2=W4) THEN Top
+ DEBUG "Channel B mismatch. Expected ",DEC W4, " got ", DEC W2,CR
+ W4=W2
+ GOTO Top

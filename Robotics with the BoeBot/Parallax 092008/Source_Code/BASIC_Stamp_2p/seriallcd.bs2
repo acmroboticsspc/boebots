@@ -1,0 +1,35 @@
+	' This program demonstrates fundamental techniques of driving
+	' BPI-216 serial LCDs in BASIC from the BASIC Stamp II. It assumes
+	' that the BPI-216 is connected to I/O pin P1 of the Stamp, and
+	' that it is set for 9600 bps.
+	' Start by defining some useful constants for the Backpack.
+	N9600 con $4054 			' Baudmode-9600 bps inverted. Use $40F0 for BS2-SX.
+	N2400 con $418c
+	I con 254 				' Instruction prefix value.
+	CLR con 1 				' LCD clear-screen instruction.
+	LINE2 con 192 			' Address of 1st char of 2nd line.
+	L1_C7 con 135 			' Address of line 1, character 7.
+	' Now clear the screen in case there's text left from a previous
+	' run of the program. Note that there's a 1-second PAUSE prior to
+	' sending any data to the Backpack. This gives the Backpack plenty
+	' of time to initialize the LCD after power up.
+	pause 1000
+m1:	serout 1,n2400,[I,CLR] 		' Clear the LCD screen.
+	pause 1
+	serout 1,n2400,["Hello World!"] ' Print message.
+	pause 1000
+	' Positioning the cursor requires sending the instruction prefix (ASCII
+	' 254, assigned the symbol "I") followed by an address.
+	serout 1,n2400,[I,LINE2,"..line 2"] ' Move to line 2 and print.
+	' Now we'll simulate a common application by printing a label on the
+	' screen and updating some data by positioning the cursor.
+	pause 2000 ' Wait 2 secs.
+	serout 1,n2400,[I,CLR] ' Clear the LCD screen.
+	pause 1
+	serout 1,n2400,["Count:"] ' Print the label.
+Again:
+	serout 1,n2400,[I,L1_C7] 	' Move to line 1, character 7.
+	serout 1,n2400,[DEC b2," "] 	' Print value of b2 followed by 2 spaces.
+	b2 = b2+1 				' Increment b2.
+	pause 200 				' Slow the loop down.
+	goto Again 				' Repeat endlessly.

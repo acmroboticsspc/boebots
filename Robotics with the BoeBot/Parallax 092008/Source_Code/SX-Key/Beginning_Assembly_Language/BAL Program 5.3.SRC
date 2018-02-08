@@ -1,0 +1,28 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 5.3
+;=======================================================================
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	start_point
+		freq	500000		; 500 kHz
+
+
+		org	8
+pattern		ds	1
+
+		org	0
+
+start_point	mov	!rb,#0		; make all of port b outputs
+		xor	pattern,#$FF
+		mov	rb,pattern
+		sleep
+
+
+
+	
+
+
+
+

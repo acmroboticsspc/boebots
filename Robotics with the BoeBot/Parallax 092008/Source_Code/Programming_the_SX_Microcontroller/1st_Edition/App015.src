@@ -1,0 +1,373 @@
+; APP015.SRC - An SX stopwatch
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+
+TRIS    = $0f
+PLP     = $0e
+
+;** Makro definitions ************************************************
+;
+SkipIfBT1IsUp MACRO     ; Skip if BT1 is not pressed
+  snb ra.0
+ENDM
+
+SkipIfBT2IsUp MACRO     ; Skip if BT2 is not pressed
+  snb ra.2
+ENDM
+
+SkipIfBT1IsDown MACRO   ; Skip if BT1 is pressed
+  snb ra.1
+ENDM
+
+SkipIfBT2IsDown MACRO   ; Skip if BT2 is pressed
+  snb ra.3
+ENDM
+
+TickOn MACRO            ; Turn 1 ms ticker on
+  setb Flags.0
+ENDM
+
+TickOff MACRO           ; Turn 1 ms ticker off
+  clrb Flags.0
+ENDM
+
+SkipIfTick MACRO        ; Skip if ticker is on
+  sb Flags.0
+ENDM
+
+BlinkOn MACRO           ; Turn on blink mode
+  setb Flags.3
+ENDM
+
+BlinkOff MACRO          ; Turn off blink mode
+  clrb Flags.3
+ENDM
+
+SkipIfBlink MACRO       ; Skip if blink mode is on
+  sb Flags.3
+ENDM
+
+ClockOn MACRO           ; Turn the clock timer on
+  setb Flags.1
+ENDM
+
+ClockOff MACRO          ; Turn the clock timer off
+  clrb Flags.1
+ENDM
+
+SkipIfClockIsOn MACRO   ; Skip if the clock timer is on
+  sb Flags.1
+ENDM
+
+SetWaitRelease MACRO    ; Turn on mode "Wait for button
+  setb Flags.2          ; release"
+ENDM
+
+ClrWaitRelease MACRO    ; Turn off mode "Wait for button
+  clrb Flags.2          ; release"
+ENDM
+
+SkipIfWaitRelease MACRO ; Skip is mode "Wait for button
+  sb Flags.2            ; release" is on
+ENDM
+
+org      $08
+Std      = $
+Temp     ds 1           ; Temporary storage
+Ix       ds 1           ; Index variable
+State    ds 1           ; State for "State Engine"
+Flags    ds 1           ; Various flags
+FsrSave  ds 1           ; Temporary Storage for FSR
+org     $30
+Leds    = $             ; Variables for the 7-Segment VP
+Column  ds 1            ; Column mask
+Digit   ds 1            ; Current display position
+Digits  ds 6            ; Digits buffer
+
+org     $50
+Timers  = $             ; Timer bank
+us4     ds 1            ; 4us counter       
+Msec    ds 1            ; 1/1000 sec counter
+HSec    ds 1            ; 1/100 sec counter 
+TSec    ds 1            ; 1/10 sec counter  
+Sec     ds 1            ; 1 sec counter     
+Sec10   ds 1            ; 10 sec counter    
+Min     ds 1            ; 1 min counter     
+Min10   ds 1            ; 10 min counter    
+
+org     $000
+
+;** Timer-VP for the stopwatch ***************************************
+;
+:Timer
+
+  Bank Timers  
+  mov   w, #250 ; 4ms * 250 = 1 ms 
+  dec   us4
+  snz
+    mov us4, w
+  snz
+    TickOn              ; Set the 1ms ticker
+    
+  SkipIfClockIsOn       ; If clock is off, continue with
+    jmp :Display        ; 7-Segment VP
+  snz
+    inc Msec            ; every millisecond
+  mov w, #10
+  mov w, MSec-w         ; Z if MSec = 10
+  snz 
+    clr Msec
+  snz 
+    inc Hsec            ; every 1/100 sec
+  mov w, #10
+  mov w, HSec-w         ; Z if HSec = 10
+  snz 
+    clr Hsec
+  snz 
+    inc Tsec            ; every 1/10 sec
+  mov w, #10
+  mov w, TSec-w         ; Z if TSec = 10
+  snz 
+    clr Tsec
+  snz 
+    inc Sec             ; every second
+  mov w, #10 
+  mov w, Sec-w          ; Z if Sec = 10
+  snz 
+    clr Sec
+  snz 
+    inc Sec10           ; every 10 seconds
+  mov w, #6
+  mov w, Sec10-w        ; Z if Sec10 = 6 
+  snz 
+    clr Sec10
+  snz 
+    inc Min             ; every minute
+  mov w, #10
+  mov w, Min-w          ; Z if Min = 10
+  snz 
+    clr Min
+  snz 
+    inc Min10           ; every 10 minutes
+  mov w, #6 
+  mov w, Min10-w
+  snz
+    clr Min10
+
+;** VP to control a 7-segment, 6-digits LED display ******************
+;
+:Display
+  SkipIfTick            ; Action only if the timer has
+    jmp :ISRExit        ; set the 1ms tick           
+  TickOff               ; Clear the tick flag         
+  bank Leds             ; Get value for current digit 
+  mov  w, #Digits       ; from Digits                
+  add  w, Digit         ;
+  mov  fsr, w           ;
+  mov  w, ind           ; indirectly and
+  call Decode           ; 7-seg pattern to W
+  clr  rc               ; Turn off the current digit
+  mov  rb, w
+  SkipIfBlink           ; If blinking is on,
+    jmp :NoBlink        ;
+  test Digit            ; check if 1/100 seconds digit is
+  sz                    ; the current one, and 
+    jmp :NoBlink  
+  bank Timers           ; if so, get bit 0 of the
+  movb c, TSec.0        ; 1/10 seconds timer to C.
+  bank Leds
+  snc                   ; If set, turn on the DP
+    clrb rb.2           ; LED.
+    
+:NoBlink
+  mov  rc, Column       ; Output column data
+  bank Leds
+  clc                   ; Select next column
+  rl   Column   
+  inc  Digit            ; Select next digit
+  mov  w, #6            ; If we are past digit 5,
+  mov  w, Digit-w       ;
+  snz                   ;
+    clr Digit           ; activate digit 0,      
+  mov  w, #1            ; and select
+  snz   ;  
+    mov Column, w       ; column 0 too.
+
+:ISRExit
+  mov   w, #-200        ; Call the ISR every 4us
+  retiw
+
+;** Subroutine returns the 7-seg pattern for a decimal digit in w
+;
+Decode
+  jmp pc+w
+  retw %00100100        ; 0
+  retw %10101111        ; 1
+  retw %01000110        ; 2
+  retw %00001110        ; 3
+  retw %10001101        ; 4
+  retw %00011100        ; 5
+  retw %00010100        ; 6
+  retw %10101110        ; 7
+  retw %00000100        ; 8
+  retw %00001100        ; 9
+
+org     $100
+
+;** Mainline program *************************************************
+;
+Start
+
+; Clear the data memory
+;
+  clr    fsr
+ClearData
+  sb     fsr.4
+    Setb fsr.3
+  clr    ind
+  ijnz   fsr, ClearData
+
+  mode PLP
+  mov  !ra, #%11110000          ; Pull up for buttons
+  mode TRIS
+  mov  rb, #$ff
+  mov  !rb, #0                  ; Outputs for cathodes
+  clr  rc
+  mov  !rc, #%11000000          ; Outputs for anodes
+
+  bank Leds
+  mov  Column, #1               ; Initialize column mask
+  mov  !option, #%10011111      ; Enable RTCC interrupt
+  jmp  @Main                    ; Continue with main program loop
+
+ 
+  org $200
+
+;** Subroutine copies the current time information into the 
+;   display buffer.
+;
+TimeToDisp
+  mov FSRSave, fsr      ; Save FSR
+  mov Ix,      #5       ; Initialize index
+
+:Copy
+  mov w,       #Hsec    ; Timer base address --> w,
+  add w,       Ix       ; add offset,
+  mov fsr,     w        ; setup indirect address,
+  mov Temp,    ind      ; copy timer variable to Temp.
+  mov w,       #Digits  ; Digits base address --> w,
+  add w,       Ix       ; add offset,
+  mov fsr,     w        ; setup indirect address,
+  mov ind,     Temp     ; copy timer variable --> Digits.
+  dec Ix                ; Next lower index
+  sb  Ix.7              ; If not < 0,
+    jmp :Copy           ; copy more digits
+  mov fsr, FSRSave      ; Restore FSR
+ret     ; Done...
+
+;** Subroutine clears all timer registers
+;
+ClrTime
+  mov FSRSave, fsr      ; Save FSR
+  mov Ix,      #7       ; Initialize index
+
+:Clear
+  mov w,       #Hsec    ; Timer base address --> w,
+  add w,       Ix       ; add offset,
+  mov fsr,     w        ; setup indirect address, 
+  clr ind               ; clear timer variable.
+  dec Ix                ; Next lower index
+  sb  Ix.7              ; If not < 0,
+    jmp :Clear          ; clear mode variables
+  mov fsr, FSRSave      ; Restore FSR
+ret                     ; Done...
+
+;** Main program loop
+;
+Main
+
+  mov  w, #2            ; If State <> 2 (elapsed time),
+  mov  w, State-w       ;  
+  sz
+    call TimeToDisp     ; copy and display the time
+
+  SkipIfWaitRelease     ; Wait for button release if
+    jmp :ExecModes      ; flag is set.
+  SkipIfBT1IsUp         ; BT1 not released,
+    jmp Main            ; continue waiting...
+  SkipIfBT2IsUp         ; BT2 not released,
+    jmp Main            ; continue waiting
+  ClrWaitRelease        ; Clear the wait flag
+:ExecModes              ; "State Engine"
+  mov  w, State         ; Select mode according to current
+  jmp  pc+w             ; state
+  jmp  ModeStop
+  jmp  ModeRun
+  jmp  ModeElap
+  
+ModeStop                ; Clock is stopped
+  SkipIfBT1IsDown       ; BT1 not pressed, check
+    jmp :TestBT2        ; BT2
+  ClockOn               ; BT1 pressed, turn clock on, and
+  SetWaitRelease        ; activate mode "Wait for Button
+                        ; Release"
+  inc State             ; Next state is "ModeRun"
+  jmp Main
+    
+:TestBT2                ; Check BT2 
+  SkipIfBT2IsDown       ; BT2 not pressed,
+    jmp Main            ; no action
+  call ClrTime          ; BT2 pressed, clear time and
+  SetWaitRelease        ; activate mode "Wait for Button
+                        ; Release"
+  jmp  Main
+  
+ModeRun                 ; Clock is running
+  SkipIfBT1IsDown       ; BT1 not pressed, check
+    jmp :TestBT2        ; BT2
+  ClockOff              ; BT1 pressed, stop the clock, and
+  SetWaitRelease        ; activate mode "Wait for Button
+                        ; Release"
+  clr State             ; Next State is ModeStop
+  jmp Main
+
+:TestBT2                ; Check BT2
+  SkipIfBT2IsDown       ; BT2 not pressed, 
+    jmp Main            ; no action
+  inc State             ; BT2 pressed, next State is
+                        ; ModeElap
+  BlinkOn               ; Set the blink flag to make DP
+                        ; in the rightmost digit blink
+  SetWaitRelease        ; Activate mode "Wait for Button
+                        ; Release"
+  jmp  Main
+  
+ModeElap                ; Display elapsed time
+  SkipIfBT1IsDown       ; BT1 not pressed, check
+    jmp :TestBT2        ; BT2
+  SetWaitRelease        ; Activate mode "Wait for Button
+                        ; Release"
+  BlinkOff              ; BT1 pressed, clear the blink flag
+  dec State             ; Next state is ModeRun
+  jmp Main
+
+:TestBT2                ; Check BT2
+  SkipIfBT2IsDown       ; BT2 not pressed, 
+    jmp Main            ; no action
+  call TimeToDisp       ; Display new elapsed time
+  SetWaitRelease        ; Activate mode "Wait for Button
+                        ; Release"
+  jmp  Main             ; again, and again...

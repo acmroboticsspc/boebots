@@ -1,0 +1,66 @@
+'{$STAMP BS2}
+
+' Program: X10_DEMO.BS2 (Demonstration of X-10 control using Xout) 
+' This program--really two program fragments--demonstrates the 
+' syntax and use of the new XOUT command. Basically, the command 
+' works like pressing the buttons on an X-10 control box; first you 
+' press one of 16 keys to identify the unit you want to control, 
+' then you press the key for the action you want that unit to 
+' take (turn ON, OFF, Bright, or Dim). There are also two group-action
+' keys, Lights ON and All OFF. Lights ON turns all lamp modules on
+' without affecting appliance modules. All OFF turns off all modules, 
+' both lamp and appliance types. 
+
+' Using  XOUT requires a 4-wire (2-I/O pin) connection to a PL-513 or 
+' TW-523 X-10 module. See the application note for sources. 
+zPin	con	0	' Zero-crossing-detect pin from TW523 or PL513. 
+mPin	con	1	' Modulation-control pin to TW523 or PL513. 
+
+' X-10 identifies modules by two codes: a House code and a Unit code. 
+' By X-10 convention, House codes are A through P and Unit codes are 
+' 1 through 16. For programming efficiency, the Stamp II treats both
+' of these as numbers from 0 through 15. 
+houseA	con	0	' House code: 0=A, 1=B... 15=P
+Unit1	con	0	' Unit code: 0=1, 1=2... 15=16
+Unit2	con	1	' Unit code 1=2. 
+
+' This first example turns a standard (appliance or non-dimmer lamp)
+' module ON, then OFF. Note that once the Unit code is sent, it 
+' need not be repeated--subsequent instructions are understood to 
+' be addressed to that unit. 
+ 
+xout mPin,zPin,[houseA\Unit1]		' Talk to Unit 1. 
+xout mPin,zPin,[houseA\uniton]		' Tell it to turn ON. 
+pause 1000				' Wait a second. 
+xout mPin,zPin,[houseA\unitoff]		' Tell it to turn OFF. 
+
+' The next example talks to a dimmer module. Dimmers go from full 
+' ON to dimmed OFF in 19 steps. Because dimming is relative to 
+' the current state of the lamp, the only guaranteed way to set a 
+' predefined brightness level is to turn the dimmer fully OFF, then 
+' ON, then dim to the desired level. Otherwise, the final setting of
+' the module will depend on its initial brightness level. 
+
+xout mPin,zPin,[houseA\Unit2]		' Talk to Unit 2. 
+
+' This example shows how to combine X-10 instructions into a 
+' single line. We send OFF to the previously identified unit (Unit2)
+' for 2 cycles (the default for non-dimmer commands). Then a comma
+' introduces a second instruction that dims for 10 cycles. When you
+' combine instructions, don't leave out the number of cycles. The 
+' Stamp may accept your instruction without complaint, but it 
+' won't work correctly--it may see the house code as the number of 
+' cycles, the instruction as the house code, etc. 
+
+xout mPin,zPin,[houseA\unitoff\2,houseA\dim\10]
+
+' Just to reinforce the idea of combining commands, here's the 
+' first example again: 
+
+xout mPin,zPin,[houseA\Unit1\2,houseA\uniton]	' Turn Unit 1 ON. 
+pause 1000					' Wait a second. 
+xout mPin,zPin,[houseA\Unit1\2,houseA\unitoff]	' Turn Unit 1 OFF. 
+
+' End of program. 
+stop
+

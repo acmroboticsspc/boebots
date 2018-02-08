@@ -1,0 +1,104 @@
+' Listing 2
+' Nuts & Volts "Stamp Applications" -- November, 2001
+
+' -----[ Title ]----------------------------------------------------------------
+'
+' File...... PCF8591.BSP
+' Purpose... PCF8591 A2D/D2A Demo
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started...
+' Updated... 07 OCT 2001
+
+' {$STAMP BS2p}
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program demonstates the Philips PCF8591 4-channel A2D plus 1-channel
+' D2A.  Channel 0 input is tied to the output of the D2A pin.  Channel 1 input
+' is tied to the wiper of a pot.  Channes 2 and 3 are tied to Vss.
+'
+' The PCF85591 uses a control byte after the Slave Address.  The control byte
+' data (see details in PCF8591 documentation) is used to enable the analog
+' output bit and set the kind of analog inputs.  In this demo, the analog output
+' bit is enabled and four single-ended analog inputs are used.
+'
+' Note that the first byte transmitted in a read cycle contains the conversion
+' result code of the previous read cycle, so a dummy byte is placed ahead of
+' the analog input array in the I2CIN command.
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+I2Cpin          CON     0                       ' SDA on 0; SCL on 1
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+DevType         CON     %1001 << 4              ' device type
+DevAddr         CON     %000 << 1               ' address = %000 -> %111
+Wr8591          CON     DevType | DevAddr       ' write to PCF8591
+Rd8591          CON     Wr8591 | 1              ' read from PCF8591
+
+EnableD2A       CON     %1 << 6                 ' enable analog output
+FourSngl        CON     %00 << 4                ' four single-ended inputs
+ThreeDiff       CON     %01 << 4                ' three differential inputs
+SnglDiff        CON     %10 << 4                ' two single; one differential
+TwoDiff         CON     %11 << 4                ' two differential inputs
+AutoInc         CON     %1 << 2                 ' auto increment a2d channels
+
+Ctrl            CON     EnableD2A | FourSngl | AutoInc
+
+MVPB            CON     $139C                   ' millivolts per bit factor
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+aOut            VAR     Byte                    ' analog out value
+aIn             VAR     Byte(4)                 ' analog input channels
+mVolts          VAR     Word                    ' convert to millivolts
+dummy           VAR     mVolts.LowByte          ' place holder
+chan            VAR     Nib                     ' channel number
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  DEBUG CLS                                     ' call DEBUG window
+  PAUSE 250                                     ' let it open
+  DEBUG "PCF8591 Demo"
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Set_D2A:
+  DEBUG Home, 10, 10, "D2A Out........ ", DEC aOut, "  ", CR
+  I2COUT I2Cpin, Wr8591, Ctrl, [aOut]
+
+Get_A2D:
+  I2CIN I2Cpin, Rd8591, Ctrl, [dummy, STR aIn\4]
+
+  FOR chan = 0 TO 3
+    DEBUG "Channel ", DEC1 chan, " In... ", DEC aIn(chan), "  ", Tab
+    mVolts = aIn(chan) */ MVPB
+    DEBUG "(", DEC mVolts DIG 3, ".", DEC3 mVolts, " volts)", CR
+  NEXT
+
+  PAUSE 250                                     ' delay between updates
+  aOut = aOut + 1                               ' increment analog output
+  GOTO Set_D2A                                  ' go again
+
+  END
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'

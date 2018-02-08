@@ -1,0 +1,227 @@
+'
+' -----[ Title ]------------------------------------------------------
+'
+' File......: SNAP-IO.BS2
+' Purpose...: Turns LEDs on and off
+' Author....: Christer Johansson
+' Version...: 1.01
+' Stamp.....: BS2-IC
+' Started...: 980503
+' Updated...: 980918
+' Modified..: 990613 by Claus Kuhnel
+'
+' -----[ Program Description ]----------------------------------------
+'
+' This program shows how to implement the S.N.A.P protocol in a BS2-IC
+' and is an simple example to turn LEDs ON or OFF. 
+' This example uses 16-bit CRC-CCITT as error detection method which 
+' gives secure data transfer.
+'
+' If the node is addressed by another node (PC or another MCU) then 
+' the lower 4 bit of DB1 value are displayed by OUTC (Pin11-8) for
+' BASIC Stamp Activity Board.
+'
+' The packet structure is defined in the received packets first two
+' bytes (HDB2 and HDB1). The following packet structure is used.
+'
+' DD=01     - 1 Byte destination address
+' SS=01     - 1 Byte source address
+' PP=00     - No protocol specific flags
+' AA=01     - Acknowledge is required
+' D=0       - No Command Mode
+' EEE=100   - 16-bit CRC-CCITT
+' NNNN=0010 - 2 Byte data
+'
+' Overview of header definition bytes (HDB2 and HDB1)
+'
+'         HDB2             HDB1
+' +-----------------+-----------------+
+' | D D S S P P A A | D E E E N N N N |
+' +-----------------+-----------------+
+'
+'
+' -----[ Constants ]--------------------------------------------------
+'
+TxD     	con 16		' Serial output pin
+RxD     	con 16		' Serial input pin
+LEDS     	con %1111		' LED outputs
+Baud    	con 80		' Baudrate (9600 bps 8N1)
+Preamble 	con %01010101	' Preamble byte
+SYNC		con %01010100	' Synchronisation byte
+CRCPOLY	con $1021		' CRC-CCITT
+HDB2_		con $51
+HDB1_		con $42
+MyAddress 	con 123		' Address for this node (1-255)
+
+' -----[ Variables ]--------------------------------------------------
+'
+CRC		var word		' CRC Word
+Lo_CRC	var CRC.lowbyte	' CRC Lo Byte
+Hi_CRC	var CRC.highbyte	' CRC Hi Byte
+HDB1		var byte		' Header Definition Byte 1
+HDB2		var byte		' Header Definition Byte 2
+DAB1		var byte		' What node should have this paket
+SAB1		var byte		' What node sent this packet
+DB1		var byte		' Packet Data Byte 1
+DB2		var byte		' Packet Data Byte 2
+CRC2		var byte		' Packet CRC Hi_Byte
+CRC1		var byte		' Packet CRC Lo_Byte
+Tmp_Byte1	var byte		' Temporary Variable
+Tmp_Byte2	var byte		' Temporary Variable
+
+
+' -----[ Initialization ]---------------------------------------------
+'
+Dirc = LEDS        		' Set pin 11 to 8 as outputs
+
+DB1 = 0				' Clear Data variable
+DB2 = 0
+
+'------[ Program ]----------------------------------------------------
+'
+Start:  ' Wait for SYNC byte, if received read next eight bytes from master
+        serin RxD,Baud,[wait(SYNC),HDB2,HDB1,DAB1,SAB1,DB2,DB1,CRC2,CRC1]
+ 
+	  debug cls, "Received data:",cr
+	  debug dec4 HDB2, dec4 HDB1
+	  debug dec4 DAB1, dec4 SAB1, cr
+	  debug dec4 DB2,  dec4 DB1
+	  debug dec4 CRC2, dec4 CRC1,cr
+   
+	  ' Packet header check routine
+        '
+        ' Check HDB2 to see if STAMP II are capable to use the packet
+        ' structure, if not goto Start
+        if HDB2 <> HDB2_ then Start
+        ' Check HDB1 to see if STAMP II are capable to use the packet
+        ' structure, if not goto Start
+        if HDB1 <> HDB1_ then Start
+
+        '
+        ' Address check routine
+        '
+        ' Check if this is the node addressed, if not goto Start
+        if DAB1 <> MyAddress then Start
+
+        ' Check CRC for all the received bytes
+        gosub check_crc
+
+        ' Check if there was any CRC errors, if so send NAK
+        if CRC <> 0 then NAK
+
+        ' No CRC errors in packet so check what to do. 
+	  ' Mask the low nibble of DB1 and switch LEDs
+		
+'
+' Associated Function (place it between +++ lines)
+'+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++	
+	  outc = db1 & $0F
+'+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++	       
+'
+ACK:
+	  ' Send ACK (i.e tell master that packet was OK)
+        ' Set ACKs bit in HDB2 (xxxxxx10)
+        HDB2 = HDB2 | %00000010
+	  HDB2 = HDB2 & %11111110	
+        goto send
+
+NAK:
+        ' Send NAK (i.e tell master that packet was bad)
+        ' Set ACK bits in HDB2 (xxxxxx11)
+        HDB2 = HDB2 | %00000011
+        goto send
+
+Send:
+        ' Swap SAB1 <-> DAB1 address bytes
+        Tmp_Byte2 = SAB1      
+        SAB1 = DAB1
+        DAB1 = Tmp_Byte2
+
+        ' Clear CRC variable
+        CRC = 0
+        ' Put HDB2 in variable Tmp_Byte1
+        Tmp_Byte1 = HDB2
+        ' Calculate CRC
+        gosub calc_crc
+        
+        ' Put HDB1 in variable Tmp_Byte1
+        Tmp_Byte1 = HDB1
+        ' Calculate CRC
+        gosub calc_crc
+        
+        ' Put DAB1 in variable Tmp_Byte1
+        Tmp_Byte1 = DAB1
+        ' Calculate CRC
+        gosub calc_crc
+
+        ' Put SAB1 in variable Tmp_Byte1
+        Tmp_Byte1 = SAB1
+        ' Calculate CRC
+        gosub calc_crc
+
+	  ' Put Data in variable Tmp_Byte1
+        Tmp_Byte1 = DB2
+        ' Calculate CRC
+        Gosub calc_crc
+
+        ' Put Data in variable Tmp_Byte1
+        Tmp_Byte1 = DB1
+        ' Calculate CRC
+        Gosub calc_crc
+        
+        ' Move calculated Hi_CRC value to outgoing packet
+        CRC2 = Hi_CRC
+        ' Move calculated Lo_CRC value to outgoing packet
+        CRC1 = Lo_CRC
+
+	  debug cr,"Sent data:",cr
+	  debug dec4 HDB2, dec4 HDB1
+	  debug dec4 DAB1, dec4 SAB1, cr
+	  debug dec4 DB2,  dec4 DB1
+	  debug dec4 CRC2, dec4 CRC1,cr
+
+        
+Tx:	' Send packet to master, including the preamble and SYNC byte
+	serout TxD,baud,[Preamble,SYNC,HDB2,HDB1,DAB1,SAB1,DB2,DB1,CRC2,CRC1]
+
+        ' Give STAMP time to shift out all bits before setting to Rx
+        Pause 50
+
+        ' Done, go back to Start and wait for a new packet
+        goto start
+ 
+' -----[ Subroutines ]------------------------------------------------
+'
+'Soubroutine for checking all received bytes in packet
+check_crc:
+        CRC = 0
+        Tmp_Byte1 = HDB2
+        gosub calc_CRC
+        Tmp_Byte1 = HDB1
+        gosub calc_CRC
+        Tmp_Byte1 = DAB1
+        gosub calc_CRC
+        Tmp_Byte1 = SAB1
+        gosub calc_CRC
+        Tmp_Byte1 = DB2
+        gosub calc_CRC
+	  Tmp_Byte1 = DB1
+        gosub calc_CRC
+        Tmp_Byte1 = CRC2 
+        gosub calc_CRC
+        Tmp_Byte1 = CRC1
+        gosub calc_CRC
+        return
+
+' Subroutine for calculating CRC value in variable Tmp_Byte1
+calc_crc:
+        CRC = Tmp_Byte1 * 256 ^ CRC
+        for Tmp_Byte2 = 0 to 7
+            if CRC.Bit15 = 0 then shift_only
+            CRC = CRC * 2 ^ CRCPOLY
+            goto nxt
+shift_only: CRC = CRC * 2
+nxt:    next
+        return
+
+' -----[ End ]--------------------------------------------------------

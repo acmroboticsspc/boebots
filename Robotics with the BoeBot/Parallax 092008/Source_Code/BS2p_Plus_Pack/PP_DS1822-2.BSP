@@ -1,0 +1,208 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' BS2p Plus Pack
+'
+' File...... PP_DS1822-2.BSP
+' Purpose... Reads and displays information from two Dallas DS1822
+' Author.... Parallax
+' E-mail.... stamptech@parallaxinc.com
+' Started...
+' Updated... 26 SEP 2001
+
+' {$STAMP BS2p}
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program demonstrates individual device addressing with the Dallas
+' 1-Wire bus.  Before running the program, the individual device addresses
+' must be determined and stored in the EEPROM.
+'
+' Use the program PP_OWID.BSP to determine the data table for your
+' DS1822 sensors.
+'
+' To run this program on the BS2p Demo Board, connect the LCD and
+' install Jumper X6. Adjust contrast pot for best display.
+'
+' Refer to the Hitachi HD44780 documentation for details on LCD control.
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+OWpin           CON     15
+TempType        VAR     In14                    ' 1 = Fahrenheit
+LCDpin          CON     0                       ' connect LCD to OutL
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+NoCmd           CON     $00                     ' No command in LCDOUT
+ClrLCD          CON     $01                     ' clear the LCD
+CrsrHm          CON     $02                     ' move cursor to home position
+CrsrLf          CON     $10                     ' move cursor left
+CrsrRt          CON     $14                     ' move cursor right
+DispLf          CON     $18                     ' shift displayed chars left
+DispRt          CON     $1C                     ' shift displayed chars right
+DDRam           CON     $80                     ' Display Data RAM control
+CGRam           CON     $40                     ' Custom character RAM
+Line1           CON     $80                     ' DDRAM address of line 1
+Line2           CON     $C0                     ' DDRAM address of line 2
+
+DegSym          CON     223                     ' degrees symbol
+
+' 1-Wire Support
+'
+OW_FERst        CON     %0001                   ' Front-End Reset
+OW_BERst        CON     %0010                   ' Back-End Reset
+OW_BitMode      CON     %0100
+OW_HighSpd      CON     %1000
+
+ReadROM         CON     $33                     ' read ID, serial num, CRC
+MatchROM        CON     $55                     ' look for specific device
+SkipROM         CON     $CC                     ' skip ROM (one device)
+SearchROM       CON     $F0                     ' search
+
+' DS1822 control
+'
+CnvrtTemp       CON     $44                     ' do temperature conversion
+RdScratch       CON     $BE                     ' read scratchpad
+
+TC              CON     0                       ' read in Celcius
+TF              CON     1                       ' read in Fahrenheit
+NumSensors      CON     2                       ' inside and outside
+
+' -----[ Variables ]------------------------------------------------------------
+'
+sensor          VAR     Nib                     ' sensor number to process
+idx             VAR     Nib                     ' loop counter
+eeAddr          VAR     Byte                    ' ee address of ROM match
+romData         VAR     Byte(8)                 ' ROM data to DS1822
+
+tempIn          VAR     Word                    ' raw temperature
+sign            VAR     tempIn.Bit11            ' 1 = negative temperature
+tInLow          VAR     tempIn.LowByte
+tInHigh         VAR     tempIn.HighByte
+tSign           VAR     Bit
+
+tempC           VAR     Word                    ' Celsius
+tempF           VAR     Word                    ' Fahrenheit
+char            VAR     Byte                    ' character for LCD
+rjNum           VAR     tempIn                  ' right justified number
+rjSign          VAR     Bit                     ' sign for rj number
+pos             VAR     Byte                    ' position to print
+digits          VAR     Nib                     ' digits in rjNum
+width           VAR     Nib                     ' width of display
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+                ' ROM codes for connected sensors
+                ' -- these values MUST be edited for your sensors
+
+T_ID0           DATA    $22,$30,$34,$01,$00,$00,$00,$6C
+T_ID1           DATA    $22,$85,$42,$01,$00,$00,$00,$71
+
+
+                ' labels for temperature sensors
+
+T_Label0        DATA    "INSIDE ",0
+T_Label1        DATA    "OUTSIDE ",0
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  PAUSE 500                                     ' let the LCD settle
+  LCDCMD LCDpin,%00110000 : PAUSE 5             ' 8-bit mode
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00100000 : PAUSE 0             ' 4-bit mode
+  LCDCMD LCDpin,%00101000 : PAUSE 0             ' 2-line mode
+  LCDCMD LCDpin,%00001100 : PAUSE 0             ' no crsr, no blink
+  LCDCMD LCDpin,%00000110                       ' inc crsr, no disp shift
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  LCDOUT LCDpin,ClrLCD,["    DS1822"]           ' splash screen
+  LCDOUT LCDpin,Line2, ["  Thermometer"]
+  PAUSE 2000
+  LCDCMD LCDpin,ClrLCD
+
+
+Show_Sensors:
+  LOOKUP sensor,[T_ID0,T_ID1],eeAddr            ' point to ROM code
+  GOSUB Get_Temp                                ' get temperature
+
+  LOOKUP sensor,[T_Label0,T_Label1],eeAddr      ' display sensor label
+  LCDCMD LCDpin, Line1
+  GOSUB Print_Label
+
+  width = 4
+  pos = Line2 + 10
+  rjNum = tempC
+  IF (TempType = TC) THEN  Print_Temp
+  rjNum = tempF
+
+Print_Temp:
+  GOSUB RJ_Print
+  LCDOUT LCDpin,NoCmd,[DegSym,TempType * ("F" - "C") + "C"]
+
+Next_Sensor:
+  sensor = sensor + 1 // NumSensors
+  PAUSE 5000
+  GOTO Show_Sensors
+
+  END
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'
+Get_Temp:
+  FOR idx = 0 TO 7                              ' load ROM pattern
+    READ (eeAddr+idx),romData(idx)
+  NEXT
+
+  OWOUT OWpin,OW_FERst,[MatchROM,STR romData\8,CnvrtTemp]
+  PAUSE 500
+  OWOUT OWpin,OW_FERst,[MatchROM,STR romData\8,RdScratch]
+  OWIN  OWpin,OW_BERst,[tInLow,tInHigh]
+
+  tSign = sign                                  ' save sign bit
+  tempC = tempIn
+  tempC = tempC >> 4                            ' round to whole degrees
+  IF (tSign = 0) THEN NoNeg1
+  tempC = tempC | $FF00                         ' extend sign bits for negs
+
+NoNeg1:
+  tempF = tempC */ $01CD                        ' multiply by 1.8
+  IF (tSign = 0) THEN NoNeg2                    ' if neg, extend sign bits
+  tempF = tempF | $FF00
+
+NoNeg2:
+  tempF = tempF + 32                            ' finish C -> F conversion
+  RETURN
+
+
+Print_Label:
+  READ eeAddr,char                              ' get a character
+  IF (char = 0) THEN Print_Done                 ' if 0, exit
+  LCDOUT LCDpin,NoCmd,[char]                    ' send to LCD
+  eeAddr = eeAddr + 1                           ' move to next char address
+  GOTO Print_Label
+Print_Done:
+  RETURN
+
+
+RJ_Print:
+  rjSign = rjNum.Bit15                          ' save sign
+  rjNum = ABS(rjNum)                            ' convert to positive
+  digits = width
+  LOOKDOWN rjNum,<[0,10,100,1000,65535],digits
+  LCDOUT LCDpin,pos,[REP " "\(width-digits-1),13 * rjSign + " ",DEC rjNum]
+  RETURN

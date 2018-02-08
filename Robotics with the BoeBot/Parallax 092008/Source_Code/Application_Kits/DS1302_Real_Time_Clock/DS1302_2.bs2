@@ -1,0 +1,102 @@
+BASIC Stamp II (BS2-IC) Program Listing #2
+'***************************************************************************
+'*       Title: DS1302_2.BS2    Author: Jeff A Martin    Date: 5/18/98       	*
+'*                                                                         			*
+'* Description: Shortened version of DS1302_1.BS2.			*
+'*                                                                         			*
+'***************************************************************************
+
+
+DATA (49)
+
+RTCCmd  	VAR 	BYTE
+Clk		CON	0
+Dta     	CON     1
+RTCReset	CON	2
+Temp	VAR	BYTE
+Seconds VAR	BYTE
+Minutes VAR	BYTE
+Hours	VAR	BYTE
+Date	VAR	BYTE
+Month	VAR	BYTE
+Year	VAR	BYTE
+I	VAR	BYTE
+
+'Define Constants
+SecReg	CON	%00000
+MinReg  CON	%00001
+HrsReg	CON	%00010
+DateReg	CON	%00011
+MonReg	CON	%00100
+YrReg	CON	%00110
+CtrlReg CON	%00111
+BrstReg	CON	%11111
+
+DIRS = %0000000000111111
+OUTS = %0000000000000000
+
+'  Clear Write Protect bit in control register
+  Temp = $10
+  RTCCmd = CtrlReg
+  GOSUB WriteRTC
+
+  Temp = $98
+  RTCCmd = YrReg
+  GOSUB WriteRTC
+
+  Temp = $08
+  RTCCmd = MonReg
+  GOSUB WriteRTC
+
+  Temp = $27
+  RTCCmd = DateReg
+  GOSUB WriteRTC
+
+  Temp = $48
+  RTCCmd = MinReg
+  GOSUB WriteRTC
+
+  Temp = $00
+  RTCCmd = SecReg
+  GOSUB WriteRTC
+
+  Temp = $80
+  RTCCmd = CtrlReg
+  GOSUB WriteRTC
+
+Loop:
+  GOSUB ReadRTCBurst
+  DEBUG HOME,DEC Hours.HIGHNIB,DEC Hours.LOWNIB,":",DEC Minutes.HIGHNIB
+  DEBUG DEC Minutes.LOWNIB,":",DEC Seconds.HIGHNIB,DEC Seconds.LOWNIB
+  DEBUG " ",DEC Month.HIGHNIB,DEC Month.LOWNIB,"/"
+  DEBUG DEC Date.HIGHNIB, DEC Date.LOWNIB,"/",DEC Year.HIGHNIB, DEC Year.LOWNIB,CR
+GOTO Loop
+
+WriteRTCRAM:
+ 'Write to DS1202 RTC
+  HIGH RTCReset
+  SHIFTOUT Dta, Clk, LSBFIRST, [%0\1,RTCCmd\5,%11\2,Temp]
+  LOW RTCReset
+RETURN
+
+WriteRTC:
+'Write to DS1202 RTC
+  HIGH RTCReset
+  SHIFTOUT Dta, Clk, LSBFIRST, [%0\1,RTCCmd\5,%10\2,Temp]
+  LOW RTCReset
+RETURN
+
+ReadRTCBurst:
+  HIGH RTCReset
+  SHIFTOUT DTA, Clk, LSBFIRST, [%1\1,BrstReg\5,%10\2]
+  SHIFTIN DTA, Clk, LSBPRE, [Seconds,Minutes,Hours,Date,Month,Year,Year]
+  LOW RTCReset
+RETURN
+
+ReadRTCRAM:
+  HIGH RTCReset
+  SHIFTOUT DTA, Clk, LSBFIRST, [%1\1,RTCCmd\5,%11\2]
+  SHIFTIN DTA, Clk, LSBPRE, [Temp]
+  LOW RTCReset
+RETURN
+				

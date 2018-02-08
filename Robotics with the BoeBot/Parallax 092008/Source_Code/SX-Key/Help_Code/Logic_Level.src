@@ -1,0 +1,57 @@
+;=======================================================================
+;TITLE:         Logic_Level.src
+;
+;PURPOSE:       This SX28 code demonstrates setup of I/O pin logic levels.
+;
+;AUTHOR:        Parallax, Inc.
+;
+;REVISIONS:
+;  08/12/99 -   Initial release.
+;  09/17/04 -   Updated to support SASM.
+;
+;CONNECTIONS:
+;  None.
+;
+;DETAILS:
+;  This code demonstrates configuring the I/O pin Logic Levels (CMOS/TTL).
+;=======================================================================
+
+
+;-------------------------- DEVICE DIRECTIVES --------------------------
+
+		DEVICE		SX28,OSC4MHZ,TURBO
+
+IFDEF	__SASM  ;SASM Directives
+		DEVICE		STACKX,OPTIONX
+		IRC_CAL		IRC_SLOW
+		
+ELSE		;Parallax Assember Directives
+		DEVICE		STACKX_OPTIONX
+ENDIF
+
+		RESET		Initialize
+
+;---------------------------- DEBUG SETTINGS ---------------------------
+
+		FREQ	4_000_000
+	
+;------------------------ INITIALIZATION ROUTINE -----------------------
+
+Initialize
+		;Logic Level Configuration
+		mov	W,#$1D			;Allow Logic Level configuration
+		mov	M,W				
+		mov	!ra,#%0000		;Set entire 4-bit port A to be CMOS
+		mov	!rb,#%11110000		;Set port B bits 4-7 to TTL, bits 0-3 to CMOS
+		mov	!rc,#%00001111		;Set port C bits 4-7 to CMOS, bits 0-3 TTL
+
+		mov	W,#$1F			;Allow Direction configuration
+		mov	M,W
+		mov	!ra,#%1100		;Set port A bits 0-1 to output direction, bits 2-3 to inputs
+		mov	!rb,#%10110011		;Set port B bits 2,3,6 to output direction, all others inputs
+		mov	!rc,#%11011110  	;Set port C bits 0,5 to output direction, all others inputs
+
+;---------------------------- MAIN PROGRAM -----------------------------
+
+Main		
+		jmp	Main

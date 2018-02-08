@@ -1,0 +1,191 @@
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... LCD_5x10.BS2
+' Purpose... Stamp 2 -> LCD (4-bit interface)
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' WWW....... http://members.aol.com/jonwms
+' Started... 16 JUL 1994
+' Updated... 27 AUG 1997
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates the various standard features of a 1x16 LCD
+' display that uses the Hitachi HD44780 controller. The display is con-
+' figured to use the 5x10 character set, thus allowing proper decenders on
+' the characters "g", "J", "q", "p" and "y". 
+'
+' LCD Connections:
+'
+' LCD        (Function)         Stamp
+' ---------------------         -----
+' pin 1         Vss             Gnd
+' pin 2         Vdd             +5
+' pin 3         Vo              Gnd (or wiper of 10K pot)
+' pin 4         RS              Pin 4
+' pin 5         R/W             Gnd
+' pin 6         E               Pin 5
+' pin 7         DB0             Gnd
+' pin 8         DB1             Gnd
+' pin 9         DB2             Gnd
+' pin 10        DB3             Gnd
+' pin 11        DB4             Pin 0
+' pin 12        DB5             Pin 1
+' pin 13        DB6             Pin 2
+' pin 14        DB7             Pin 4
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+' 16 JUL 94 : Version 1.0 - compilation of code from last 3 months
+' 08 AUG 96 : Trimmed code to save space -- no performance changes!
+' 27 AUG 97 : Updated for Nuts & Volts
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+RS      CON     4                       ' Register Select (1 = char)
+E       CON     5                       ' LCD Enable pin  (1 = enabled)
+
+' LCD control characters
+'
+ClrLCD  CON     $01                     ' clear the LCD
+CrsrHm  CON     $02                     ' move cursor to home position
+CrsrLf  CON     $10                     ' move cursor left
+CrsrRt  CON     $14                     ' move cursor right
+DispLf  CON     $18                     ' shift displayed chars left
+DispRt  CON     $1C                     ' shift displayed chars right
+DDRam   CON     $80                     ' Display Data RAM control
+
+' DDROM codes for characters with decenders
+'
+_g	CON	$E7
+_j	CON	$EA
+_p	CON	$F0
+_q	CON	$F1
+_y	CON	$F9
+
+ 
+' -----[ Variables ]-------------------------------------------------------
+'
+char    VAR     Byte                    ' character sent to LCD
+index   VAR     Byte                    ' loop counter
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+Msg     DATA    "Heeeere's Jonn",_y,"!"	' preload EEPROM with message
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Init:   DirL = %00111111                ' set pins 0-5 as outputs
+	Outs = $0000
+
+
+' Initialize the LCD (Hitatchi HD44780 controller)
+'
+LCDini: PAUSE 500                       ' let the LCD settle
+	OutA = %0011                    ' 8-bit mode
+	PULSOUT E, 1
+	PAUSE 5
+	PULSOUT E, 1
+	PULSOUT E, 1
+	OutA = %0010                    ' 4-bit mode
+	PULSOUT E, 1
+	char = %00100100                ' 5x10 font
+	GOSUB LCDcmd
+	char = %00001100                ' disp on, crsr off, blink off
+	GOSUB LCDcmd                     
+	char = %00000110                ' inc crsr, no disp shift
+	GOSUB LCDcmd
+	char = ClrLCD
+	GOSUB LCDcmd
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Start:  FOR index = 0 TO 15
+	  READ Msg + index, char        ' get character from EEPROM
+	  GOSUB LCDwr                   ' write it
+	  PAUSE 50                      ' delay between chars
+	NEXT
+	PAUSE 2000                      ' wait 2 seconds
+
+	char = CrsrHm                   ' move the cursor home
+	GOSUB LCDcmd
+
+	char = %00001110                ' turn the cursor on
+	GOSUB LCDcmd
+	PAUSE 500
+
+	char = CrsrRt
+	FOR index = 1 TO 15             ' move the cursor accross display
+	  GOSUB LCDcmd
+	  PAUSE 100
+	NEXT
+
+	FOR index = 14 TO 0             ' go backward by moving to
+	  char = DDRam + index          '  a specific address
+	  GOSUB LCDcmd
+	  PAUSE 100
+	NEXT
+
+	char = %00001101                ' cursor off, blink on
+	GOSUB LCDcmd
+	PAUSE 2000
+	
+	char = %00001100                ' blink off
+	GOSUB LCDcmd
+
+	FOR index = 1 TO 10             ' flash display
+	  char = char ^ %00000100       ' toggle display bit
+	  GOSUB LCDcmd
+	  PAUSE 250       
+	NEXT
+	PAUSE 1000
+
+	FOR index = 1 TO 16             ' shift display
+	  char = DispRt
+	  GOSUB LCDcmd
+	  PAUSE 100
+	NEXT
+	PAUSE 1000
+
+	FOR index = 1 TO 16             ' shift display back
+	  char = DispLf
+	  GOSUB LCDcmd
+	  PAUSE 100
+	NEXT
+	PAUSE 1000
+
+	char = ClrLCD                   ' clear the LCD
+	GOSUB LCDcmd
+	PAUSE 500
+
+	GOTO Start                      ' do it all over
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+' Translate ASCII code for characters with decenders
+' -- has no affect on other characters
+'
+Xlate:	LOOKDOWN char, ["g","j","q","p","y"], char
+	LOOKUP char, [_g,_j,_q,_p,_y], char
+	RETURN
+
+' Send command to the LCD
+'
+LCDcmd: LOW RS                          ' enter command mode
+					'  then write the character
+
+' Write ASCII char to LCD 
+'
+LCDwr:  OutA = char.HIGHNIB             ' output high nibble
+	PULSOUT E, 1                    ' strobe the Enable line
+	OutA = char.LOWNIB              ' output low nibble
+	PULSOUT E, 1
+	HIGH RS                         ' return to character mode
+	RETURN

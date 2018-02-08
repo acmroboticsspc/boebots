@@ -1,0 +1,67 @@
+' -----[ Title ]----------------------------------------------------------------
+' Mini Sumo 3.2 : Line Sensors Routine
+' {$STAMP BS2}
+
+' -----[ I/O Definitions ]------------------------------------------------------
+
+LLineSnsrPwr    CON     10                      ' left line sensor power
+LLineSnsrIn     CON      9                      ' left line sensor input
+RLineSnsrPwr    CON      7                      ' right line sensor power
+RLineSnsrIn     CON      8                      ' right line sensor input
+
+' -----[ Constants ]------------------------------------------------------------
+
+ClrEOL          CON     11                      ' clear to end of line (DEBUG)
+
+' -----[ Variables ]------------------------------------------------------------
+
+leftSense       VAR     Word                    ' left sensor raw reading
+rightSense      VAR     Word                    ' right sensor raw reading
+lineBits        VAR     Nib                     ' decoded sensors value
+lineLeft        VAR     lineBits.Bit1
+lineRight       VAR     lineBits.Bit0
+
+' -----[ Main Code ]------------------------------------------------------------
+
+Main:
+  GOSUB Read_Line_Sensors
+  DEBUG Home, "LR", CR                          ' show sensor readings
+  DEBUG BIN2 lineBits, CR, CR
+
+  ' sumo movement
+  BRANCH lineBits, [Go_Fwd, Spin_Left, Spin_Right, About_Face]
+
+Go_Fwd:
+  DEBUG "Continue forward", ClrEOL
+  GOTO Main
+
+Spin_Left:
+  DEBUG "Spin Left", ClrEOL
+  GOTO Main
+
+Spin_Right:
+  DEBUG "Spin Right", ClrEOL
+  GOTO Main
+
+About_Face:
+  DEBUG "Turn around", ClrEOL
+  GOTO Main
+
+' -----[ Subroutines ]----------------------------------------------------------
+
+Read_Line_Sensors:
+  HIGH LLineSnsrPwr                             ' activate sensors
+  HIGH RLineSnsrPwr
+  HIGH LLineSnsrIn                              ' discharge caps
+  HIGH RLineSnsrIn
+  PAUSE 1
+  RCTIME LLineSnsrIn, 1, leftSense              ' read left sensor
+  RCTIME RLineSnsrIn, 1, rightSense             ' read right sensor
+  LOW LLineSnsrPwr                              ' deactivate sensors
+  LOW RLineSnsrPwr
+
+  ' convert readings to bits
+  lineBits = %00
+  LOOKDOWN leftSense, >=[1000, 0], lineLeft     ' 0 = on black, 1 = on line
+  LOOKDOWN rightSense, >=[1000, 0], lineRight
+  RETURN

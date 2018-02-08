@@ -1,0 +1,175 @@
+' -----[ Title ]----------------------------------------------------------------
+' zippy_sumobot.bs2
+' {$STAMP BS2}
+
+' This program controls a Parallax MiniSumo Bot equipped with 2 QTI line
+' sensors and 2 IR-based object detectors.
+
+' This program is based on the Parallax published program
+' Mini Sumo 5.1 : Basic Competition Program
+' The main logic is different.
+
+' The robot will go forward unless it detects another robot to the
+' right or left, in which case it turns in the appropriate direction.
+' 
+' When it detects the white line at the edge of the sumo ring, the
+' robot will back up, turn to the right a bit, and continue forward
+' again.
+
+' The robot does not stop at the end of the match, it keeps going forever.
+
+' -----[ I/O Definitions ]------------------------------------------------------
+
+LMotor          CON     13                      ' left servo motor
+RMotor          CON     12                      ' right servo motor
+
+LLineSnsPwr     CON     10                      ' left line sensor power
+LLineSnsIn      CON      9                      ' left line sensor input
+RLineSnsPwr     CON      7                      ' right line sensor power
+RLineSnsIn      CON      8                      ' right line sensor input
+
+LfIrOut         CON      4                      ' left IR LED output
+LfIrIn          VAR     In11                    ' left IR sensor input
+RtIrOut         CON     15                      ' right IR LED output
+RtIrIn          VAR     In14                    ' right IR sensor input
+
+Speaker         CON      1                      ' piezo speaker
+StartLED        CON      0                      ' display start delay
+
+' -----[ Constants ]------------------------------------------------------------
+
+LFwdFast        CON     1000                    ' left motor forward; fast
+LFwdSlow        CON      800                    ' left motor forward; slow
+LStop           CON      750                    ' left motor stop
+LRevSlow        CON      700                    ' left motor reverse; slow
+LRevFast        CON      500                    ' left motor reverse; fast
+
+RFwdFast        CON      500                    ' right motor forward; fast
+RFwdSlow        CON      700                    ' right motor forward; slow
+RStop           CON      750                    ' right motor stop
+RRevSlow        CON      800                    ' right motor reverse; slow
+RRevFast        CON     1000                    ' right motor reverse; fast
+
+BackupTime	CON	20			' len time robot backs up
+TurnTime	CON	20			' len time robot turns rt
+
+' -----[ Variables ]------------------------------------------------------------
+
+leftSense       VAR     Word                    ' left sensor raw reading
+rightSense      VAR     Word                    ' right sensor raw reading
+blackThresh     VAR     Word                    ' QTI black threshold setting
+lineBits        VAR     Nib                     ' decoded sensors value
+lineLeft        VAR     lineBits.Bit1
+lineRight       VAR     lineBits.Bit0
+
+irBits          VAR     Nib                     ' storage for IR target data
+irLeft          VAR     irBits.Bit1
+irRight         VAR     irBits.Bit0
+lastIr          VAR     Nib                     ' info from last reading
+
+pulses          VAR     Byte                    ' counter for motor control
+temp            VAR     Byte
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+
+RunStatus       DATA    $00                     ' run status
+
+' -----[ Initialization ]-------------------------------------------------------
+
+Run_Check:                                      ' user Reset button as On-Off
+  READ RunStatus, temp                          ' read current status
+  temp = ~temp                                  ' invert status
+  WRITE RunStatus, temp                         ' save status for next reset
+  IF (temp = 0) THEN Set_Threshold              ' run now?
+  END                                           '   -- no ... next time
+
+' Sets black threshold to 1/4 the average of the two sensor readings.
+' SumoBot must be placed over black playing surface before this code runs.
+
+Set_Threshold:                                  ' set QTI black threshold
+  GOSUB Read_Line_Sensors
+  blackThresh = (leftSense / 8) + (rightSense / 8)
+
+Start_Delay:                                    ' mandatory five second delay
+  FOR temp = 1 TO 5
+    HIGH StartLED                               ' show active
+    PAUSE 900
+    INPUT StartLED                              ' blink each second
+    FREQOUT Speaker, 100, 2500, 3000            ' beep each second
+  NEXT
+
+' -----[ Main Code ]------------------------------------------------------------
+
+Main:
+  GOSUB Read_Line_Sensors
+
+' If either sensor is on the line...
+  IF ( (lineLeft = 1) OR (lineRight = 1)) THEN White_Line
+
+' ...else check IR sensors
+  GOSUB Read_IR_Sensors
+
+' Determine direction to go, depending on what was detected
+  BRANCH irBits, [ Forward_Pulse, Right_Pulse, Left_Pulse, Forward_Pulse]
+
+' -----[ Subroutines ]----------------------------------------------------------
+
+Read_Line_Sensors:
+  HIGH LLineSnsPwr                              ' activate sensors
+  HIGH RLineSnsPwr
+  HIGH LLineSnsIn                               ' discharge QTI caps
+  HIGH RLineSnsIn
+  PAUSE 1
+  RCTIME LLineSnsIn, 1, leftSense               ' read left sensor
+  RCTIME RLineSnsIn, 1, rightSense              ' read right sensor
+  LOW LLineSnsPwr                               ' deactivate sensors
+  LOW RLineSnsPwr
+
+  ' convert readings to bits
+  lineBits = %00
+  LOOKDOWN leftSense, >=[blackThresh, 0], lineLeft
+  LOOKDOWN rightSense, >=[blackThresh, 0], lineRight
+  RETURN
+
+Read_IR_Sensors:
+  FREQOUT LfIrOut, 1, 38500                     ' modulate left IR LED
+  irLeft = ~LfIrIn                              ' read input (1 = target)
+  FREQOUT RtIrOut, 1, 38500                     ' modulate right IR LED
+  irRight = ~RtIrIn                             ' read input (1 = target)
+  RETURN
+
+White_Line:
+  GOSUB Backward
+  GOSUB Right_Turn
+  GOTO Main
+
+Right_Turn:
+  FOR pulses = 1 TO TurnTime
+    PULSOUT LMotor, LFwdFast
+    PULSOUT RMotor, RRevFast
+    PAUSE 20
+  NEXT
+  RETURN
+
+Backward:
+  FOR pulses = 1 TO BackupTime
+    PULSOUT LMotor, LRevFast
+    PULSOUT RMotor, RRevFast
+    PAUSE 20
+  NEXT
+  RETURN
+
+Forward_Pulse:
+  PULSOUT LMotor, LFwdFast
+  PULSOUT RMotor, RFwdFast
+  GOTO Main
+
+Left_Pulse:
+  PULSOUT LMotor, LRevFast
+  PULSOUT RMotor, RFwdFast
+  GOTO Main
+
+Right_Pulse:
+  PULSOUT LMotor, LFwdFast
+  PULSOUT RMotor, RRevFast
+  GOTO Main

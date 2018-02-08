@@ -1,0 +1,37 @@
+' -----[ Title ]-----------------------------------------------------------
+' Gripper Program 2.1: Close Gripper
+'{$STAMP BS2}
+'{$PBASIC 2.5}
+
+' -----[ Program Description ]---------------------------------------------
+' This program closes the gripper
+' Manually move gripper to open position before beginning
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+GripperServo   PIN     14                    ' Gripper Servo on P14
+
+' -----[ Constants ]-------------------------------------------------------
+' Choose your type of gripper servo.  1 for newer, 0 for older.
+#DEFINE NewGripServo = 1                     ' Newer standard servo
+'#DEFINE NewGripServo = 0                    ' Older STD servo
+
+#IF (NewGripServo = 1) #THEN                 ' For newer Standard gripper servo
+  StepSize     CON     20                    ' Step size for gripper servo
+#ELSE                                        ' For older STD gripper servo
+  StepSize     CON     10                    ' Step size for griper servo
+#ENDIF
+
+CloseGripper   CON     700                   ' Decrease to close more
+OpenGripper    CON     1200                  ' Increase to open more
+
+' -----[ Variables ]-------------------------------------------------------
+
+pulsewidth     VAR     Word
+
+' -----[ Main Code ]-------------------------------------------------------
+
+FOR pulsewidth = OpenGripper TO CloseGripper STEP StepSize
+  PULSOUT GripperServo, pulsewidth
+  PAUSE 20
+NEXT

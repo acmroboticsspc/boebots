@@ -1,0 +1,39 @@
+'{$STAMP BS2}
+
+' Program: 74HC595.BS2 (Demonstrate 74HC595 shift register with Shiftout)
+' This program demonstrates the use of the 74HC595 shift register as an
+' 8-bit output port accessed via the Shiftout instruction. The '595
+' requires a minimum of three inputs: data, shift clock, and latch 
+' clock. Shiftout automatically handles the data and shift clock, 
+' presenting data bits one at a time on the data pin, then pulsing the
+' clock to shift them into the '595's shift register. An additional 
+' step--pulsing the latch-clock input--is required to move the shifted
+' bits in parallel onto the output pins of the '595. 
+
+' Note that this application does not control the output-enable or 
+' reset lines of the '595. This means that before the Stamp first 
+' sends data to the '595, the '595's output latches are turned on and
+' may contain random data. In critical applications, you may want to 
+' hold output-enable high (disabled) until the Stamp can take control. 
+
+DataP	con	0	' Data pin to 74HC595. 
+Clock	con	1	' Shift clock to '595. 
+Latch	con	2	' Moves data from shift register to output latch. 
+counter	var	byte	' Counter for demo program. 
+
+' The loop below moves the 8-bit value of 'counter' onto the output
+' lines of the '595, pauses, then increments counter and repeats. 
+' The data is shifted msb first so that the most-significant bit is 
+' shifted to the end of the shift register, pin QH, and the least-
+' significant bit is shifted to QA. Changing 'msbfirst' to 'lsbfirst'
+' causes the data to appear backwards on the outputs of the '595. 
+' Note that the number of bits is _not_ specified after the variable
+' in the instruction, since it's eight, the default. 
+Again: 
+  Shiftout DataP,Clock,msbfirst,[counter]	' Send the bits. 
+  pulsout Latch,1				' Transfer to outputs. 
+  pause 50					' Wait briefly. 
+  counter = counter+1				' Increment counter. 
+goto Again					' Do it again. 
+
+

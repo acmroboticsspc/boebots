@@ -1,0 +1,229 @@
+' Listing 3
+' Nuts & Volts - December 2000
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... PCF8583.BSP
+' Purpose... BASIC Stamp SX Plus <--> Philips PCF8583 (I2C RTC/RAM)
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 05 NOV 2000
+' Updated... 05 NOV 2000 
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates the I2C routines of the BSP by connecting to
+' a Philips PCF8583 RTC/RAM chip.
+'
+' Program requires 2x16 LCD
+'   - LCD.E 	--> Pin0 (pulled down [to ground] through 4.7K)
+'   - LCD.R/W	--> Pin2 (or grounded for write-only operation)
+'   - LCD.RS 	--> Pin3
+'   - LCD.D4	--> Pin4
+'   - LCD.D5	--> Pin5
+'   - LCD.D6	--> Pin6
+'   - LCD.D7	--> Pin7
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+LCDpin		CON	0			' data on pins 4 - 7
+I2Csda		CON	8			' sda pin (scl on 9)
+BtnsIn		VAR	InD			' button input
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+' LCD control characters
+'
+NoCmd		CON	$00			' just print 
+ClrLCD  	CON     $01             	' clear the LCD
+CrsrHm  	CON     $02             	' cursor home
+CrsrLf  	CON     $10             	' cursor left
+CrsrRt  	CON     $14			' move cursor right
+DispLf  	CON     $18			' shift display left
+DispRt  	CON     $1C			' shift displayright
+DDRam   	CON     $80			' Display Data RAM control
+Line1		CON	$80			' address of line 1
+Line2		CON	$C0			' address of line 2
+
+' PCF8583 control
+'
+RTCwrite	CON	%10100000		' write address
+RTCread		CON	%10100001		' read address
+
+Yes		CON	1
+No		CON	0
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+seconds		VAR	Byte
+minutes		VAR	Byte
+hours		VAR	Byte
+day		VAR	Nib			' 0 - 6 (day of week)
+date		VAR	Byte			' 1 - 31
+month		VAR	Nib
+year		VAR	Nib			' 0 - 3 (LeapYear offset)
+
+rawTime		VAR	Word			' minutes past midnight
+
+regCtrl		VAR	Byte			' [0] control/status
+regHuns		VAR	Byte			' [1] hundredths (bcd)
+regSecs		VAR	Byte			' [2] seconds (bcd)
+regMins		VAR	Byte			' [3] minutes (bcd)
+regHrs		VAR	Byte			' [4] hours (bcd)
+regYrDate	VAR	Byte			' [5] year & date (bcd+)
+regMoDay	VAR	Byte			' [6] day & month (bcd+)
+
+btns		VAR	Nib			' button inputs
+btnMin		VAR	btns.Bit0		' update minutes
+btnHrs		VAR	btns.Bit1		' update hours
+btnDay		VAR	btns.Bit2		' update day
+btnBack		VAR	btns.Bit3		' go backward
+
+regAddr		VAR	Byte			' register address
+regData		VAR	Byte			' data to/from register
+
+eeAddr		VAR	Byte			' EE data pointer
+char		VAR	Byte			' character from EE
+idx		VAR	Byte			' loop counter
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+Su		DATA	"SUNDAY",0
+Mo		DATA	"MONDAY",0
+Tu		DATA	"TUESDAY",0
+We		DATA	"WEDNESDAY",0
+Th		DATA	"THURSDAY",0
+Fr		DATA	"FRIDAY",0
+Sa		DATA	"SATURDAY",0
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+LCD_Setup:
+  LCDCMD LCDpin,%00110000 : PAUSE 5		' 8-bit mode
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00100000 : PAUSE 0		' 4-bit mode
+  LCDCMD LCDpin,%00101000 : PAUSE 0		' 2-line mode
+  LCDCMD LCDpin,%00001100 : PAUSE 0		' no crsr, no blink 
+  LCDCMD LCDpin,%00000110			' inc crsr, no disp shift
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Main:
+  LCDOUT LCDpin,ClrLCD,["BSP <--> PCF8583"]	' splash screen
+  LCDOUT LCDpin,Line2, ["  (RTC + RAM)"]
+  PAUSE 2000
+  LCDCMD LCDpin,ClrLCD
+ 
+Loop:
+  GOSUB GetTimeAndDay				' get and display clock
+  GOSUB PrintDay
+  LCDOUT LCDpin,(Line2 + 8),[DEC2 hours,":",DEC2 minutes,":",DEC2 seconds]
+
+  GOSUB GetButtons				' any buttons pressed?
+  IF btns = %0000 THEN NoUpdate			' nope
+  IF btnBack = Yes THEN GoBack			' back button pressed?
+
+
+GoForward:
+  rawTime = rawTime + btnMin			' add one minute
+  rawTime = rawTime + (btnHrs * 60)		' add one hour
+  day = (day + btnDay) // 7			' next day
+  GOTO UpdateClock
+
+
+GoBack:
+  IF (btns <= %1000) THEN NoUpdate		' no update button pressed
+  rawTime = rawTime + (btnMin * 1439)		' subtract one minute
+  rawTime = rawTime + (btnHrs * 1380)		' subtract one hour
+  day = (day + (btnDay * 6)) // 7		' previous day
+
+
+UpdateClock:					' send update to RTC 
+  rawTime = rawTime // 1440			' clean-up time mods
+  GOSUB PutRawClock				' set clock with rawTime
+  GOTO NoDelay
+
+
+NoUpdate:
+  PAUSE 100					' pad loop
+NoDelay:					' skip pad on updates
+  GOTO Loop
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+PutRegister:
+  I2COUT I2Csda,RTCwrite,regAddr,[regData]	' send data to register
+  RETURN
+
+
+GetRegister:
+  I2CIN I2Csda,RTCread,regAddr,[regData]	' get data from register
+  RETURN
+
+
+PutRawClock:					' set with rawTime
+  minutes = rawTime // 60
+  hours = rawTime / 60
+
+PutClock:
+  regSecs = 0
+  regMins.HighNib = minutes / 10		' convert regs to BCD
+  regMins.LowNib = minutes // 10
+  regHrs.HighNib = hours / 10
+  regHrs.LowNib = hours // 10
+  regMoDay.HighNib = month / 10
+  regMoDay.LowNib = month // 10
+  regMoDay = regMoDay + (day << 5)		' pack weekday in
+  I2COUT I2Csda,RTCwrite,2,[STR regSecs\5]	' write time & day
+  RETURN
+
+
+GetTimeAndDay:
+  I2CIN I2Csda,RTCread,0,[STR regCtrl\7]
+
+  ' convert from BCD
+
+  seconds = (regSecs.HighNib * 10) + regSecs.LowNib
+  minutes = (regMins.HighNib * 10) + regMins.LowNib
+  hours = (regHrs.HighNib * 10) + regHrs.LowNib
+  rawTime = (hours * 60) + minutes
+  day = regMoDay >> 5 
+  RETURN
+
+
+PrintDay:
+  LOOKUP day,[Su,Mo,Tu,We,Th,Fr,Sa],eeAddr	' point to EE string
+  LCDCMD LCDpin,Line1				' move to LCD Line1
+PrintLoop:
+  READ eeAddr,char				' read a character
+  IF char = 0 THEN PrintDone			' done?
+  LCDOUT LCDpin,NoCmd,[char]			' print the character
+  eeAddr = eeAddr + 1				' point to next
+  GOTO PrintLoop:				' go get it
+PrintDone:
+  LCDOUT LCDpin,NoCmd,[REP " "\5]		' spaces for clean-up
+  RETURN
+
+
+GetButtons:
+  btns = %1111					' enable all button inputs
+  FOR idx  = 1 TO 10
+    btns = btns & ~BtnsIn			' test inputs
+    PAUSE 5					' delay between tests
+  NEXT
+  PAUSE 100					' slow held button(s)
+  RETURN

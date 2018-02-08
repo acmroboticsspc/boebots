@@ -1,0 +1,94 @@
+' Program: LTC1298.BS2 (LTC1298 analog-to-digital converter)
+
+' The LTC1298 is a 12-bit, two-channel ADC. Its high resolution, low
+' supply current, low cost, and built-in sample/hold feature make it a 
+' great companion for the Stamp in sensor and data-logging applications. 
+' With its 12-bit resolution, the LTC1298 can measure tiny changes in 
+' input voltage; 1.22 millivolts (5-volt reference/4096). 
+
+' ==========================================================
+'                     ADC Interface Pins
+' ==========================================================
+
+' The 1298 uses a four-pin interface, consisting of chip-select, clock, 
+' data input, and data output. In this application, we tie the data lines
+' together with a 1k resistor and connect the Stamp pin designated DIO 
+' to the data-in side of the resistor. The resistor limits the current
+' flowing between DIO and the 1298's data out in case a programming error
+' or other fault causes a "bus conflict." This happens when both pins are
+' in output mode and in opposite states (1 vs 0). Without the resistor, 
+' such a conflict would cause large currents to flow between pins, 
+' possibly damaging the Stamp and/or ADC. 
+
+CS 	con	0	' Chip select; 0 = active
+CLK	con	1	' Clock to ADC; out on rising, in on falling edge. 
+DIO_n	con	2	' Data I/O pin _number_. 
+config	var	nib	' Configuration bits for ADC. 
+AD	var	word	' Variable to hold 12-bit AD result. 
+
+' ==========================================================
+'                     ADC Setup Bits
+' ==========================================================
+
+' The 1298 has two modes. As a single-ended ADC, it measures the 
+' voltage at one of its inputs with respect to ground. As a differential
+' ADC, it measures the difference in voltage between the two inputs. 
+' The sglDif bit determines the mode; 1 = single-ended, 0 = differential. 
+' When the 1298 is single-ended, the oddSign bit selects the active input
+' channel; 0 = channel 0 (pin 2), 1 = channel 1 (pin 3). 
+' When the 1298 is differential, the oddSign bit selects the polarity 
+' between the two inputs; 0 = channel 0 is +, 1 = channel 1 is +. 
+' The msbf bit determines whether clock cycles _after_ the 12 data bits
+' have been sent will send 0s (msbf = 1) or a least-significant-bit-first
+' copy of the data (msbf = 0). This program doesn't continue clocking after
+' the data has been obtained, so this bit doesn't matter. 
+
+' You probably won't need to change the basic mode (single/differential)
+' or the format of the post-data bits while the program is running, so 
+' these are assigned as constants. You probably will want to be able to 
+' change channels, so oddSign (the channel selector) is a bit variable. 
+
+startB	var	config.bit0	' Start bit for comm with ADC. 
+sglDif	var	config.bit1	' Single-ended or differential mode. 
+oddSign	var	config.bit2	' Channel selection. 
+msbf	var	config.bit3	' Output 0s after data xfer complete. 
+
+' ==========================================================
+'                     Demo Program
+' ==========================================================
+
+' This program demonstrates the LTC1298 by alternately sampling the two
+' input channels and presenting the results on the PC screen using Debug. 
+
+high CS			' Deactivate ADC to begin. 
+high DIO_n		' Set data pin for first start bit. 
+again: 			' Main loop. 
+  for oddSign = 0 to 1	' Toggle between input channels. 
+    gosub convert	' Get data from ADC. 
+    debug "channel ",DEC oddSign, ": ",DEC AD,cr	' Display data. 
+    pause 500		' Wait a half second. 
+  next			' Change channels. 
+goto again		' Endless loop. 
+
+' ==========================================================
+'                     ADC Subroutine
+' ==========================================================
+
+' Here's where the conversion occurs. The Stamp first sends the config 
+' bits to the 1298, then clocks in the conversion data. Note the use of
+' the new BS2 instructions Shiftout and Shiftin. Their use is pretty 
+' straightforward here: Shiftout sends data bits to pin DIO and clock
+' the CLK pin. Sending the least-significant bit first, it shifts out
+' the four bits of the variable config. Then Shiftin changes DIO to 
+' input and clocks in the data bits--most-significant bit first, post
+' clock (valid after clock pulse). It shifts in 12 bits to the 
+' variable AD. 
+
+convert: 
+  config = config | %1011	' Set all bits except oddSign. 
+  low CS			' Activate the ADC. 
+  shiftout DIO_n,CLK,lsbfirst,[config\4]	' Send config bits. 
+  shiftin DIO_n,CLK,msbpost,[AD\12]		' Get data bits. 
+  high CS		' Deactivate the ADC. 
+return			' Return to program. 
+

@@ -1,0 +1,46 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - IrInterferenceSniffer.bs2
+' This program tests for IR interference from other fluorescent lights,
+' handheld remotes, video recorders and other SumoBot robots.
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+IrLedLF        PIN     4                     ' Left IR LED connected to P4
+IrSenseLF      PIN     11                    ' Left IR detector to P11
+
+IrLedRF        PIN     15                    ' Right IR LED connected to P15
+IrSenseRF      PIN     14                    ' Right IR detector to P14
+
+LedSpeaker     PIN     5                     ' LED/speaker connected to P5
+
+' -----[ Variables ]----------------------------------------------------------
+
+irLF           VAR     Bit                   ' State of Left Front IR
+irRF           VAR     Bit                   ' State of Right Front IR
+
+counter        VAR     Byte                  ' Loop counting variable
+
+' -----[ Initialization ]-----------------------------------------------------
+
+DEBUG CLS, "Checking for IR interference...", CR, CR
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+DO                                           ' DO...LOOP repeats indefinitely
+
+  irLF = ~IrSenseLF                          ' Save IR receiver output
+  irRF = ~IrSenseRF
+
+  IF irLF = 1 OR irRF = 1 THEN
+    DEBUG "IR interference detected!!!", CR
+    FOR counter = 1 TO 7
+      FREQOUT LedSpeaker, 50, 4000
+      PAUSE 50
+    NEXT
+  ENDIF
+
+LOOP
+

@@ -1,0 +1,63 @@
+; TUT011.SRC
+; ----------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE TURBO
+RESET  Start
+
+org         $10                 ;  1
+BankA       equ $               ;  2
+Counter1    ds  1               ;  3
+
+org         $30                 ;  4
+BankB       equ $               ;  5
+Counter2    ds  1               ;  6
+                                                
+
+org         $50                 ;  7
+BankC       equ $               ;  8
+Counter3    ds  1               ;  9
+
+org         $70                 ; 10
+BankD       equ $               ; 11
+Counter4    ds  1               ; 12
+
+org         $100                ; 13
+
+Start
+                                                
+  ; Clear the data memory       ; 14
+  ;
+  clr       fsr                 ; 15
+
+ClearData                       ; 16
+  sb      fsr.4                 ; 17
+    setb  fsr.3                 ; 18
+  clr     ind                   ; 19
+  ijnz    fsr, ClearData        ; 20
+
+  ; Testing data memory addressing
+  ;
+TestAddr
+  bank      BankA               ; 21
+  inc       Counter1            ; 22
+
+  bank      BankB               ; 23
+  inc       Counter2            ; 24
+
+  bank      BankC               ; 25
+  inc       Counter3            ; 26
+  bank      BankD               ; 27
+  inc       Counter4            ; 28
+
+  jmp       TestAddr            ; 29

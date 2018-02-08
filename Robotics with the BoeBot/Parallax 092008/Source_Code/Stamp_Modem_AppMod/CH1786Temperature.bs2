@@ -1,0 +1,324 @@
+'{$STAMP BS2}
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... Temperature Temperature (CH1786Temperature.BS2)
+' Purpose... Stamp Modem Demo Program with DS1620
+' Author.... Parallax, Inc.
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program monitors a Dallas Seminconductor DS1620 digital thermometer
+' while waiting for an incoming call.  When a call is received, the Stamp
+' causes the modem to answer the call then displays temperture data on
+' the remote terminal.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+' modem pins
+'
+TX1		CON	15				' CH1786 "Tx" pin
+RX1		CON	14				' CH1786 "Rx" pin
+RI_		VAR	In12				' ring indicator
+DCD_		VAR	In13				' carrier detect
+
+' DS1620 pins
+'
+Rst		CON 	6				' DS1620.3
+Clk		CON	7				' DS1620.2
+DQ		CON	8				' DS1620.1
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+True		CON	1
+False		CON	0
+
+No		CON	1
+Yes		CON	0
+
+T2400		CON	396				' 2400 baud for modem
+
+LF		CON	10				' line feed character
+FF		CON	12				' form feed (clear remote screen)
+
+
+' DS1620 commands
+'
+RTmp		CON	$AA				' read temperature
+WTHi		CON	$01				' write TH (high temp register)
+WTLo		CON	$02				' write TL (low temp register)
+RTHi		CON	$A1				' read TH
+RTLo		CON	$A2				' read TL
+Strt		CON	$EE				' start conversion
+StpC		CON	$22				' stop conversion
+WCfg		CON	$0C				' write configuration register
+RCfg		CON	$AC				' read configuration register
+
+
+NTasks	CON	3				' total number of tasks
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+tmpIn		VAR	Word				' 9-bit temp input from DS1620
+nFlag		VAR	tmpIn.Bit8			' negative flag
+hlfBit	VAR	tmpIn.Bit0			' half degree C bit
+tempF		VAR	Word				' converted fahrenheit value
+tempC		VAR	Byte				' converted celcius value
+tmpNow	VAR	Word				' current temperature
+tmpLo		VAR	Word				' low temp
+tmpHi		VAR	Word				' high temp
+
+sign		VAR	Byte				' - for negative temps
+sLo		VAR	Byte
+sHi		VAR	Byte
+
+inByte	VAR	Byte				' input from user terminal
+cmd		VAR	Byte				' command pointer
+answer	VAR	Byte				' user response to prompt
+
+task		VAR	Byte				' task control variable
+
+riFltr	VAR	Byte				' for ring indicator filter
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Init:	
+	tmpLo = $FFFF				' start with opposite extremes
+	tmpHi = 0
+
+I_Modm:	
+	PAUSE 250					' allow modem to power up
+	' train modem for speed
+	'
+	SEROUT TX1, T2400, 10, ["AT", CR]
+	SERIN  RX1, T2400, 2500, Error, [WAIT ("OK")]
+	PAUSE 250
+	' auto answer on second ring (S0=2)
+	' set max time for carrier detect to 30 secs (S7=30)
+	'
+	SEROUT TX1, T2400, 10, ["ATS0=2 S7=30", CR]
+	SERIN  RX1, T2400, 2500, Error, [WAIT ("OK")]
+     
+I_1620:	
+	HIGH Rst					' alert the DS1620
+	SHIFTOUT DQ,Clk,LSBFIRST,[WCfg] 	' write configuration
+							' use with CPU; free run mode
+	SHIFTOUT DQ,Clk,LSBFIRST,[%00000010] 
+	LOW Rst
+	PAUSE 10					' pause for DS1620 EE write cycle
+	HIGH Rst
+	SHIFTOUT DQ,Clk,LSBFIRST,[Strt]	' start temp conversions
+	LOW Rst
+     debug "Initializing DS1620",cr
+NoDCD:	IF DCD_ = Yes THEN NoDCD 	' make sure DCD is clear
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+
+Main:	GOSUB ScanT					' get current temperature
+	IF DCD_ = Yes THEN GetMdm		' call received
+
+	BRANCH task, [Task0, Task1, Task2]
+	GOTO Main
+
+Task0:						' task code here
+	'
+	task = 1					' select a specific task
+	GOTO NextT					' go do it
+
+Task1:						' task code here
+	'
+	task = 2
+	GOTO NextT
+
+Task2:						' task code here
+	'
+	task = 0
+	GOTO NextT
+
+NextT:						' task = task + 1 // NTasks	
+							' round-robin to next task
+	GOTO Main
+
+	END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+
+' ==============
+' Modem Routines
+' ==============
+
+' error with modem
+' - structured as seperate routine to allow user indications/enhancements
+'
+Error:						' additional code here
+	PAUSE 1000
+	GOTO I_Modm					' try to initialize again
+
+
+GetMdm:	PAUSE 5000				' let other end get ready
+Modm1:	GOSUB DoMenu			' show readings and menu
+Get1:	SERIN RX1, T2400, [inByte]		' wait for input
+
+							' process user input
+	cmd = 99
+							' convert letter to digit (0..5)
+	LOOKDOWN inByte, ["tTrRdD"], cmd
+	cmd = cmd / 2				' fix for BRANCH
+	' branch to handler
+	BRANCH cmd, [Cmd0, Cmd1, Cmd2]
+	GOTO Modm1
+
+Cmd0:	GOSUB ScanT					' get current temp
+	GOTO Modm1
+Cmd1:	GOSUB RstT					' reset high and low
+	GOTO Modm1
+Cmd2:	GOSUB Discon				' disconnect from user
+	IF answer = No THEN Modm1		' stay with user
+	GOTO NoDCD					' back to the beginning
+
+
+' clear remote terminal and display menu
+'
+DoMenu:	
+     debug "DoMenu",cr
+SEROUT TX1, T2400, [FF]
+	SEROUT TX1, T2400, ["==========================", CR, LF]
+	SEROUT TX1, T2400, ["Remote Stamp - Station 001", CR, LF]
+	SEROUT TX1, T2400, ["==========================", CR, LF]
+	SEROUT TX1, T2400, [LF]
+	SEROUT TX1, T2400, ["Temp (Now).... ", sign, DEC tmpNow, CR, LF]
+	SEROUT TX1, T2400, ["Temp (Low).... ", sLo,  DEC tmpLo, CR, LF]
+	SEROUT TX1, T2400, ["Temp (High)... ", sHi,  DEC tmpHi, CR, LF]
+	SEROUT TX1, T2400, [LF]
+	SEROUT TX1, T2400, ["[T] Re-display current readings", CR, LF]
+	SEROUT TX1, T2400, ["[R] Reset high and low temps", CR, LF]
+	SEROUT TX1, T2400, ["[D] Disconnect", CR, LF]
+	SEROUT TX1, T2400, [LF, "--> "]
+	RETURN
+
+
+' reset high and low temperatures
+'
+RstT:	SEROUT TX1, T2400, [CR, LF, LF, "Reset? "]
+	GOSUB YesNo
+	IF answer = No THEN RstX
+	GOSUB ScanT
+	tmpLo = tmpNow
+	sLo = sign
+	tmpHi = tmpNow
+	sHi = sign
+RstX:	RETURN
+
+
+' disconnect
+'
+Discon:	SEROUT TX1, T2400, [CR, LF, LF, "Disconnect? "]
+	GOSUB YesNo
+	IF answer = No THEN DiscX
+	SEROUT TX1, T2400, [CR, LF, LF, "Disconnecting.", CR, LF]
+
+	' return modem to command state
+	' and hang up
+	'
+	PAUSE 2000
+	SEROUT TX1, T2400, ["+++"]
+	PAUSE 2000
+	SEROUT TX1, T2400, 10, ["ATH0", CR]
+DiscX:	RETURN
+
+
+' confirm for [Y]es or [N]o
+' and get user input (default = No)
+'
+YesNo:	SEROUT TX1, T2400, ["Are you sure? (Y/N) : "]
+	answer = No
+
+	' get answer
+	' - but only wait for 5 seconds
+	'
+	SERIN RX1, T2400, 5000, YesNoX, [inByte]
+	IF inByte = "y" THEN IsYes
+	IF inByte = "Y" THEN IsYes
+	GOTO YesNoX
+IsYes:	answer = Yes
+YesNoX:	RETURN
+
+
+' process ring indicator
+' - filters pulsing ring indicator
+' - waits for about 0.25 second of no RI pulsing before returning
+'
+DoRing:	' your code here
+	'  (i.e., count number of rings)
+	'
+RIWait:	riFltr = 0				' clear the "no pulses" counter
+RIchk:	IF RI_ = Yes THEN RIWait	' still pulsing
+	riFltr = riFltr + 1			' not pulsing, increment count
+	IF riFltr > 50 THEN RIx			' RI clear now
+	PAUSE 5					' 5 ms between RI scans
+	GOTO RIchk					' check again
+RIx:	RETURN					' done - outta here
+
+
+' ===============
+' DS1620 Routines
+' ===============
+
+' get current temperature
+' -- update high and low readings
+'
+ScanT:	HIGH Rst				' alert the DS1620
+	SHIFTOUT DQ,Clk,LSBFIRST,[RTmp]	' read temperature
+	SHIFTIN DQ,Clk,LSBPRE,[tmpIn\9]	' get the temperature
+	LOW Rst
+	GOSUB GetF					' convert to Farhenheit
+	tmpNow = tempF
+	IF (tmpLo < tmpNow) THEN THigh
+	tmpLo = tmpNow				' set new low
+	sLo = sign
+	debug "Scan T",cr
+THigh:	IF (tmpHi > tmpNow) THEN TDone
+	tmpHi = tmpNow				' set new high
+	sHi = sign
+TDone:	RETURN
+
+
+' convert reading from 1/2 degrees input (rounds up)
+'
+GetC:	IF nFlag = 0 THEN CPos			' check negative bit (8)
+	sign = "-"					' set sign
+	tempC = -tmpIn / 2 + hlfBit		' if neg, take 2's compliment
+	GOTO CDone
+CPos:	sign = " "
+	tempC = tmpIn / 2 + hlfBit
+CDone:	RETURN
+
+
+' convert (1/2 degrees C) to Fahenheit with rounding
+' -- general equation (for whole degrees): F = C * 9 / 5 + 32
+'
+GetF:	sign = " "
+	IF nFlag = 0 THEN FPos1
+	tmpIn = -tmpIn & $FF			' convert from negative
+	IF tmpIn < 36 THEN FPos0
+FNeg:	sign = "-"
+	tempF = tmpIn * 9 / 10 + hlfBit - 32
+	GOTO FDone
+FPos0:	tempF = 32 - (tmpIn * 9 / 10 + hlfBit)
+	GOTO FDone
+FPos1:	tempF = tmpIn * 9 / 10 + 32 + hlfBit
+FDone:	RETURN
+

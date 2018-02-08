@@ -1,0 +1,177 @@
+' -----[ Title ]-----------------------------------------------------------
+' Gripper Program 2.7: KeyChain Remote Control
+'{$STAMP BS2}
+'{$PBASIC 2.5}
+
+' -----[ Program Description ]---------------------------------------------
+' Control Boe-Bot Gripper with KeyChain Transmitter.
+' Up    Arrow = Forward
+' Down  Arrow = Backward
+' Left  Arrow = Left
+' Right Arrow = Right
+' Round Btn   = Gripper Open/Close
+'
+' Revision History
+' Based on Gripper Program 1.7, updates include:
+' - Both new and old gripper servos are supported.
+'   Set #DEFINE NewGripServo = 1 for newer servo, = 0 for older.
+'    Newer are marked "standard", older are marked "STD"
+' - Both new and old wheel servos are supported.
+'   Set #DEFINE NewWheelServo = 1 for newer servo, = 0 for older.
+'   Newer are marked "continuous rotation", older marked "PM" (Pre-Modified)
+' - PBASIC 2.5
+
+' -----[ Hardware Wiring ]-------------------------------------------------
+' Parallax KeyChain Receiver:                              (Part No: 28004)
+'  Recvr                   Stamp
+' ------                   ------
+'   OUT1 -> LEFT ARROW   -> Pin P0
+'   OUT2 -> DOWN ARROW   -> Pin P1
+'   OUT3 -> RIGHT ARROW  -> Pin P2
+'   OUT4 -> UP ARROW     -> Pin P3
+'   OUT5 -> ROUND BUTTON -> Pin P4
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+GripServo      PIN     14                    ' Gripper servo on P14
+LeftServo      PIN     13                    ' Left wheel servo on P13
+RightServo     PIN     12                    ' Right wheel servo on P12
+
+' -----[ Constants ]-------------------------------------------------------
+
+' Choose your type of wheel servo.  1 for newer, 0 for older.
+#DEFINE NewWheelServo = 1                    ' Newer continuous rotation servo
+'#DEFINE NewWheelServo = 0                   ' Older pre-modified servo
+
+' Choose your type of gripper servo.  1 for newer, 0 for older.
+#DEFINE NewGripServo = 1                     ' Newer standard servo
+'#DEFINE NewGripServo = 0                    ' Older STD servo
+
+#IF (NewWheelServo = 1) #THEN                ' Newer continuous rotation servo
+  ClockWise    CON     650                   ' Clockwise wheel rotation
+  CtrClkWise   CON     850                   ' Counter clockwise wheel rotation
+  TravelPulses CON     20                    ' Num pulses for fwd/back travel
+  TurnPulses   CON     12                    ' Num pulses for turning
+#ELSE                                        ' For older pre-modified servo
+  ClockWise    CON     500                   ' Clockwise wheel rotation
+  CtrClkWise   CON     1000                  ' Counter clockwise wheel rotation
+  TravelPulses CON     30                    ' Num pulses for fwd/back trav
+  TurnPulses   CON     15                    ' Num pulses for turning
+#ENDIF
+
+#IF (NewGripServo = 1) #THEN                 ' For newer Standard gripper servo
+  StepSize     CON     20                    ' Step size for gripper servo
+#ELSE                                        ' For older STD gripper servo
+  StepSize     CON     10                    ' Step size for gripper servo
+#ENDIF
+
+CloseGripper   CON     700                   ' Replace with values
+OpenGripper    CON     1200                  ' for your gripper
+ToOpen         CON     1                     ' These become values telling
+ToClose        CON     0                     ' gripper whether to open or close
+
+' -----[ Variables ]-------------------------------------------------------
+
+pulses         VAR     Word                  ' Quantity of pulses to servo
+pulsewidth     VAR     Word                  ' Width of pulse sent to servo
+dataRx         VAR     Byte                  ' Data received from KeyChain Rx
+gripCommand    VAR     Bit                   ' Should the gripper open or close
+' -----[ Initialization ]--------------------------------------------------
+
+DIRS = %11111111100000                       ' Inputs: P0-P4 KeyChain Receiver
+OUTS = %00000000000000
+
+GOSUB Open
+
+' -----[ Main Routine ]----------------------------------------------------
+
+Main:
+DO
+  GOSUB Read_Rx                              ' Read keychain receiver
+  GOSUB Navigate                             ' Move Boe-Bot correct direction
+LOOP
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' Read_Rx subroutine reads data from a Parallax KeyChain Receiver (PN 28004)
+' and stores data into variable dataRx
+'
+' How it works --
+'   INL reflects the state of input pins P0 though P7
+'   NCD returns ( position of highest set bit ) + 1
+' Here's a chart showing how dataRx ends up with it's value after button press
+'
+' KeyChain Tx Keypress:    INL Value    NCD INL Value    dataRx value
+'                            P7.. P0
+' No button pressed          0000000                0               0
+' Left button, OUT1 high     0000001                1               1
+' Down button, OUT2 high     0000010                2               2
+' Right button, OUT3 high    0000100                3               3
+' Up button, OUT4 high       0001000                4               4
+' Round button, OUT5 high    0010000                5               5
+
+Read_Rx:
+  dataRx = NCD INL                           ' Read the pins,store in dataRx
+  RETURN
+
+Navigate:                                    ' GOSUB to appropriate motion
+  ON dataRx GOSUB Do_Nothing, Left, Backward, Right, Forward, Open_Close
+  RETURN
+
+Open_Close:                                  ' Decides whether to
+  IF (gripCommand = ToOpen) THEN             ' open or close the gripper
+    GOSUB Open
+  ELSE
+    GOSUB Close
+  ENDIF
+  gripCommand =  ~gripCommand                ' Next time, do the opposite
+  RETURN
+
+Forward:                                     ' Move Boe-Bot a set distance
+  FOR pulses = 1 TO TravelPulses
+    PULSOUT RightServo, ClockWise
+    PULSOUT LeftServo,  CtrClkWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Backward:
+  FOR pulses = 1 TO TravelPulses
+    PULSOUT RightServo, CtrClkWise
+    PULSOUT LeftServo,  ClockWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Left:
+  FOR pulses = 1 TO TurnPulses
+    PULSOUT RightServo, ClockWise
+    PULSOUT LeftServo,  ClockWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Right:
+  FOR pulses = 1 TO TurnPulses
+    PULSOUT RightServo, CtrClkWise
+    PULSOUT LeftServo,  CtrClkWise
+    PAUSE 20
+  NEXT
+  RETURN
+
+Open:                                        ' Open the gripper
+  FOR pulsewidth = CloseGripper TO OpenGripper STEP StepSize
+    PULSOUT GripServo, pulsewidth
+    PAUSE 20
+  NEXT
+  RETURN
+
+Close:                                       ' Close the gripper
+  FOR pulsewidth = OpenGripper TO CloseGripper STEP StepSize
+    PULSOUT GripServo, pulsewidth
+    PAUSE 20
+  NEXT
+  RETURN
+
+Do_Nothing:
+  RETURN

@@ -1,0 +1,107 @@
+;=======================================================================
+;TITLE:         pwm.src
+;
+;PURPOSE:       Generate 8 PWM outputs on all bits of Port B.
+;
+;AUTHOR:        Parallax, Inc.
+;
+;REVISIONS:
+;  08/12/99 -   Initial release.
+;  09/17/04 -   Updated to support SASM.    
+;
+;CONNECTIONS:
+;  All bits of Port B are outputs.  Connect LEDs or use oscilloscope to
+;  see PWM signals.
+;
+;DETAILS:
+;  Use Run -> Run option to program SX chip, or use Program and connect
+;  a 50 MHz resonator to the chip afterward.  All bits of Port B will
+;  generate a PWM signal.  They are each updated every 1 us.  Set and
+;  modify values in duty0-duty7 to change the individual duty cycles.
+;=======================================================================
+
+
+;-------------------------- DEVICE DIRECTIVES --------------------------
+
+		DEVICE		SX28,OSCHS2,TURBO
+
+IFDEF	__SASM  ;SASM Directives
+		DEVICE		STACKX,OPTIONX
+		IRC_CAL		IRC_SLOW
+		
+ELSE		;Parallax Assember Directives
+		DEVICE		STACKX_OPTIONX
+ENDIF
+
+		RESET		Initialize
+
+;------------------------------ VARIABLES ------------------------------
+			ORG	$8
+
+temp		DS	1			;temporary workspace
+
+			ORG	$10
+
+acc0		DS	1			;pwm accumulators
+acc1		DS	1
+acc2		DS	1
+acc3		DS	1
+acc4		DS	1
+acc5		DS	1
+acc6		DS	1
+acc7		DS	1
+
+duty0		DS	1			;pwm duty cycles
+duty1		DS	1
+duty2		DS	1
+duty3		DS	1
+duty4		DS	1
+duty5		DS	1
+duty6		DS	1
+duty7		DS	1
+
+;---------------------------- DEBUG SETTINGS ---------------------------
+
+		FREQ	50_000_000
+
+;-------------------------- INTERRUPT ROUTINE --------------------------
+		ORG	0
+		
+Interrupt
+;Update eight 8-bit pwm's on rb pins with a 1 MHz refresh rate.  Total
+;service time is 32 clocks; at 50MHz, 18 MIPS are left over for main app.
+						;3	interrupt entry
+		add	acc0,duty0		;2	update pwm0
+		rl	temp			;1
+		add	acc1,duty1		;2	update pwm1
+		rl	temp			;1
+		add	acc2,duty2		;2	update pwm2
+		rl	temp			;1
+		add	acc3,duty3		;2	update pwm3
+		rl	temp			;1
+		add	acc4,duty4		;2	update pwm4
+		rl	temp			;1
+		add	acc5,duty5		;2	update pwm5
+		rl	temp			;1
+		add	acc6,duty6		;2	update pwm6
+		rl	temp			;1
+		add	acc7,duty7		;2	update pwm7
+		mov	w,<<temp		;1
+		mov	rb,w			;1	output pwm states
+		mov	w,#-50			;1	repeat every 1us
+		retiw				;3 (32)	interrupt exit
+
+;------------------------ INITIALIZATION ROUTINE -----------------------
+
+Initialize
+		mov	!rb,#%00000000		;make rb outputs
+		mov	!option,#%10011111	;enable rtcc interrupt
+
+;---------------------------- MAIN PROGRAM -----------------------------
+
+Main
+;Interrupt routine does all PWM work, however, duty0-duty7 values may
+;be updated here to modify individual PWM pin duty cycles.
+
+:loop		;(update duty0-duty7)
+		jmp	:loop

@@ -1,0 +1,8 @@
+'{$STAMP BS2p}
+
+TxD  	con 16   		'TxD at SOUT
+baud 	con 16624 		'N2400
+pace 	con 200       	'Pace = 200 ms
+
+loop:	serout TxD,baud,pace,["Hello world", cr]
+	goto loop

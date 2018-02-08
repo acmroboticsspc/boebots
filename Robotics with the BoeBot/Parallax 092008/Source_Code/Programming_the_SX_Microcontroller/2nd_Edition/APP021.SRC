@@ -1,0 +1,233 @@
+; APP021.SRC - Scanning a Key Matrix - Quick-Scan and 2-Key Rollover
+;
+; ---------------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller", 2nd Edition by Guenther Daubach
+; Copyright (c) by Parallax Inc. 2004
+; ---------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET   Main
+
+TRIS    = $0f
+PLP     = $0e
+
+TimerOn MACRO
+  setb Flags.0                  ; Turn the timer on
+ENDM
+
+TimerOff MACRO
+  clrb Flags.0                  ; Turn the timer off
+ENDM
+
+SkipIfTimeout MACRO             ; Skip if timer is done
+  snb Flags.0
+ENDM
+
+SkipIfTimer MACRO               ; Skip, if timer is active
+  sb Flags.0
+ENDM
+
+QuickScanOn MACRO               ; Turn on Quick Scan
+  setb Flags.1
+ENDM
+
+QuickScanOff MACRO              ; Turn off Quick Scan
+  clrb Flags.1
+ENDM
+
+SkipIfQuickScan MACRO           ; Skip if Quick Scan active
+  sb Flags.1
+ENDM
+
+SkipIfKeyDown MACRO             ; Skip if key is pressed
+  snb Flags.1
+ENDM
+
+org     $08
+Flags   ds 1                    ; Register for various flags
+KeyId   ds 1                    ; Id of pressed key
+Ix      ds 1                    ; Index for KeyId buffer
+
+org     $30
+Keys    equ $
+Column  ds 1                    ; Current scan column
+Row     ds 1                    ; Current scan row
+RowMask ds 1                    ; Mask for the row decoded last
+
+org     $50
+Timers  equ $
+us5     ds 1                    ; Counter for 5 us
+Msec    ds 1                    ; Counter for Milliseconds
+
+org     $70
+Buffer  ds 16                   ; Buffer for key IDs (debug only)
+
+
+org     $000
+
+;** Timer and Quick Scan *********************************************
+;
+Clock
+  SkipIfQuickScan               ; If Quick Scan is off, go ahead
+    jmp :Timer                  ;  with the Timer
+  mov  w, /rc                   ; Read inverted row bits, and 
+  and  w, #$0f                  ;  mask out the row lines
+  sz                            ; If a key is pressed,
+    QuickScanOff                ;  turn off Quick Scan
+
+:Timer
+  SkipIfTimer                   ; If timer is off,
+    jmp :ISRExit                ;  no action
+  Bank Timers
+  mov  w, #250                  ; 5us * 250 = 1,25 ms
+  dec  us5
+  snz
+    mov us5, w
+  mov w, #16                    ; 1,25 ms * 16 = 20 ms
+  snz
+    dec Msec
+  snz
+    mov MSec, w
+  snz
+    TimerOff                    ; After 20 ms
+
+:ISRExit
+  mov   w, #-250                ; Call ISR every 5 us
+  retiw
+ 
+;** Subroutine reads the Column variable and returns the column mask
+;   in w.
+;
+Col2Mask
+  mov w, Column
+  jmp pc+w
+  retw %11101111
+  retw %11011111
+  retw %10111111
+  retw %01111111
+
+;** This subroutine will send the recognized key IDs to some exter-
+;   nal device in "real life". Here, we save 16 Key IDs in a buffer
+;   for debugging purposes. As the buffer contains all zeros at
+;   program start, we increment all key IDs by one, i.e. 1...16
+;   are the "transformed" key IDs in order to make a difference
+;   between an empty buffer register and the lowest key ID.
+;  
+SendKey
+  mov  w, #Buffer               ; Buffer base address +
+  add  w, Ix                    ;  Index =
+  mov  fsr, w                   ;  indirect address
+  mov  ind, KeyId               ; Save the key ID, and 
+  inc  ind                      ;  increment it
+  inc  Ix                       ; Next buffer register index,
+  clrb Ix.4                     ;  but not above 15
+  bank Keys
+  ret
+  
+org     $100
+
+;** Mainline program *******************************************
+;
+Main
+
+include "Clr2x.inc" 
+
+;** Initialize the data ports
+;
+  mode PLP
+  mov  !rc, #%11110000          ; Pull-up at rc.3...0
+  mode TRIS
+  mov  !rc, #$ff                ; All lines Hi-Z for now
+  clr  rc                       ; pre-initialize rc with all zeros
+  bank Timers
+  mov  us5, #250
+  mov  MSec, #16
+  bank Keys
+  mov   !option, #%10011111     ; Enable the RTCC interrupt
+
+ 
+;** Main program loop
+;
+Loop
+  mov  !rc, #%00001111          ; All columns low
+  QuickScanOn                   ; Turn on Quick Scan, and
+:WaitForKey                     ;  wait for a key
+  SkipIfKeyDown
+    jmp :WaitForKey
+  clr  Column                   ; Start with column 0
+:Scan  
+  call Col2Mask                 ; Get the column mask,
+  mov  !rc, w                   ;   and set the Port C TRIS register
+  clr KeyId                     ; The contents of KeyId are not
+                                ;  important here, therefore, we
+                                ;  use it as a counter
+:Delay                          ; Wait until signals are stable,
+  decsz KeyId                   ;  i.e. do a pre-de-bounce here
+    jmp :Delay
+  mov  w, /rc                   ; Complement the row data
+  and  w, #$0f                  ;   and mask them out
+  sz                            ; 0 if no key is down in this col.
+    jmp :Key                    ; A key is down, decode it
+  inc  Column                   ; Next column
+  snb  Column.2                 ; If column > 3, we have a bounce,
+    jmp Loop
+  jmp :Scan                     ;  therefore, no action
+
+;** De-bounce and decode the key
+;
+:Key
+  mov KeyId, w                  ; Save row info
+  TimerOn                       ; Turn the timer on
+:Debounce
+  SkipIfTimeout                 ; Wait for the 20 ms tick
+    jmp :Debounce
+
+  mov w, /rc                    ; Read inverted row info again,
+  and w, #$0f                   ;  and mask it out
+  mov w, KeyId-w                ; Still same value ?
+  sz                            ; If yes, go ahead, and decode it
+    jmp Loop                    ; If no, we have a bounce
+
+  ;** Convert row and column info into the key ID
+  ;
+  mov Row, #-1
+:Decode
+  inc Row                       ; First row number (0)
+  rr  KeyId                     ; Rotate row info -> C 
+  sc                            ; If C=1, a key is down in that row
+    jmp :Decode
+
+  mov KeyId, Row                ; Row contains row number
+  clc
+  rl KeyId                      ; KeyId = KeyId * 4 + Column
+  rl KeyId
+  or KeyId, Column
+  
+  inc Row                       ; Set the bit in RowMask that
+  clr RowMask                   ;  corresponds to the detected
+  stc                           ;  key
+:SetupMask
+  rl RowMask
+  decsz Row
+    jmp :SetupMask
+
+  call SendKey                  ; Send KeyId
+  
+;** Wait for key release
+;
+:WaitRelease
+  TimerOn                       ; Turn timer on
+:WaitForTick
+  SkipIfTimeout                 ; Wait for 20 ms tick
+    jmp :WaitForTick  
+    
+  mov w, /rc                    ; Read inverted port bits, and
+  and w, RowMask                ;  mask the bit where the current
+                                ;  key was detected
+  sz                            ; If this key is still down, 
+    jmp :WaitRelease            ;  continue waiting for release
+      jmp Loop                  ; Wait for next key press, or
+                                ;  decode the second key that is
+                                ;  still down.
+END

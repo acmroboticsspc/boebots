@@ -1,0 +1,299 @@
+; TUT040
+; ----------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+;************************************************************************
+; Virtual Peripheral UART
+;
+; Length:  67 bytes (total)
+; Authors: Chip Gracey, President, Parallax Inc.
+;          modified by Craig Webb,
+;          Consultant to Scenix Semiconductor, Inc.
+; Written: 97/03/10 to 98/7/09
+;
+;************************************************************************
+;
+; Assembler directives
+;
+; Uses:      SX28 "A"-Type, 2 pages of program memory, 8 banks of data
+;            memory, clock from the SX-Key, expanded stack and OPTION
+;            register.
+;               
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28, OSCHS2, STACKX_OPTIONX
+endif
+ 
+ID      'UART'                          ;Program-ID
+RESET   reset_entry                     ;define the main entry point
+;
+;************************ Program Variables *****************************
+;
+; Port assignment: Bit variables
+;
+rx_pin          EQU     ra.2            ;UART receive input
+tx_pin          EQU     ra.3            ;UART transmit output
+;
+;
+;****** Register definitions (bank 0)
+;
+                org     8               ;First register address in 
+main            =       $               ; main memory bank
+;
+temp            ds      1               ;Temporary storage
+byte            ds      1               ;Temporary UART shift register
+flags           DS      1               ;Program flags register
+number_low      ds      1               ;Low receive byte
+number_high     ds      1               ;High receive byte
+hex             ds      1               ;Value of received hex number
+string          ds      1               ;Indirect pointer for text output
+
+rx_flag         EQU     flags.5         ;Signals reception of one byte
+
+                org     10h             ;Variables in bank 3
+serial          =       $               ;UART bank
+;
+tx_high         ds      1               ;Low transmit byte
+tx_low          ds      1               ;High transmit byte
+tx_count        ds      1               ;Number of remaining bits to be sent
+tx_divide       ds      1               ;Counter for transmit timer (/16)
+rx_count        ds      1               ;Number of bits received
+rx_divide       ds      1               ;Counter for receive timer
+rx_byte         ds      1               ;Buffer for received bytes
+;
+; The next three parameters determine the baud rate of the UART.
+; The values of baud_bit, and int_period control the baud rate as follows:
+; 
+; Baud rate = 50 MHz/(2 ^ baud_bit * int_period * RTCC_prescaler)
+;     Important: - 1 <= baud_bit <= 7
+;                - int_period must be less than 256 and longer than
+;                  the total time required by the ISR instructions. Changing
+;                  int_period will also influence the timing of other VPs
+;                  that are possibly executed within the ISR.
+;                - start_delay must be set to (2 ^ baud_bit) * 1,5 + 1.
+;
+; Values for various baud rates:
+;
+; *** 2400 Baud (For baud rates below 2,400, the RTCC prescaler must be
+;                activated.)
+;baud_bit       =       7
+;start_delay    =       128+64+1
+;int_period     =       163
+;
+; *** 9600 baud
+;baud_bit        =      5
+;start_delay     =      16+8+1
+;int_period      =      163
+;
+; *** 19,200 Baud
+baud_bit        =       4
+start_delay     =       16+8+1
+int_period      =       163
+;
+; *** 38,400 baud
+;baud_bit       =       3
+;start_delay    =       8+4+1
+;int_period     =       163
+;
+; *** 57,600 baud
+;baud_bit       =       2
+;start_delay    =       4+2+1
+;int_period     =       217
+;
+; *** 115.2k baud
+;baud_bit       =       1
+;start_delay    =       2+1+1
+;int_period     =       217
+;
+; *** 230.4k baud (for higher baud rates, int_period must be reduced - see
+;                  above!)
+;baud_bit       =       0
+;start_delay    =       1+0+0
+;int_period     =       217
+;
+;**************************** ISR CODE ****************************************
+;
+; Remark: The ISR code must always start at address §000. Time-critical
+;         VP code (e.g. for A/D converters) should be placed before the
+;         code of VPs that have a variable execution time, like this UART
+;         code.
+interrupt       ORG     $000
+;
+;
+;**** Virtual Peripheral: Universal Asynchronous Receiver Transmitter (UART)
+;
+; This routine sends and receives serial RS232 data. It is configured for
+; the frequently used "8-N-1" format (8 Bits, no parity, 1 stop bit).
+;
+; RECEIVE:  The rx_flag will be set as soon as a valid data byte is available.
+;           It is then the responsibility of the code that processes the data
+;           byte to reset the rx_flag again.
+;
+; TRANSMIT: The transmit routine expects the inverted data in the register-
+;           pair tx_high, and tx_low, where the byte to be sent must be
+;           inverted and stored in tx_high. In tx_low, Bit 7 must be set,
+;           and the other bits are ignored. Then the number of bits to be sent
+;           (10 = 1 start bit + 8 data bits + 1 stop bit) must be stored in
+;           tx_count. As soon as tx_count contains a value > 0, the transmitter
+;           starts sending the data. The calling application may test tx_count
+;           in order to determine if a transmission is still in progress, i.e.
+;           if tx_count > 0.
+;
+; This VP has variable execution times. Therefore, it should be located behind
+; time-critical code (e.g. for A/D converters, timers, PWMs, etc.) in the ISR.
+
+;
+; Note: The transmit and receive code is independent from each other. If
+;       the transmitter or the receiver is not required in an application,
+;       its code may be deleted. Take care NOT to delete the initial 
+;       bank serial instruction.
+;
+;       Input variables:  tx_low (bit 7 only)
+;                         tx_high, tx_count
+;
+;       Output variables: rx_flag, rx_byte
+;
+;       Required clock cycles (in turbo mode):
+;
+;           Transmit:   9 cycles (while idle)
+;                      19 cycles (while sending)
+;                    +  1 cycle  for the common bank instruction
+;
+;           Receive:   9 cycles (while idle)
+;                     16 cycles (at start)
+;                     13 cycles (while reading the next bit)
+;                     17 cycles (at the end of reception)
+;
+   bank    serial                  ;Select the "serial" bank            ;  1
+
+:transmit
+   clrb    tx_divide.baud_bit      ;Clear transmit timer flag           ;  2
+   inc     tx_divide               ;Increment the counter                       ;  3
+   stz                             ;Set Z flag for next instruction     ;  4
+   snb     tx_divide.baud_bit      ;Execute the transmit routine on     ;  5
+                                   ; (2 ^ baud_bit)-th interrupt.
+     test  tx_count                ;Are we sending data?                        ;  6
+   jz      :receive                ; no, continue with the receiver     ;  7
+   clc                             ; yes, prepare stop bit, and         ;  8
+   rr      tx_high                 ; shift to next bit                  ;  9
+   rr      tx_low                                       ; 10
+   dec     tx_count                ;Decrement bit counter                       ; 11
+   movb    tx_pin, /tx_low.6       ;Output next bit                             ; 12
+
+:receive
+   movb    c, rx_pin               ;Store received bit in carry flag    ; 13
+   test    rx_count                ;Are we receiving?                           ; 14
+   jnz     :rxbit                  ; yes, continue receiving            ; 15
+   mov     w, #9                   ; no, prepare 9 bits                 ; 16
+   sc                              ; if no start bit, continue          ; 17
+     mov   rx_count, w             ; if start bit, set bit counter      ; 18
+   mov     rx_divide, #start_delay ;Set 1.5 bit periods                 ; 19
+
+:rxbit
+   djnz    rx_divide, :rxdone      ;In the "middle" of the next bit?    ; 20
+   setb    rx_divide.baud_bit      ; yes, set 1 bit period                      ; 21
+   dec     rx_count                ;Last bit?                           ; 22
+   sz                              ; no,                                ; 23
+     rr    rx_byte                 ;  save bit                          ; 24
+   snz                             ; yes,                               ; 25
+     setb  rx_flag                 ;  set flag                          ; 26
+
+:rxdone
+     mov     w, #-int_period       ;Interrupt every int_period          ; 27
+                                   ; clock cycles
+                                   ; (163 for 19,200 Bd)
+:end_int
+     retiw                         ;Leave the ISR                               ; 28
+
+;***************************** PROGRAM DATA ***********************************
+;
+; Character strings for user interface (must be located in the first half
+; of a program memory page).
+;
+_hello     dw      13,10,13,10,'SX 2400-230.4K UART Virtual Peripheral Demo'
+_prompt    dw      13,10,'>',0
+
+;***************************** SUBROUTINES ************************************
+;
+; Read a byte from the UART
+;
+get_byte
+     jnb     rx_flag, $            ;Wait until a byte has been received ; 29
+     clrb    rx_flag               ;Reset rx_flag                               ; 30
+     mov     byte, rx_byte         ;Save Byte (w also contains Byte)    ; 31
+                                   ;"Fall through", to echo the received
+                                   ;character.
+
+; Send a byte via the UART
+;
+send_byte
+     bank    serial                             ; 32
+
+:wait
+     test    tx_count              ;Wait for a pause                            ; 33
+     jnz     :wait                                              ; 34
+
+     not     w                     ;Prepare bits (negative logic)               ; 35
+     mov     tx_high, w            ; Save data byte                             ; 36
+     setb    tx_low.7              ; Set start bit                              ; 37
+     mov     tx_count, #10         ;1 start + 8 data + 1 stop bit               ; 38
+     retp                          ;Return with page adjust             ; 39
+
+
+; Send a character string that begins at the address in w.
+;
+send_string
+     mov     string, w             ;Save the address                            ; 40
+
+:loop
+     mov     w, string             ;Read next character                 ; 41
+     mov     m, #0                 ; using an indirect address.         ; 42
+     iread                         ;                            ; 43
+     mov     m, #$0f               ;Adjust m register                           ; 44
+     test    w                     ;Last character?                             ; 45
+     snz                           ; No, continue                               ; 46
+     retp                          ; Yes, return with page adjust               ; 74
+     call    send_byte             ;Send character                              ; 48
+     inc     string                ;Address next character                      ; 49
+     jmp     :loop                 ;Continue until the end of text      ; 50
+
+
+;***************************** MAIN PROGRAM CODE ******************************
+;
+           ORG     100h                         ; 51
+;
+; Program execution after power-on or reset starts here.
+;
+reset_entry
+     mov     ra,  #%1011             ;Initialize port RA                        ; 52
+     mov     !ra, #%0100             ;Set RA's inputs and outputs               ; 53
+     clr     fsr                     ;Clear the data memory starting    ; 54
+                                     ; at $08h.
+:zero_ram 
+     sb      fsr.4                   ;Lower half of bank?                       ; 55
+     setb    fsr.3                   ; Yes, don't clear registers 0...7 ; 56
+     clr     ind                     ;Clear using indirect addressing   ; 57
+     ijnz    fsr, :zero_ram          ;... until done                            ; 58
+     mov     !option,#%10011111      ;Enable RTCC interrupt             ; 59
+
+; Main program loop
+
+     mov     w, #_hello              ;Send the hello string             ; 60
+     page    send_string                                ; 61
+     call    send_string                                ; 62
+
+:loop
+     call    get_byte                ;Get a byte from the UART          ; 63
+
+
+     ; <Add more program code here, as required>
+
+     jmp     :loop                   ;Loop back for next character      ; 64
+                
+     END                             ;End of program code                       ; 65

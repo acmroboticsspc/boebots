@@ -1,0 +1,30 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 4.2
+;=======================================================================
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx, watchdog
+		IRC_CAL	IRC_SLOW
+		reset	start_point
+		freq	500000  	; 500 kHz
+
+
+		org     8         	; data start
+outval	    	ds	1
+
+ledport		= 	rb
+flipmask	equ	$FF
+
+                org     0	    	; code start
+
+start_point     mov     !ledport,#0    	; make all of port b outputs
+					; changed to use single 
+					; instruction to xor with 
+					; constant
+agn             xor     outval,#flipmask
+                mov     ledport,outval
+                sleep
+
+
+
+

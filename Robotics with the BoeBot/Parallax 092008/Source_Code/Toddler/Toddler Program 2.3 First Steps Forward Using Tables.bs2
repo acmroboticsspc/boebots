@@ -1,0 +1,119 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 2.3: First Steps Forward Using Tables
+' Movement routines stored in EEPROM using DATA statement
+' {$STAMP BS2}
+' {$PBASIC 2.5}  
+										
+' -----[ I/O Definitions ]-------------------------------------------------
+' Connect Vs1 and Vs2 to Vss to ground both servos
+
+StrideServo     CON     12                      ' Stride servo
+TiltServo       CON     13                      ' Tilt servo
+
+' -----[ Constants ]-------------------------------------------------------
+
+TiltStep        CON     10                      ' TiltServo step size
+StrideStep      CON     10                      ' StrideServo step size
+MoveDelay       CON     14                      ' Servo pause (ms)
+
+RightTilt       CON     625                     ' Tilt limits
+CenterTilt      CON     750             
+LeftTilt        CON     875             
+
+RightForward    CON     600                     ' Stride limits
+StrideCenter    CON     750             
+LeftForward     CON     900      
+
+' -----[ Variables ]-------------------------------------------------------
+
+MoveLoop        VAR     Nib                     ' Loop for repeat movements
+Pulses          VAR     Word                    ' Pulse variable
+
+Dx              VAR     Pulses                  ' Stores Mx movement index
+Mx              VAR     Word                    ' Movement index
+TiltStart       VAR     Word                    ' Start tilt value
+TiltEnd         VAR     Word                    ' End tilt value
+StrideStart     VAR     Word                    ' Start stride value
+StrideEnd       VAR     Word                    ' End stride value
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+' Indicates which movement routines are executed to comprise steps
+' Extend WalkForward with 3, 4, 5, 6, for longer walks
+' The number 0 marks the end of a list
+
+StartForward    DATA    1, 2, 0
+WalkForward     DATA    3, 4, 5, 6,3, 4, 5, 6,3, 4, 5, 6,3, 4, 5, 6,3, 4, 5, 6, 0           
+FinishForward   DATA    3, 7, 8, 0
+
+' Movement routines
+
+M1              DATA    WORD CenterTilt, WORD RightTilt, 
+                        WORD StrideCenter, WORD StrideCenter
+M2              DATA    WORD RightTilt, WORD RightTilt,
+                        WORD StrideCenter, WORD LeftForward
+M3              DATA    WORD RightTilt, WORD LeftTilt, 
+                        WORD LeftForward, WORD LeftForward
+M4              DATA    WORD LeftTilt, WORD LeftTilt,
+                        WORD LeftForward, WORD RightForward
+M5              DATA    WORD LeftTilt, WORD RightTilt,
+                        WORD RightForward, WORD RightForward
+M6              DATA    WORD RightTilt, WORD RightTilt, 
+                        WORD RightForward, WORD LeftForward
+M7              DATA    WORD LeftTilt, WORD LeftTilt,
+                        WORD LeftForward, WORD StrideCenter
+M8              DATA    WORD LeftTilt, WORD CenterTilt, 
+                        WORD StrideCenter, WORD StrideCenter
+
+' -----[ Main Routine ]----------------------------------------------------
+
+Main_Program:                                   
+  GOSUB M0                                      ' Center servos
+
+  Mx = StartForward
+  'DEBUG ? Mx
+  GOSUB Movement
+    FOR MoveLoop = 1 to 3
+      Mx = WalkForward
+      GOSUB Movement
+    NEXT  
+  Mx = FinishForward
+  GOSUB Movement                                
+END
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Movement:
+  READ Mx, Dx                                   ' Read state table number
+  Mx = Mx + 1
+  'DEBUG "Movement routine = ", DEC Mx,cr
+  IF Dx = 0 THEN DoReturn                       ' Skip if no more states
+    LOOKUP Dx,[M1, M1, M2, M3, M4, M5, M6, M7, M8],Dx
+    READ Dx,	WORD TiltStart, WORD TiltEnd, 
+		WORD StrideStart, WORD StrideEnd' Read table entry; store
+    IF TiltStart = TiltEnd THEN MovementStride
+      FOR Pulses = TiltStart TO TiltEnd STEP TiltStep
+        PULSOUT TiltServo, Pulses             
+        PULSOUT StrideServo, StrideStart
+        PAUSE MoveDelay                                 
+      NEXT
+  GOTO Movement
+
+MovementStride:
+  FOR Pulses = StrideStart TO StrideEnd STEP StrideStep                   
+    PULSOUT TiltServo, TiltStart
+    PULSOUT StrideServo, Pulses
+    PAUSE MoveDelay                                     
+  NEXT
+  GOTO Movement
+
+' ----- M0: Move feet to initial center position -----
+
+M0:     
+  FOR Pulses = 1 TO 100 STEP StrideStep                         
+    PULSOUT TiltServo, CenterTilt               
+    PULSOUT StrideServo, StrideCenter
+    PAUSE MoveDelay                                     
+  NEXT
+
+DoReturn:
+  RETURN

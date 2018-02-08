@@ -1,0 +1,127 @@
+' ==============================================================================
+'
+'   File...... SONIC SIGHT.BS2
+'   Purpose... Devantech SRF04 Ultrasonic Range Finder
+'   Author.... Jon Williams
+'   E-mail.... jonwms@aol.com
+'   Started...
+'   Updated... 06 MAR 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' This program uses the Devantech SRF04 to measure the distance between the
+' unit and a target.  Display is raw value, inches and centimeters.
+'
+' Conversion formulas:
+'
+' inches = echo_time / 73.746           (use 7.3746 for tenths)
+' centimeters = echo_time / 29.033      (use 2.9033 for tenths)
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+
+Trigger         CON     0
+Echo            CON     1
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+MoveTo          CON     2                       ' cursor position control
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+pWidth          VAR     Word                    ' pulse width from sensor
+rawDist         VAR     Word                    ' filtered measurment
+distance        VAR     Word                    ' converted value
+blips           VAR     Nib                     ' loop counter for measurement
+
+temp            VAR     Word                    ' value for RJ_print
+digits          VAR     Nib                     ' used by RJ_Print
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Init:
+  PAUSE 250
+  DEBUG CLS
+  DEBUG "Devantech SRF04 Demo", CR
+  DEBUG "--------------------", CR, CR
+  DEBUG "Raw........... ", CR
+  DEBUG "Inches........         ", 34, CR
+  DEBUG "Centimeters...         cm", CR
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  GOSUB Get_Sonar                               ' take sonar reading
+  DEBUG MoveTo, 15, 3
+  temp = rawDist
+  GOSUB RJ_Print                                ' display raw value
+
+  DEBUG MoveTo, 15, 4
+  distance = rawDist ** 8886                    ' divide by 7.3746
+  temp = distance / 10
+  GOSUB RJ_Print                                ' display inches
+  DEBUG ".", DEC1 distance
+
+  DEBUG MoveTo, 15, 5
+  distance = rawDist ** 22572                   ' divide by 2.9033
+  temp = distance / 10
+  GOSUB RJ_Print                                ' display centimeters
+  DEBUG ".", DEC1 distance
+
+  PAUSE 200                                     ' delay between readings
+  GOTO Main
+
+  END
+
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+Get_Sonar:
+  rawDist = 0
+  FOR blips = 1 TO 5
+    PULSOUT Trigger, 5                          ' 10 uS trigger pulse
+    PULSIN Echo, 1, pWidth                      ' measure distance to target
+    rawDist = rawDist + (pWidth / 5)            ' simple digital filter
+    PAUSE 10                                    ' minimum period between pulses
+  NEXT
+  RETURN
+
+
+RJ_Print:                                       ' right justify
+  digits = 5
+  LOOKDOWN temp, <[0,10,100,1000,65535], digits
+  DEBUG REP " "\(5 - digits), DEC temp
+  RETURN

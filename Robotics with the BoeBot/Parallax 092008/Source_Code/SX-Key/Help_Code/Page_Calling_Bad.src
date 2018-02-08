@@ -1,0 +1,51 @@
+;=======================================================================
+;TITLE:         Page_Calling_Bad.src
+;
+;PURPOSE:       This SX28 code demonstrates calling errors when calling
+;               across pages.
+;
+;AUTHOR:        Parallax, Inc.
+;
+;REVISIONS:
+;  08/12/99 -   Initial release.
+;  09/17/04 -   Updated to support SASM.
+;
+;CONNECTIONS:
+;  None.
+;
+;DETAILS:
+;  NOTE:  THIS CODE IS IN ERROR AND IS INTENDED ONLY TO DEMONSTRATE THE
+;  WRONG WAY TO CALL ACROSS PAGES!!!  SEE Page_Calling.src for the proper
+;  method.
+;=======================================================================
+
+
+;-------------------------- DEVICE DIRECTIVES --------------------------
+
+		DEVICE		SX28,OSC4MHZ,TURBO
+
+IFDEF	__SASM  ;SASM Directives
+		DEVICE		STACKX,OPTIONX
+		IRC_CAL		IRC_SLOW
+		
+ELSE		;Parallax Assember Directives
+		DEVICE		STACKX_OPTIONX
+ENDIF
+
+		RESET		Main
+
+;---------------------------- DEBUG SETTINGS ---------------------------
+
+		FREQ	4_000_000
+
+;---------------------------- MAIN PROGRAM -----------------------------
+		ORG	$0
+
+Main		call	SubRoutine	;<----This is bad, it will call location $000
+		jmp	Main		;instead of $200
+	
+;----------------------------- SUBROUTINES -----------------------------
+		ORG	$200		;Page 1
+
+SubRoutine	mov	RA,#$10
+		ret

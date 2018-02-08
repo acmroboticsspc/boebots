@@ -1,0 +1,153 @@
+'Program Listing 60.1: MMBDemo.BS2
+
+'MMBDemo.BS2
+'
+Input		0
+Output		2
+Input		11
+Input		11
+Input		12
+Input		14
+Input		15
+'
+MotorPin	VAR	Byte
+SpeedMot1	VAR  	Byte
+SpeedMot3	VAR  	Byte
+Function	VAR	Byte	
+Speed		VAR	Byte
+PotPin		VAR	Byte
+Direction	VAR	Byte
+Temp		VAR	Byte
+PotResult	VAR	Word
+'
+StopMotor	CON	$00
+ReverseMotor	CON	$01
+StatusCheck	CON	$05
+Motor1		CON	10
+Motor2		CON	9
+Motor3		CON	8
+BrakeMot1	CON	2
+PotA		CON	12
+PotB		CON	11
+FastSW		CON	15
+SlowSW		CON	14
+MaxSW		CON	0
+MinSW		CON	1
+'*******************************************
+Initialize:
+	HIGH 	BrakeMot1
+	PAUSE	1000
+	SpeedMot3 = $80
+	LOW	Motor2
+	PAUSE	500
+	HIGH	Motor2
+	PAUSE	100
+	SEROUT	Motor2,396,[$55,$04,$46,$50,$01]
+	GOTO	MainProgram
+'*******************************************
+MotorSpeed:
+	DEBUG	"Speed = ",ISHEX2 Speed,CR
+	SEROUT	MotorPin,396,[$55,$03,Speed]
+	RETURN
+'*******************************************
+MotorFunction:
+	SEROUT	MotorPin,396,[$55,Function]
+	RETURN
+'*******************************************
+MeasurePot:
+	HIGH	PotPin
+	PAUSE	1
+	RCTIME	PotPin,1,PotResult
+	RETURN
+'*******************************************
+MotorControl1:
+	MotorPin = Motor1
+	PotPin 	= PotA
+	GOSUB	MeasurePot
+'	debug	"potA ",ISHEX4 PotResult,cr
+	If PotResult > $0850 then Forward
+	If PotResult < $0750 then Backward
+	LOW	BrakeMot1
+	Function = StopMotor
+	GOSUB 	MotorFunction
+	RETURN
+Forward:
+	HIGH	BrakeMot1
+	SEROUT	MotorPin,396,[$55,$05]
+	SERIN	MotorPin,396,100,Forward,[Direction,Temp]
+	If Direction <> 0 Then ReverseDirection
+		PotResult = (PotResult - $0850)/3
+		If PotResult > $FF then UpperLimit
+		Speed = PotResult
+		Gosub MotorSpeed
+		RETURN
+Backward:
+	HIGH	BrakeMot1
+	SEROUT	MotorPin,396,[$55,$05]
+	SERIN	MotorPin,396,100,Backward,[Direction,Temp]
+	If Direction <> 1 Then ReverseDirection
+		PotResult = ($750 - PotResult)/3
+		If PotResult > $FF then UpperLimit
+		Speed = PotResult
+		Gosub MotorSpeed
+		RETURN
+UpperLimit:
+	Speed = $FF
+	GOSUB MotorSpeed
+	RETURN
+ReverseDirection:
+	LOW	BrakeMot1
+	Function = StopMotor
+	GOSUB 	MotorFunction
+	PAUSE	100
+	Function = ReverseMotor
+	GOSUB MotorFunction
+	PAUSE	100
+	HIGH	BrakeMot1
+	RETURN
+'*******************************************
+MotorControl3:
+	MotorPin = Motor3
+	If IN0 = 0 then ChangeDirection0
+	IF IN1 = 0 then ChangeDirection1
+	IF IN14 = 0 then ReduceMot3
+	IF IN15 = 0 then IncreaseMot3
+	GOTO UpdateMot3
+ReduceMot3:
+	If SpeedMot3 < $0A then UpdateMot3
+	SpeedMot3 = SpeedMot3 - 10
+	GOTO UpdateMot3
+IncreaseMot3:	
+	If SpeedMot3 > $F6 then UpdateMot3
+	SpeedMot3 = SpeedMot3 + 10
+UpdateMot3:
+	Speed = SpeedMot3
+	GOSUB	MotorSpeed
+	RETURN
+ChangeDirection0:
+	Function = StopMotor
+	GOSUB	MotorFunction
+	PAUSE	50
+	Function = ReverseMotor
+	GOSUB	MotorFunction
+	Speed = SpeedMot3
+	GOSUB	MotorSpeed
+WaitForHigh0:
+	If IN0 = 0 then WaitForHigh0
+	RETURN
+ChangeDirection1:
+	Function = StopMotor
+	GOSUB	MotorFunction
+	PAUSE	50
+	Function = ReverseMotor
+	GOSUB	MotorFunction
+	Speed = SpeedMot3
+	GOSUB	MotorSpeed
+WaitForHigh1:
+	If IN1 = 0 then WaitForHigh1
+	RETURN
+'*******************************************
+MainProgram:
+	GOSUB	MotorControl1
+	GOSUB  MotorControl3
+	goto	MainProgram

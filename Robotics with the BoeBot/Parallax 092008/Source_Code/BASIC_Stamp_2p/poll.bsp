@@ -1,0 +1,27 @@
+DisPollClrCfg	con 0			' PollMode 0
+DisPollSaveCfg	con 1			' PollMode 1
+EnPolledOutput 	con 2			' PollMode 2
+EnPolledRun		con 3			' PollMode 3
+EnPolledAll		con 4			' PollMode 4
+ClrPollInpCfg	con 5			' PollMode 5
+ClrPollOutCfg	con 6			' PollMode 6
+ClrPolIOCfg		con 7			' PollMode 7
+
+stateHi 		con 1
+stateLo		con 0
+
+pIN1 			con 8			' PollInput Pin# 8
+pIN2			con 9			' PollInput Pin# 9
+pOUT			con 10 		' PollOutput Pin# 10
+
+InitPolling:
+	POLLIN 	pIN1 , stateLo	' If this polled input is Lo
+	POLLIN	pIN2 , stateLo	' or this pin is Lo then
+	POLLOUT 	pOUT , stateLo	' the polled output is Lo
+	POLLMODE 	EnPolledOutput
+
+Loop:						' This in the "main" program
+	DEBUG "."
+	GOTO LOOP
+
+

@@ -1,0 +1,42 @@
+' Program Listing 18.2. DS1267 Demo Program for BS2
+' Program: DS1267.BS2
+' This program controls the DS1267 digital potentiometer chip.
+' This chip is very versatile as a digital-to-analog converter.
+' It can output a variable voltage, can adjust current (up to
+' 1 mA), or it can serve as the variable resistance in a
+' resistor-capacitor timing circuit such as a timer or oscillator.
+
+' Hardware interface with the DS1267:
+
+RST 	con 0 			' Pin number of reset connection.
+CLK 	con 1 			' Pin number of clock connection.
+DQ_n 	con 2 			' Pin number of data (DQ) connection.
+
+' Variables used by the program:
+DSpots 	var word 		' Word variable holding pot values.
+DSpot0 	var DSPots.lowbyte 	' Variable for setting of pot 0.
+DSpot1 	var DSPots.highbyte 	' Variable for setting of pot 1.
+
+DIRA = %0111 			' Output pins 0,1,2 to DS1267.
+
+' The loop below increments pot 1 in 10-unit steps from 0 to 255.
+' by subtracting pot 1 value from 0 and writing that to pot 0,
+' it makes pot 0 the inverse of pot 1. In other words, as pot 1
+' increases, pot 0 decreases.
+Begin:
+for DSpot1 = 0 to 255 step 10 ' Pot 1 increasing: 0 to 255.
+  DSPot0 = 0 - DSPot1 ' Pot 0 decreasing.
+  gosub outPot
+next ' Next value for pots.
+goto Begin ' Repeat endlessly.
+
+'====================DS1267 SUBROUTINE=====================
+' This code shifts data out to the DS1267. Since it uses
+' the Shiftout instruction, which does not alter the variable
+' being shifted, we don't have to make a copy of the pot data.
+outPot:
+  high RST ' Take RST high to start transfer.
+  pulsout CLK,1 ' Pulse for stack-select bit (don't care).
+  Shiftout DQ_n,CLK,msbfirst,[DSpots\16] ' Shift out pot values.
+  low RST ' Take RST high to end transfer.
+Return

@@ -1,0 +1,99 @@
+' =========================================================================
+'
+'   File....... StampPLC_Report.BS2
+'   Purpose.... Typicall PLC application whereby this unit listens for
+'               serial commands from a host controller.
+'   Author..... John Barrowman, Parallax
+'   E-mail..... support@parallax.com
+'   Started.... 26 JUN 2003
+'   Updated.... 26 JUN 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'   This program demonstrates how to periodically "listen" for a serial
+'   command while performing another task.  When a serial command is
+'   received, it is parsed and acted upon.  If no command is received
+'   within 5 seconds, the serial routine times out and returns to the
+'   user task.
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+T1200           CON     813
+T2400           CON     396
+T9600           CON     84
+T19200          CON     32
+
+Baud            CON     T9600
+
+DegSym          CON     $B0                     ' degrees symbol
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+waxTemp         VAR     Byte
+keyIn           VAR     Byte                    ' terminal input
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Startup:
+  waxTemp = 105
+  GOSUB Initialize
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    SERIN 16, Baud, 50, Run_Task, [keyIn]       ' Run_Task if no input
+  LOOP UNTIL (keyIn = "W")                      ' wait for "W"
+
+Ready_Prompt:
+  SEROUT 16, Baud, [CR, LF, "Ready!", CR]
+
+Do_Command:
+  DO
+    SERIN 16, Baud, 5000, Back_To_Work, [keyIn] ' wait for command
+
+    SELECT keyIn                                ' process command
+      CASE "?"
+        SEROUT 16, Baud,
+               [CR, LF, "Wax Temperature = ",
+                DEC WaxTemp, DegSym, "F", CR]
+
+      CASE ELSE
+        IF (keyIn <> "X") THEN
+          SEROUT 16, Baud, [BELL]               ' bell for invalid input
+        ENDIF
+    ENDSELECT
+
+  LOOP UNTIL (keyIn = "X")
+
+Back_To_Work:
+  SEROUT 16, Baud, [CR, LF, "Returning to work"]
+  GOSUB Initialize
+
+Run_Task:                                       ' User task code goes here
+  SEROUT 16, Baud, ["."]                        ' -- progress indicator
+  GOTO Main
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Initialize:                                     ' setup for user task goes
+  SEROUT 16, Baud, [CR, LF, "Working"]          '   goes here
+  RETURN

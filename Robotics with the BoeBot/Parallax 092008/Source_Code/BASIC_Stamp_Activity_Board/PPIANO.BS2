@@ -1,0 +1,180 @@
+'************************************************************************
+'*  Basic Stamp Activity Board Sample Program             Player Piano  *
+'*  9 September, 1997                                           (BS-2)  *
+'*                                                                      *
+'*  This program demonstrates the use of the speaker and a couple of    *
+'*  look-up tables. Basically, the program emulates a one note player   *
+'*  piano. Hit the P5/P10 button to play the selected song. Hit the     *
+'*  P6/P9 button to select the next song. Hitting the P7/P8 button      *
+'*  selects the previous song. Hit 'Alt-R' and prepare to be amused.    *
+'*  Feel free to add songs as there is plenty of room on the BS2.       *
+'************************************************************************
+
+C	con	65		'Ridiculously low notes
+Db	con	69
+D	con	73
+Eb	con	77
+E	con	82
+F	con	87
+Gb	con	92
+G	con	97
+Ab	con	103
+A	con	110
+Bb	con	117
+BE	con	124
+
+C1	con	131		'Very low notes
+Db1	con	139
+D1	con	147
+Eb1	con	154
+E1	con	165
+F1	con	175
+Gb1	con	185
+G1	con	195
+Ab1	con	207
+A1	con	220
+Bb1	con	234
+BE1	con	248
+
+C2	con	262		'Low notes
+Db2	con	278
+D2	con	294
+Eb2	con	307
+E2	con	329
+F2	con	350
+Gb2	con	370
+G2	con	391
+Ab2	con	414
+A2	con	439
+Bb2	con	467
+BE2	con	495
+
+C3	con	521		'Middle 'C'
+Db3	con	554
+D3	con	588
+Eb3	con	623
+E3	con	658
+F3	con	694
+Gb3	con	737
+G3	con	781
+Ab3	con	829
+A3	con	877
+Bb3	con	928
+BE3	con	980
+
+C4	con	1042		'High notes
+Db4	con	1102
+D4	con	1163
+Eb4	con	1240
+E4	con	1316
+F4	con	1389
+Gb4	con	1476
+G4	con	1563
+Ab4	con	1658
+A4	con	1754
+Bb4	con	1856
+BE4	con	1960
+
+C5	con	2084		'Very high notes
+Db5	con	2204
+D5	con	2326
+Eb5	con	2480
+E5	con	2632
+F5	con	2778
+Gb5	con	2952
+G5	con	3126
+Ab5	con	3316
+A5	con	3508
+Bb5	con	3712
+BE5	con	3920
+
+C6	con	4168		'Rediculously high notes
+Db6	con	4408
+D6	con	4652
+Eb6	con	4960
+E6	con	5264
+F6	con	5556
+Gb6	con	5904
+G6	con	6252
+Ab6	con	6632
+A6	con	7016
+Bb6	con	7424
+BE6	con	7840
+
+MaxNum	con	3
+R	con	$FF
+indx	var	byte
+tune	var	byte
+note	var	word
+dura	var	word
+
+INIT
+	tune = 0
+DELAY
+	note = 0
+	dura = 0
+	indx = 0
+	pause 200
+START					'Read pushbuttons
+	if in10 = 0 then PLAY
+	if in9 = 0 then PREV
+	if in8 = 0 then NXXS
+	goto START
+NXXS					'If P7/P8 button pressed
+	if tune > MaxNum then START	'  select next tune
+	tune = tune + 1
+	goto DELAY
+PREV					'If P6/P9 button pressed
+	if tune = 0 then START		'  select previous tune
+	tune = tune - 1
+	goto DELAY
+PLAY					'If P5/P10 button pressed play
+	if tune = 4 then SHOW4		'  the song selected by 'tune'.
+	if tune = 3 then SHOW3
+	if tune = 2 then SHOW2		'Report the name of the tune
+	if tune = 1 then SHOW1		'to the display.
+SHOW0:	debug "Star Wars Theme",cr
+	goto LOOP
+SHOW1:	debug "Death March",cr
+	goto LOOP
+SHOW2:	debug "Shave and a Haircut",cr
+	goto LOOP
+SHOW3:	debug "Charge",cr
+	goto LOOP
+SHOW4:	debug "Heart and Soul",cr
+LOOP					'Get the next note to be played
+	gosub GetSong			'for the selected song and play
+	if note = 0 then DELAY		'it.
+	if note = R then REST
+	freqout 11,dura,note
+NXT
+	indx = indx + 1
+	goto LOOP
+REST
+	pause dura
+	goto NXT
+GetSong
+	if tune = 4 then Song4
+	if tune = 3 then Song3
+	if tune = 2 then Song2
+	if tune = 1 then Song1
+Song0
+	lookup indx,[ G4, D5, C5,BE4, A4, G5, D5, C5,BE4, A4, G5, D5, C5,BE4, C5, A4,0],note
+	lookup indx,[800,800,150,150,150,800,800,150,150,150,800,800,150,150,150,800],dura
+	return
+Song1
+	lookup indx,[ F3,R, F3,R, F3,R, F3,R,Ab3,R, G2,R, G2,R, F3,R, F3,R, E3,R, F3,0],note
+	lookup indx,[400,3,300,3,100,1,300,9,300,1,100,5,300,1,120,5,300,9,200,9,400],dura
+	return
+Song2
+	lookup indx,[ F4, R, C4,R, C4,R, D4,R, C4,  R, E4,R, F4,0],note
+	lookup indx,[350,50,200,2,200,5,400,3,300,550,400,5,400],dura
+	return
+Song3
+	lookup indx,[Db4,Gb4,Bb4,Db5,R,Bb4,Db5,0],note
+	lookup indx,[150,150,150,300,9,200,600],dura
+	return
+Song4
+	lookup indx,[ C5, R, C5, R, C5, R, C5,BE4, A4,BE4, C5, D5,R, C5, E5, R, E5, R, E5,0],note
+	lookup indx,[450,50,400,50,750,90,200,300,200,300,200,300,5,200,450,30,450,50,800],dura
+	return

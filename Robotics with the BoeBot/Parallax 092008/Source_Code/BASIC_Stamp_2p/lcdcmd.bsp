@@ -1,0 +1,15 @@
+InitLCD: 	
+	PAUSE 1000 		' Wait for power-up of LCD
+	LCDCMD 1, 48 	' Send wakeup command
+	PAUSE 10 		' Pause needed due to the LCD specs
+	LCDCMD 1, 48
+	PAUSE 1 		' Pause needed due to the LCD specs
+	LCDCMD 1, 48
+	PAUSE 1 		' Pause needed due to the LCD specs
+	LCDCMD 1, 32 	' Set data bus to 4-bit mode
+	LCDCMD 1, 40 	' Set to 2-line mode with 5x8 font
+	LCDCMD 1, 8 	' Turn display off
+	LCDCMD 1, 12 	' Turn display on without cursor
+	LCDCMD 1, 6 	' Set to auto-increment cursor
+	LCDCMD 1, 1 	' Clear the display
+	LCDOUT 1, 1, ["Hello my friend."]

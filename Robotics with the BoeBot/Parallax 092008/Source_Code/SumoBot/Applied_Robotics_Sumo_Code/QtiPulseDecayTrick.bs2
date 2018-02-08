@@ -1,0 +1,112 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - QtiPulseDecayTrick.bs2
+' This program uses the Pulse-Decay trick to discern between black and white
+' with QTI line sensors.
+
+' Important: You must start with the QTIs seeing black.
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+qtiPwrLeft     PIN     10                    ' Left QTI on/off pin
+qtiSigLeft     PIN     9                     ' Left QTI signal pin
+
+qtiPwrRight    PIN     7                     ' Right QTI on/off pin
+qtiSigRight    PIN     8                     ' Right QTI signal pin
+
+DummyPin       PIN     6                     ' Unused I/O pin
+
+' -----[ Variables ]----------------------------------------------------------
+
+qtiStateLeft   VAR     Bit                   ' Stores snapshot of QtiSigLeft
+qtiStateRight  VAR     Bit                   ' Stores snapshot of QtiSigRight
+qtiLeft        VAR     Word                  ' Stores left QTI time
+qtiRight       VAR     Word                  ' Stores right QTI time
+qtiThreshold   VAR     Word                  ' Stores black/white threshold
+
+' -----[ Initialization ]-----------------------------------------------------
+
+GOSUB Calibrate_Qtis
+
+DEBUG CLS,    "FRONT QTI Sensors", CR,       ' Display column headings
+              "Left    Right", CR,
+              "-----   -----", CR
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+DO                                           ' DO...LOOP repeats indefinitely
+
+  GOSUB Read_Line_Sensors                    ' Get reflection values
+
+  DEBUG CRSRXY, 0, 3,
+        BIN1 qtiStateLeft, CRSRX, 8,         ' Display reflection values
+        BIN1 qtiStateRight, CR
+
+  IF qtiStateLeft = 0 THEN                   ' Indicate what left QTI sees
+    DEBUG "White"
+  ELSE
+    DEBUG "Black"
+  ENDIF
+
+  DEBUG CRSRX, 8
+
+  IF qtiStateRight = 0 THEN                  ' Indicate what right QTI sees
+    DEBUG "White"
+  ELSE
+    DEBUG "Black"
+  ENDIF
+
+  PAUSE 100                                  ' Delay for slower PCs
+
+LOOP
+
+' -----[ Subroutine - Calibrate_Qtis ]----------------------------------------
+
+Calibrate_Qtis:
+
+  HIGH qtiPwrLeft                            ' Turn left QTI on
+  HIGH qtiSigLeft                            ' Discharge capacitor
+  PAUSE 1
+  RCTIME qtiSigLeft, 1, qtiLeft              ' Measure charge time
+  LOW qtiPwrLeft                             ' Turn left QTI off
+
+  HIGH qtiPwrRight                           ' Turn right QTI on
+  HIGH qtiSigRight                           ' Discharge capacitor
+  PAUSE 1
+  RCTIME qtiSigRight, 1, qtiRight            ' Measure charge time
+
+  GOSUB Read_Line_Sensors                    ' Get reflection values
+  qtiThreshold = (qtiLeft + qtiRight) / 2    ' Calculate average
+  qtiThreshold = qtiThreshold / 4            ' Take 1/4 average
+
+  IF qtiThreshold > 220 THEN                 ' Account for code overhead
+    qtiThreshold = qtiThreshold - 220
+  ELSE
+    qtiThreshold = 0
+  ENDIF
+
+  RETURN
+
+' -----[ Subroutine - Read_Line_Sensors ]-------------------------------------
+
+Read_Line_Sensors:
+
+  HIGH qtiPwrLeft                            ' Turn on QTIs
+  HIGH qtiPwrRight
+  HIGH qtiSigLeft                            ' Push signal voltages to 5 V
+  HIGH qtiSigRight
+  PAUSE 1                                    ' Wait 1 ms for capacitors
+
+  INPUT qtiSigLeft                           ' Start the decays
+  INPUT qtiSigRight
+  PULSOUT DummyPin, qtiThreshold             ' Wait for threshold time
+
+  qtiStateLeft  = qtiSigLeft                 ' Snapshot of QTI signal states
+  qtiStateRight = qtiSigRight
+
+  LOW qtiPwrLeft                             ' Turn off QTIS
+  LOW qtiPwrRight
+
+  RETURN

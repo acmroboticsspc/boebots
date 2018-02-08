@@ -1,0 +1,112 @@
+; APP010.SRC - A/D converter using bitstream continuous calibration
+; ----------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+
+TRIS    equ $0f
+LVL     equ $0d
+PWMPin  equ rb.6                        ; Port pin for PWM output
+
+IntPer  equ 163
+
+org     $08
+PWMAcc  ds  1                           ; Counter for PWM
+
+org     50h                             ; Bank 2 variables
+analog  equ $                           ; ADC bank
+port_buff  ds 1                         ; Buffer used by all ADCs
+adc0       ds 1                         ; ADC0 - Value
+adc1       ds 1                         ; ADC1 - Value
+adc0_acc   ds 1                         ; ADC0 - Accumulator
+adc1_acc   ds 1                         ; ADC1 - Accumulator
+adc0_count ds 1                         ; Time counter
+
+org     $000
+
+  bank analog                           ; Select ADC bank
+
+;** VP for two A/D Converters ****************************************
+;
+ADC
+           
+  mov   w, >>rc                         ; Read current state of ADCs     
+  not   w                               ; Turn inputs to outputs         
+  and   w, #%01010000                   ; Mask ADC1 and ADC0
+  or    port_buff, w                    ; Save new value in buffer
+  mov   rc, port_buff                   ; Refresh charge/discharge lines
+
+  sb    port_buff.4                     ; ADC0 above threshold ?
+    incsz adc0_acc                      ; If so, increment accumulator,
+  inc   adc0_acc                        ;  and avoid overflow by skipping
+  dec   adc0_acc                        ;  the second inc instruction
+
+  sb    port_buff.6                     ; ADC0 above threshold ?
+  incsz adc1_acc                        ; If so, increment accumulator,
+    inc adc1_acc                        ; and avoid overflow by skipping
+  dec   adc1_acc                        ; the second inc instruction
+
+  inc   adc0_count                      ; Increment time counter
+  jnz   :done_adcs                      ; Continue if not yet done
+
+  mov   adc0, adc0_acc                  ; Update ADC0 value
+  mov   adc1, adc1_acc                  ; Update ADC1 value
+  clr   adc0_acc                        ; Clear ADC0 accumulator
+  clr   adc1_acc                        ; Clear ADC1 accumulator
+
+:done_adcs
+
+;** PWM VP, controlled by ADC0 ***************************************
+;
+PWM
+  setb  PwmPin                          ; Set PWM bit in advance 
+  csb   PwmAcc, adc0                    ; If PWM value reached,  
+    clrb  PwmPin                        ; clear PWM bit        
+  inc   PwmAcc                          ; Increment current value
+  mov   w, ++PwmAcc                     ; Test if PwmAcc = 255   
+  snz                                   ; if so,                
+    clr PwmAcc                          ; clear PwmAcc          
+
+  clr   port_buff                       ; Clear PWM port buffer
+
+  mov   w, #-IntPer                     ; Call ISR every 'IntPer' cycles
+  retiw
+
+org     $100
+
+;** The mainline program *********************************************
+Start           
+
+  clr     rc                            ; Initialize Port C
+  mov     !rc, #%10101111               ; Configure Port C I/O pins
+  mov     !rb, #%10111111               ; Configure Port B output for LED
+  mode    LVL                           ; Set Port C inputs to
+  mov     !rc,#0                        ; CMOS
+  mode    TRIS                          ; Restore MODE to direction
+   
+
+; Clear the data memory
+;
+  clr fsr
+
+:ClearData
+  sb     fsr.4
+    setb fsr.3
+  clr    ind
+  ijnz   fsr, :ClearData
+
+mov     !option,#%10011111              ; Enable RTCC interrupt
+
+:loop
+  jmp   :loop

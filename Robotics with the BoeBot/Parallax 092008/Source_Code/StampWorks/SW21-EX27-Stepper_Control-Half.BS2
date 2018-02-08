@@ -1,0 +1,155 @@
+' =========================================================================
+'
+'   File....... SW21-EX27-Stepper_Control-Half.BS2
+'   Purpose.... Servo control and positioning with a potentiomenter
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates simple stepper motor control. A potentiometer
+' allows for speed and direction control.  Using the L293D driver, this
+' program will work with unipolar and bipolar stepper motors.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+PotCW           PIN     0                       ' clockwise pot input
+PotCCW          PIN     1                       ' counter-cw pot input
+Coils           VAR     OUTB                    ' output to stepper coils
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+#SELECT $STAMP
+  #CASE BS2, BS2E, BS2PE
+    Scale       CON     $100                    ' to scale RCTIME
+  #CASE BS2SX
+    Scale       CON     $066
+  #CASE BS2P, BS2PX
+    Scale       CON     $060
+#ENDSELECT
+
+Mitsumi         CON     96                      ' half steps
+Howard          CON     200
+
+RevSteps        CON     200                     ' steps per revolution
+NumSteps        CON     8                       ' use 4-step sequence
+LastStep        CON     NumSteps - 1            ' last step in sequence
+
+
+#DEFINE _Testing = 0                            ' 1 for POT testing
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+idx             VAR     Byte                    ' loop counter
+stpIdx          VAR     Nib                     ' step pointer
+stpDelay        VAR     Byte                    ' delay for speed control
+
+rcRt            VAR     Word                    ' rc reading - right
+rcLf            VAR     Word                    ' rc reading - left
+diff            VAR     Word                    ' difference in readings
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+'                          __
+'                        ABAB
+'                       -----
+Step1           DATA    %1000
+Step2           DATA    %1100
+Step3           DATA    %0100
+Step4           DATA    %0110
+Step5           DATA    %0010
+Step6           DATA    %0011
+Step7           DATA    %0001
+Step8           DATA    %1001
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Setup:
+  DIRB = %1111                                  ' make P4..P7 outputs
+  stpDelay = 5                                  ' set step delay
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Demo:
+  FOR idx = 1 TO RevSteps                       ' 1 rev forward
+    GOSUB Step_Fwd
+  NEXT
+  PAUSE 200
+
+  FOR idx = 1 TO RevSteps                       ' 1 rev back
+    GOSUB Step_Rev
+  NEXT
+  PAUSE 200
+
+Main:
+  HIGH PotCW                                    ' read clockwise position
+  PAUSE 1
+  RCTIME PotCW, 1, rcRt
+
+  HIGH PotCCW                                   ' read ccw position
+  PAUSE 1
+  RCTIME PotCCW, 1, rcLf
+
+  rcRt = (rcRt */ Scale) MAX 600                ' set speed limits
+  rcLf = (rcLf */ Scale) MAX 600
+  diff = ABS (rcRt - rcLf)                      ' get difference
+  stpDelay = 100 - (diff / 6) MIN 2             ' calculate step delay
+
+  #IF _Testing #THEN                            ' show program values
+    DEBUG HOME,
+          DEC rcrt, CLREOL, CR,
+          DEC rclf, CLREOL, CR,
+          DEC diff, CLREOL, CR,
+          DEC stpDelay, CLREOL
+  #ELSE                                         ' move stepper
+    IF (diff < 25) THEN                         ' allow for dead band
+      GOTO Main
+    ELSE                                        ' do a step
+      IF (rcRt > rcLf) THEN
+        GOSUB Step_Fwd
+      ELSE
+        GOSUB Step_Rev
+      ENDIF
+    ENDIF
+  #ENDIF
+
+  GOTO Main                                     ' repeat
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+
+' Turn stepper clockwise one full step
+
+Step_Fwd:
+  stpIdx = stpIdx + 1 // NumSteps               ' point to next step
+  GOTO Do_Step
+
+
+' Turn stepper counter-clockwise one full step
+
+Step_Rev:
+  stpIdx = stpIdx + LastStep // NumSteps        ' point to previous step
+  GOTO Do_Step
+
+
+' Read new step data and output to pins
+
+Do_Step:
+  READ (Step1 + stpIdx), Coils                  ' output new coil data
+  PAUSE stpDelay                                ' pause between steps
+  RETURN

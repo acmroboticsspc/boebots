@@ -1,0 +1,47 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - TestFrequencyResponse.bs2
+' This program can be used with objects at varying distances to determine
+' which frequencies make the SumoBot more nearsighted or farsighted.
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+IrLedLF        PIN     4                     ' Left IR LED connected to P4
+IrSenseLF      PIN     11                    ' Left IR detector to P11
+
+IrLedRF        PIN     15                    ' Right IR LED connected to P15
+IrSenseRF      PIN     14                    ' Right IR detector to P14
+
+' -----[ Variables ]----------------------------------------------------------
+
+irLF       VAR     Bit                       ' State of Left Front IR
+irRF       VAR     Bit                       ' State of Right Front IR
+frequency  VAR     Word                      ' Stores Frequencies
+
+' -----[ Initialization ]-----------------------------------------------------
+
+DEBUG CLS, "FRONT IR DETECTORS", CR,         ' Display heading
+           "Frequency Left   Right", CR,
+           "--------- ----   -----", CR
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+FOR frequency = 36000 TO 42000 STEP 500
+
+  FREQOUT IrLedLF, 1, frequency              ' Left IRLED shines IR light
+  irLF = ~IrSenseLF                          ' Save IR receiver output
+
+  FREQOUT IrLedRF, 1, frequency              ' Repeat for right IRLED/receiver
+  irRF = ~IrSenseRF
+
+  DEBUG CR, DEC frequency, CRSRX, 11         ' Display yes/no for detection
+  IF irLF = 1 THEN DEBUG "yes" ELSE DEBUG "no"
+  DEBUG CRSRX, 19
+  IF irRF = 1 THEN DEBUG "yes" ELSE DEBUG "no"
+
+  PAUSE 50                                   ' Delay for slower PCs
+
+NEXT
+

@@ -1,0 +1,53 @@
+' =========================================================================
+'
+'   File....... SW21-EX04-SciFi_LEDs.BS2
+'   Purpose.... Sci-Fi LED Display
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' "Ping-Pongs" a single LED back-and-forth across a bank of eight.  This
+' program will work, unmodified, on any BS2-family module.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+LEDs            VAR     OUTL                    ' LEDs on P0 - P7
+LEDsDirs        VAR     DIRL                    ' DIRS control for LEDs
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+DelayTm         CON     100                     ' delay time for LEDs
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  LEDS = %00000001                              ' start with right LED on
+  LEDsDirs = %11111111                          ' make LEDs outputs
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO WHILE (LEDs < %10000000)                   ' test for left extreme
+    PAUSE DelayTm                               ' on-time for lit LED
+    LEDs = LEDs << 1                            ' shift LED left
+  LOOP
+
+  DO
+    PAUSE DelayTm
+    LEDs = LEDs >> 1                            ' shift LEDs right
+  LOOP UNTIL (LEDs = %00000001)                 ' test for right extreme
+
+  GOTO Main

@@ -1,0 +1,99 @@
+' =========================================================================
+'
+'   File....... SW21-EX09-Roller.BS2
+'   Purpose.... Single digit, digital die
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program combines a 7-segment display and pushbutton input to form
+' a digital die that displays numbers 1 - 6.  This program will work,
+' unmodified, on any BS2-family module.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Segs            VAR     OUTL                    ' Segments on P0 - P7
+SegsDirs        VAR     DIRL                    ' DIRS for segments
+
+RollBtn         PIN     15                      ' roll button for die
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+rndVal          VAR     Word                    ' random number
+swData          VAR     Byte                    ' workspace for BUTTON
+dieVal          VAR     Nib                     ' new die value
+spinPos         VAR     Nib                     ' spinner position
+doSpin          VAR     Nib                     ' spinner update control
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+'                        .GFEDCBA
+'                        --------
+Digit0          DATA    %00111111               ' digit patterns
+Digit1          DATA    %00000110
+Digit2          DATA    %01011011
+Digit3          DATA    %01001111
+Digit4          DATA    %01100110
+Digit5          DATA    %01101101
+Digit6          DATA    %01111101
+Digit7          DATA    %00000111
+Digit8          DATA    %01111111
+Digit9          DATA    %01100111
+
+'                        .GFEDCBA
+'                        --------
+Bug0            DATA    %00000001               ' animated "bug" frames
+Bug1            DATA    %00000010
+Bug2            DATA    %00000100
+Bug3            DATA    %00001000
+Bug4            DATA    %00010000
+Bug5            DATA    %00100000
+
+BugLen          CON     Bug5 - Bug0 + 1        ' calc animation length
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  SegsDirs = %01111111                          ' make outputs for LEDs
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Tumble_Die                            ' shake the die
+    PAUSE 5                                     ' loop pad
+    ' check for button press
+    BUTTON RollBtn, 0, 255, 5, swData, 1, Show_Die
+  LOOP
+
+Show_Die:
+  READ (Digit0 + dieVal), Segs                  ' transfer die to segments
+  PAUSE 3000                                    ' hold for viewing
+  GOTO Main                                     ' start again
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Tumble_Die:
+  RANDOM rndVal                                 ' stir random value
+  dieVal = (rndVal // 6) + 1                    ' get die val, 1 - 6
+  doSpin = (doSpin + 1) // 10                   ' update spin timer
+  IF (doSpin = 0) THEN                          ' time for update
+    spinPos = (spinPos + 1) // BugLen           ' yes, point to next pos
+    READ (Bug0 + spinPos), Segs                 ' output to segments
+  ENDIF
+  RETURN

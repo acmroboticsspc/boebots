@@ -1,0 +1,199 @@
+' Listing 2
+' Nuts & Volts -- July 2001
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... SOUNDFX.BS2
+' Purpose... Sound FX player; uses BS2 and QV306M4
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 25 APR 2001
+' Updated... 07 MAY 2001 
+
+' {$STAMP BS2}
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Scans a 4x4 matrix keypad and plays corresponding sound effect from
+' QV306M4 module.  There are many sound effects sites on the Internet,
+' I found several files at: 
+' 
+' -- http://soundamerica.com
+' -- http://soundresource.net
+'
+' WAV files need to be resampled to 11,025 Hz, 16-bit (Windows PCM), Mono
+' before downloading to the QV306M4
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+' 25 APR 2001 : Completed and working
+' 03 MAY 2001 : Added forced key release -- prevents unwanted duplicates
+' 07 MAY 2001 : Added "shifted" keyboard code (commented out of this demo)
+
+
+' -----[ Connections ]-----------------------------------------------------
+'
+' QV306M4 Connections:
+'
+'  1 (RxD)		Stamp.P1
+'  2 (TxD)		Stamp.P2
+'  3 (Busy)		Stamp.P3
+'  4 (BR1)		Ground
+'  5 (BR0)		Ground
+'  7 (+5)		+5 volts
+'  8 (Gnd)		Ground
+' 14 (Reset)		Stamp.P0
+' 15 (Sp-)		8 ohm speaker -
+' 16 (Sp+)		8 ohm speaker +
+'
+' Volume in		Stamp.P7 (RCTIME: 10K pot, 0.1uF cap)
+'
+' Keys.R0		Stamp.P8	|
+' Keys.R1		Stamp.P9	+-- OutC
+' Keys.R2		Stamp.P10	|
+' Keys.R3		Stamp.P11	|
+'
+' Keys.C0		Stamp.P12	|
+' Keys.C1		Stamp.P13	+-- InD
+' Keys.C2		Stamp.P14	|
+' Keys.C3		Stamp.P15	|
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+QV_RST		CON	0			' QV306M4.14
+QV_RX		CON	1			' QV306M4.1
+QV_TX		CON	2			' QV306M4.2
+QV_BUSY		VAR	In3			' QV306M4.3
+
+VolPot		CON	7
+
+Rows		VAR	DirC			' keyboard row (outputs)
+Row_pins	VAR	OutC
+Cols		VAR	InD			' keyboard column (inputs)
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+T2400		CON	396			' 2400 baud, true
+IsBusy		CON	0
+
+NoKey		CON	$FF			' flag value for no key pressed
+
+Yes		CON	1
+No		CON	0
+
+VolCtrl		CON	Yes			' use volume control POT?
+VMax		CON	645			' RCTIME val at max volume
+VScale		CON	VMax / 31		' scale value for volume control
+
+' ** QV306M4 Command Set **
+
+QV_Direct	CON	$F0			' QV modes
+QV_Stop		CON	$F6
+QV_Sleep	CON	$F8
+QV_Volume	CON	$FC
+QV_Reset	CON	$FD			' software reset
+QV_Rev		CON	$FE			' module revision
+QV_Type		CON	$FF			' module type
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+volume		VAR	Word
+lastVol		VAR	Byte			' last volume setting
+keyMap		VAR	Word			' keyboard map (1 = pressed)
+colsIn		VAR	Nib			' keyboard column inputs
+phrase		VAR	Byte			' phrase to play
+lastPhrase	VAR	Byte
+scan		VAR	Nib			' row scan control
+dbnc		VAR	Nib			' debounce loop counter
+shiftKey	VAR	Bit			' shift state
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Initialize:
+  LOW QV_RST					' reset the QV306M4
+  PAUSE 100
+  HIGH QV_RST
+  PAUSE 2000
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Main:
+  IF (VolCtrl = No) THEN GetKey			' using volume pot?
+
+GetVolume:
+  HIGH VolPot					' discharge volume cap
+  PAUSE 1
+  RCTIME VolPot,1,volume			' read volume pot
+  volume = volume / VScale MAX 31		' scale volume
+  IF (volume = lastVol) THEN GetKey 		' no change, check keyboard	
+  GOSUB Set_Volume				' if changed, send it to QV306
+  lastVol = volume				' save latest volume
+
+GetKey:
+  GOSUB Scan_4x4				' scan the keyboard
+
+  ' shiftKey = keyMap.Bit15			' get shift state
+  ' keyMap.Bit15 = 0				' remove shift from map
+  
+  IF (keyMap > 0) THEN DecodeKey		' any key pressed?
+  lastPhrase = NoKey
+  GOTO Main
+
+DecodeKey:
+  phrase = (15 * shiftKey) + (NCD keyMap) - 1
+  IF (phrase = lastPhrase) THEN Main		' force key release
+  GOSUB Say_Phrase				' say the corresponding file
+  lastPhrase = phrase
+
+  GOTO Main
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+' *****************
+' Scan 4x4 keyboard
+' *****************
+'
+Scan_4x4:
+  keyMap = 0					' clear keyboard map
+  Row_pins = %1111				' refresh row outputs
+
+  FOR scan = 0 TO 3				' row scan
+    Rows = 1 << scan				' enable a row
+    colsIn = %1111				' assume press
+    FOR dbnc = 1 TO 10				' debounce
+      colsIn = colsIn & Cols			' scan column inputs
+      PAUSE 2
+    NEXT
+    keyMap.LowNib(scan) = colsIn		' update keyboard map
+    Rows = %0000
+  NEXT
+  RETURN
+
+
+' ************************
+' Say an individual phrase
+' ************************
+'
+Say_Phrase:
+  IF (QV_Busy = IsBusy) THEN Say_Phrase	' wait until not busy
+  SEROUT QV_RX,T2400,[phrase]			' say the phrase
+  RETURN
+
+
+' *****************
+' Set module volume
+' *****************
+'
+Set_Volume:
+  IF (QV_Busy = IsBusy) THEN Set_Volume		' wait for Busy to release
+  SEROUT QV_RX,T2400,[QV_Volume]
+  SEROUT QV_RX,T2400,[volume.LowByte]
+  RETURN

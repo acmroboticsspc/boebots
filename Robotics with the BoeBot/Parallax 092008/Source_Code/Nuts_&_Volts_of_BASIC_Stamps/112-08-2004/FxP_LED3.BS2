@@ -1,0 +1,266 @@
+' =========================================================================
+'
+'   File...... FxP_LED3.BS2
+'   Purpose... Simple controls with FlexiPanel module
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallax.com
+'   Started...
+'   Updated... 14 JUN 2004
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+
+' This program uses all available FlexiPanel connections.  By monitoring
+' the HasClient input the BASIC Stamp can put its program into a fail-safe
+' mode should the connection get dropped.
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+' FlexiPanel connections
+
+TX              PIN     2                       ' to FxP RxD
+RX              PIN     4                       ' from FxP TxD
+CTS             PIN     6                       ' from FxP RTS
+RTS             PIN     8                       ' to FxP CTS
+HasClient       PIN     10                      ' from FxP Mod
+HasData         PIN     12                      ' from FxP Data
+
+' Circuit connections
+
+GrnLED          PIN     1
+YelLED          PIN     3
+RedLED          PIN     5
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+#SELECT $STAMP
+  #CASE BS2, BS2E, BS2PE
+    Baud        CON     32                      ' 19.2 kBaud
+  #CASE BS2SX, BS2P
+    Baud        CON     110                     ' 19.2 kBaud
+#ENDSELECT
+
+Yes             CON     1
+No              CON     0
+
+IsOn            CON     1
+IsOff           CON     0
+
+Pressed         CON     $FF                     ' button was pushed
+
+GetData         CON     $01                     ' Get control data
+SetData         CON     $02                     ' Set control data
+GetMod          CON     $03                     ' Get modified control
+ShowMsg         CON     $04                     ' Show message
+
+ID_Green        CON     $01                     ' Green control ID
+ID_Yellow       CON     $02                     ' Yellow control ID
+ID_Red          CON     $03                     ' Red control ID
+ID_AllOn        CON     $04                     ' All_On control ID
+ID_AllOff       CON     $05                     ' All_Off control ID
+ID_Status       CON     $06                     ' Status control ID
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+idx             VAR     Word                    ' loop counter
+cData           VAR     Byte                    ' data to/from FxP
+text            VAR     Byte(4)                 ' text IO
+ctrl            VAR     Byte                    ' control id
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+FxpROM          DATA    $06, $02, $00, $00, $00, $00, $4C, $45, $44, $33
+                DATA    $20, $43, $6F, $6E, $74, $72, $6F, $6C, $00, $00
+                DATA    $00, $00, $00, $03, $41, $01, $38, $00, $AC, $00
+                DATA    $00, $00, $C3, $00, $17, $00, $01, $00, $01, $00
+                DATA    $00, $00, $00, $00, $01, $02, $01, $42, $01, $00
+                DATA    $00, $00, $C4, $00, $01, $00, $DC, $00, $18, $00
+                DATA    $01, $00, $01, $00, $00, $00, $00, $00, $01, $02
+                DATA    $01, $42, $02, $00, $00, $00, $DD, $00, $02, $00
+                DATA    $F2, $00, $15, $00, $01, $00, $01, $00, $00, $00
+                DATA    $00, $00, $01, $02, $01, $42, $03, $00, $00, $00
+                DATA    $F3, $00, $03, $00, $02, $01, $0F, $00, $01, $00
+                DATA    $01, $00, $00, $00, $00, $00, $01, $02, $01, $42
+                DATA    $04, $00, $00, $00, $03, $01, $04, $00, $1C, $01
+                DATA    $19, $00, $01, $00, $01, $00, $00, $00, $00, $00
+                DATA    $01, $02, $01, $42, $05, $00, $00, $00, $1D, $01
+                DATA    $05, $00, $35, $01, $18, $00, $0C, $00, $0C, $00
+                DATA    $00, $00, $00, $00, $01, $02, $01, $54, $06, $00
+                DATA    $00, $00, $02, $00, $00, $00, $5A, $63, $05, $00
+                DATA    $00, $00, $47, $72, $65, $65, $6E, $04, $00, $00
+                DATA    $00, $00, $FF, $00, $00, $00, $02, $00, $00, $00
+                DATA    $5A, $63, $06, $00, $00, $00, $59, $65, $6C, $6C
+                DATA    $6F, $77, $04, $00, $00, $00, $FF, $FF, $FF, $00
+                DATA    $00, $02, $00, $00, $00, $5A, $63, $03, $00, $00
+                DATA    $00, $52, $65, $64, $04, $00, $00, $00, $FF, $00
+                DATA    $FF, $00, $00, $01, $00, $00, $00, $5A, $06, $00
+                DATA    $00, $00, $41, $6C, $6C, $20, $4F, $4E, $00, $02
+                DATA    $00, $00, $00, $5A, $63, $07, $00, $00, $00, $41
+                DATA    $6C, $6C, $20, $4F, $46, $46, $04, $00, $00, $00
+                DATA    $80, $80, $80, $00, $00, $02, $00, $00, $00, $5A
+                DATA    $6D, $06, $00, $00, $00, $53, $74, $61, $74, $75
+                DATA    $73, $04, $00, $00, $00, $0D, $00, $00, $00, $53
+                DATA    $74, $61, $74, $75, $73, $3A, $20, $3F, $3F, $3F
+                DATA    $00, $00, $01, $00, $FF, $00, $01, $02, $00, $00
+                DATA    $01, $00, $FF, $10, $01, $F5, $00, $00, $01, $00
+                DATA    $FF, $20, $01, $2D, $00, $00, $01, $00, $FF, $30
+                DATA    $01, $15, $00, $00, $01, $00, $FF, $60, $01, $0C
+                DATA    $00, $00, $01, $01, $FF, $00, $01, $34, $00, $00
+                DATA    $01, $01, $FF, $10, $01, $F5, $00, $00, $01, $01
+                DATA    $FF, $20, $01, $2D, $00, $00, $01, $01, $FF, $30
+                DATA    $01, $15, $00, $00, $01, $01, $FF, $60, $01, $0C
+                DATA    $00, $00, $01, $02, $FF, $00, $01, $63, $00, $00
+                DATA    $01, $02, $FF, $10, $01, $F5, $00, $00, $01, $02
+                DATA    $FF, $20, $01, $2D, $00, $00, $01, $02, $FF, $30
+                DATA    $01, $15, $00, $00, $01, $02, $FF, $60, $01, $0C
+                DATA    $00, $00, $01, $03, $FF, $00, $01, $92, $00, $00
+                DATA    $01, $03, $FF, $10, $01, $F5, $00, $00, $01, $03
+                DATA    $FF, $20, $01, $2D, $00, $00, $01, $03, $FF, $30
+                DATA    $01, $15, $00, $00, $01, $03, $FF, $60, $01, $0C
+                DATA    $00, $00, $01, $04, $FF, $00, $01, $C1, $00, $00
+                DATA    $01, $04, $FF, $10, $01, $F5, $00, $00, $01, $04
+                DATA    $FF, $20, $01, $2D, $00, $00, $01, $04, $FF, $30
+                DATA    $01, $15, $00, $00, $01, $04, $FF, $60, $01, $0C
+                DATA    $00, $00, $01, $05, $00, $30, $01, $28, $00, $00
+                DATA    $01, $01, $00, $00, $01, $03, $00, $00, $01, $01
+                DATA    $00, $10, $01, $03, $00, $00, $01, $01, $00, $20
+                DATA    $01, $4C, $00, $00, $01, $01, $00, $30, $01, $28
+                DATA    $00, $00, $01, $02, $00, $00, $01, $52, $00, $00
+                DATA    $01, $02, $00, $10, $01, $03, $00, $00, $01, $02
+                DATA    $00, $20, $01, $4C, $00, $00, $01, $02, $00, $30
+                DATA    $01, $28, $00, $00, $01, $03, $00, $00, $01, $A1
+                DATA    $00, $00, $01, $03, $00, $10, $01, $03, $00, $00
+                DATA    $01, $03, $00, $20, $01, $4C, $00, $00, $01, $03
+                DATA    $00, $30, $01, $28, $00, $00, $01, $05, $00, $00
+                DATA    $01, $03, $00, $00, $01, $05, $00, $10, $01, $59
+                DATA    $00, $00, $01, $05, $00, $20, $01, $EA, $00, $00
+                DATA    $01, $04, $00, $00, $01, $03, $00, $00, $01, $04
+                DATA    $00, $10, $01, $2E, $00, $00, $01, $04, $00, $20
+                DATA    $01, $EA, $00, $00, $01, $04, $00, $30, $01, $28
+                DATA    $00, $00, $01, $06, $00, $00, $01, $03, $00, $00
+                DATA    $01, $06, $00, $10, $01, $84, $00, $00, $01, $06
+                DATA    $00, $20, $01, $EA, $00, $00, $01, $06, $00, $30
+                DATA    $01, $28, $00, $00, $01, $00, $00, $00, $01, $01
+                DATA    $00, $00, $01, $06, $00, $40, $01, $00, $00, $00
+                DATA    $01, $05, $00, $40, $01, $00, $00, $00, $01, $04
+                DATA    $00, $40, $01, $00, $00, $00, $01, $01, $00, $40
+                DATA    $01, $00, $00, $00, $01, $02, $00, $40, $01, $00
+                DATA    $00, $00, $01, $03, $00, $40, $01, $00, $00, $00
+                DATA    $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+                DATA    $00, $00, $00, $00
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  LOW GrnLED                                    ' start with LEDs off
+  LOW YelLED
+  LOW RedLED
+  PAUSE 50                                      ' let FxP initialize
+
+  ' Program FxP ROM
+
+  DEBUG CLS, "Programming ROM...", CR
+  SEROUT TX\CTS, Baud, [$81, $31]
+  FOR idx = 0 TO $30F                           ' loop through ROM image
+    DEBUG CRSRX, 0, DEC idx, " of ", DEC $30F   ' show progress
+    READ (FxpROM + idx), cData
+    SEROUT TX\CTS, Baud, [cData]
+  NEXT
+  DEBUG CR, CR, "Awaiting acknowledge...", CR
+  SERIN  RX\RTS, Baud, [STR text\3]
+  DEBUG "Acknowledge: ", STR text\3, CR
+
+Get_Client:
+  DEBUG CR, "Waiting for client...", CR
+  DO : LOOP UNTIL (HasClient = Yes)
+  DEBUG CLS,
+        "Client is Connected", CR,
+        "Use buttons to toggle LEDs"
+
+  GOSUB Update_Status
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    IF (HasClient = No) THEN Get_Client         ' abort if client drops
+  LOOP UNTIL (HasData = Yes)                    ' wait for user input
+
+Get_Changed_Control:
+  SEROUT TX\CTS, Baud, [GetMod]                 ' get changed control ID
+  SERIN  RX\RTS, Baud, [ctrl]
+
+Poll_Control:
+  SELECT ctrl                                   ' poll changed control
+    CASE ID_Green
+      SEROUT TX\CTS, Baud, [GetData, ID_Green]
+      SERIN  RX\RTS, Baud, [cData]
+      IF (cData = Pressed) THEN
+        TOGGLE GrnLED
+      ENDIF
+
+    CASE ID_Yellow
+      SEROUT TX\CTS, Baud, [GetData, ID_Yellow]
+      SERIN  RX\RTS, Baud, [cData]
+      IF (cData = Pressed) THEN
+        TOGGLE YelLED
+      ENDIF
+
+    CASE ID_Red
+      SEROUT TX\CTS, Baud, [GetData, ID_Red]
+      SERIN  RX\RTS, Baud, [cData]
+      IF (cData = Pressed) THEN
+        TOGGLE RedLED
+      ENDIF
+
+    CASE ID_AllOn
+      SEROUT TX\CTS, Baud, [GetData, ID_AllOn]
+      SERIN  RX\RTS, Baud, [cData]
+      IF (cData = Pressed) THEN
+        GrnLED = IsOn
+        YelLED = IsOn
+        RedLED = IsOn
+      ENDIF
+
+    CASE ID_AllOff
+      SEROUT TX\CTS, Baud, [GetData, ID_AllOff]
+      SERIN  RX\RTS, Baud, [cData]
+      IF (cData = Pressed) THEN
+        GrnLED = IsOff
+        YelLED = IsOff
+        RedLED = IsOff
+      ENDIF
+  ENDSELECT
+
+  GOSUB Update_Status
+  GOTO Main
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Update_Status:
+  text(0) = "." + (25 * OUTS.LOWBIT(GrnLED))    ' rebuild status bits
+  text(1) = "." + (43 * OUTS.LOWBIT(YelLED))
+  text(2) = "." + (36 * OUTS.LOWBIT(RedLED))
+  text(3) = 0
+
+  ' send to client
+
+  SEROUT TX\CTS, Baud, [SetData, ID_Status, "Status: ", STR text\4]
+  RETURN

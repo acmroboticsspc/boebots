@@ -1,0 +1,129 @@
+' Supplemental Listing
+' Nuts & Volts, August 2001
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... IR_ANALYZE.BSX
+' Purpose... IR Signal Analyzer (for Sony remotes)
+' Author.... Jon Williams (based on work by Andy Lindsay)
+' E-mail.... jwilliams@parallaxinc.com
+' Started... 06 JUL 2001
+' Updated... 06 JUL 2001 
+
+' { $STAMP BS2sx }
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program monitors the output of an IR detector.  When a valid start
+' bit is detected, the other bits are collected and the packet is 
+' analyzed and displayed.
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+ 
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+IR_pin	CON	15
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+IsLow		CON	0
+IsHigh	CON	1
+
+StartWidth	CON	2700				' width of IR start bit (BS2sx)
+Bit0Width	CON	750				' width of IR zero bit (BS2sx)
+Bit1Width	CON	1500				' widht of IR one bit (BS2sx)
+
+'StartWidth	CON	2880				' width of IR start bit (BS2p)
+'Bit0Width	CON	800				' width of IR zero bit (BS2p)
+'Bit1Width	CON	1600				' widht of IR one bit (BS2p)
+
+BitTest	CON	Bit0Width * 3 / 2		' test width -- look for 1's
+
+Val2uS	CON	$CC				' value to uS (0.8, BS2sx)
+'Val2uS	CON	$C0				' value to uS (0.75, BS2p)
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+irStart	VAR	Word				' width of start bit
+irBit		VAR	Word(12)			' width of each data bit
+
+bitPos	VAR	irStart.Nib3		' bit position
+irCode	VAR	irStart			' 12-bit IR code from remote
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Intialize:
+  PAUSE 500
+  DEBUG CLS
+  DEBUG "Sony IR Signal Analyzer", CR
+  DEBUG "Point remote at detector and press a key", CR, CR
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Wait_For_Start:					' wait for start bit
+  PULSIN IR_pin,IsLow,irStart
+  BRANCH irStart/StartWidth,[Wait_For_Start]
+
+  ' capture IR code
+
+  PULSIN IR_pin,IsLow,irBit(0)
+  PULSIN IR_pin,IsLow,irBit(1)
+  PULSIN IR_pin,IsLow,irBit(2)
+  PULSIN IR_pin,IsLow,irBit(3)
+  PULSIN IR_pin,IsLow,irBit(4)
+  PULSIN IR_pin,IsLow,irBit(5)
+  PULSIN IR_pin,IsLow,irBit(6)
+  PULSIN IR_pin,IsLow,irBit(7)
+  PULSIN IR_pin,IsLow,irBit(8)
+  PULSIN IR_pin,IsLow,irBit(9)
+  PULSIN IR_pin,IsLow,irBit(10)
+  PULSIN IR_pin,IsLow,irBit(11)
+
+
+Show_Report:
+  DEBUG CLS
+  DEBUG "Sony IR Packet Analysis", CR
+  DEBUG "=======================", CR
+  DEBUG CR
+  DEBUG " Bit ", TAB, " uS ", TAB, "Val", CR
+  DEBUG "-----", TAB, "----", TAB, "---", CR
+
+  DEBUG "Start", TAB, DEC irStart */ Val2uS, CR, CR
+
+  irCode = 0
+
+  FOR bitPos = 0 TO 11
+    DEBUG "Bit", DEC bitPos, TAB, DEC irBit(bitPos) */ Val2uS
+    DEBUG TAB, " ", DEC1 irBit(bitPos)/BitTest, CR
+    PAUSE 5
+    irCode = irBit(bitPos)/BitTest << bitPos + irCode
+  NEXT
+
+
+  DEBUG CR, CR,"Code", TAB, TAB, BIN12 (irCode & $FFF)
+  DEBUG TAB, HEX3 (irCode & $FFF), CR
+
+  DEBUG "Device", TAB, TAB, BIN5 (irCode & $FFF >> 7)
+  DEBUG "       ", TAB, " ", HEX2 (irCode & $FFF >> 7), CR
+
+  DEBUG "Command", TAB, TAB, "     ", BIN7 (irCode & $07F)
+  DEBUG TAB, " ", HEX2 (irCode & $07F)
+
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'

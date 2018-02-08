@@ -1,0 +1,106 @@
+' =========================================================================
+'
+'   File....... SW21-EX05-LED_Graph.BS2
+'   Purpose.... Bar or Dot Graph with LEDs
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Displays a linear (bar) or dot graph using eight LEDs.  This program
+' will require modifications (to the constants LoScale and HiScale) when
+' running on the BS2Sx, BS2p, or BS2px.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+LEDs            VAR     OUTL                    ' LEDs on P0 - P7
+LEDsDirs        VAR     DIRL                    ' DIRS control for LEDs
+
+Pot             PIN     15                      ' Pot circuit IO
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+DotGraf         CON     0                       ' define graph types
+BarGraf         CON     1
+GraphMode       CON     BarGraf                 ' define graph mode
+
+IsOn            CON     1
+IsOff           CON     0
+
+LoScale         CON     10                      ' raw low reading
+HiScale         CON     695                     ' raw high reading
+Span            CON     HiScale - LoScale       ' between lo-to-hi
+Scale           CON     $FFFF / Span            ' scale factor 0..255
+
+
+#DEFINE Testing = 0                             ' 1 for POT testing
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+rawVal          VAR     Word                    ' raw value from pot
+grafVal         VAR     Byte                    ' graph value
+hiBit           VAR     Byte                    ' highest lighted bit
+newBar          VAR     Byte                    ' workspace for bar graph
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  LEDsDirs = %11111111                          ' make LEDs outputs
+
+  #IF Testing #THEN                             ' for reading raw pot value
+    DO
+      GOSUB Read_Pot
+      DEBUG HOME, DEC rawVal, CLREOL
+      PAUSE 50
+    LOOP
+  #ENDIF
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Read_Pot                              ' get raw pot value
+    grafVal = (rawVal - LoScale) */ Scale       ' z-adjust, then scale
+    GOSUB Show_Graph                            ' now show it
+    PAUSE 50
+  LOOP
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Read_Pot:
+  HIGH Pot                                      ' charge cap
+  PAUSE 1                                       '   for 1 millisecond
+  RCTIME Pot, 1, rawVal                         ' read the Pot
+  RETURN
+
+
+Show_Graph:
+  hiBit = DCD (grafVal / 32)                    ' get highest bit
+  IF (GraphMode = BarGraf) THEN
+    newBar = 0                                  ' clear bar workspace
+    IF (grafVal > 0) THEN
+      DO WHILE (hiBit > 0)                      ' all bar LEDs lit?
+        newBar = newBar << 1                    ' no - shift left
+        newBar.BIT0 = IsOn                      ' light low end
+        hiBit = hiBit >> 1                      ' mark bit lit
+      LOOP
+    ENDIF
+    LEDs = newBar                               ' output new level
+  ELSE
+    LEDs = hiBit                                ' show dot value
+  ENDIF
+  RETURN

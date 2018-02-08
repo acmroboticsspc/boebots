@@ -1,0 +1,57 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - TestFrontQtiLineSensors.bs2
+' Tests values returned by QTI lines sensors mounted on
+' the front of the SumoBot.
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+qtiPwrLeft     PIN     10                    ' Left QTI on/off pin
+qtiSigLeft     PIN     9                     ' Left QTI signal pin
+
+qtiPwrRight    PIN     7                     ' Right QTI on/off pin
+qtiSigRight    PIN     8                     ' Right QTI signal pin
+
+' -----[ Variables ]----------------------------------------------------------
+
+qtiLeft        VAR     Word                  ' Stores left QTI time
+qtiRight       VAR     Word                  ' Stores right QTI time
+
+' -----[ Initialization ]-----------------------------------------------------
+
+DEBUG CLS, "FRONT QTI Sensors", CR,          ' Display heading
+           "Left    Right", CR,
+           "-----   -----", CR
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+DO                                           ' DO...LOOP repeats indefinitely
+
+  GOSUB Read_Line_Sensors                    ' Update qtiLeft & qtiRight
+
+  DEBUG CRSRX, 0, DEC5 qtiLeft               ' Display time measurement
+  DEBUG CRSRX, 8, DEC5 qtiRight              ' Display time measurement
+
+  PAUSE 100                                  ' Delay for slower PCs
+
+LOOP
+
+' -----[ Subroutines ]--------------------------------------------------------
+
+Read_Line_Sensors:
+
+  HIGH qtiPwrLeft                            ' Turn left QTI on
+  HIGH qtiSigLeft                            ' Discharge capacitor
+  PAUSE 1
+  RCTIME qtiSigLeft, 1, qtiLeft              ' Measure charge time
+  LOW qtiPwrLeft                             ' Turn left QTI off
+
+  HIGH qtiPwrRight                           ' Turn right QTI on
+  HIGH qtiSigRight                           ' Discharge capacitor
+  PAUSE 1
+  RCTIME qtiSigRight, 1, qtiRight            ' Measure charge time
+
+  RETURN
+

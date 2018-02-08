@@ -1,0 +1,45 @@
+' =========================================================================
+'
+'   File....... SW21-EX16-Freq_Measure.BS2
+'   Purpose.... Measuring frequency using COUNT
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program counts the number of events in one second and calculates
+' frequency from it. Since frequency in Hertz is cycles per second, the
+' number of cycles counted is the input frequency.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+FreqIn          PIN     15                      ' frequency input pin
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+OneSec          CON     1000                    ' capture window = 1 sec
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+cycles          VAR     Word                    ' counted cycles
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    COUNT FreqIn, OneSec, cycles                ' count for 1 second
+    DEBUG HOME,
+          "Frequency: ", DEC cycles, " Hz"      ' display
+  LOOP

@@ -1,0 +1,210 @@
+' Listing 2
+' Nuts & Volts - Stamp Applications, April 2001
+
+
+' {$STAMP BS2p}
+
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... OWSEARCH.BSP
+' Purpose... Searches 1-Wire bus for device ROM codes
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 26 FEB 2001
+' Updated... 05 MAR 2001
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program will search for all connected Dallas 1-Wire devices. The
+' calling program passes its slot number, the 1-Wire buss pin and the
+' start of EEPROM space for the storage of Dallas 1-Wire serail numbers.
+'
+' If a device is found, the 8-byte serial number is recorded in the 
+' EEPROM of the calling program slot.  The search will continue until all
+' devices have been found.  The program will then jump back to the caller.
+'
+' REFERENCE: iButton Standards documentation, ROM Search Figure 5-3
+'            Dallas Semiconductor
+'            www.dalsemi.com
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+' 28 FEB 2001 - Tested and working per Dallas specification
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+' 1-Wire Support
+'
+OW_FERst	CON	%0001			' Front-End Reset
+OW_BERst	CON	%0010			' Back-End Reset
+OW_BitMode	CON	%0100
+OW_HighSpd	CON	%1000
+
+ReadROM		CON	$33			' read ID, serial num, CRC
+MatchROM	CON	$55			' look for specific device
+SkipROM		CON	$CC			' skip ROM (one device)
+SearchROM	CON	$F0			' search 
+
+Yes		CON	1
+No		CON	0
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+thisSlot	VAR	Nib			' this program slot
+caller		VAR	Nib			' calling program
+ow_pin		VAR	Nib			' BS2p pin for OW bus
+dStart		VAR	Byte			' start of EE data
+
+lastDisc	VAR	Byte			' previous collision location
+doneFlag	VAR	Bit			' done with this search?
+moreDevs	VAR	Bit			' more devices on bus?
+result		VAR	Nib			' result of bit read
+bitIndex	VAR	Byte			' current bit position
+tempROM		VAR	Byte(8)			' holds ROM search
+discMarker	VAR	Byte			' collision in this search
+
+devCount	VAR	Byte			' devices found
+addr		VAR	Byte			' EE address to store
+offset		VAR	Byte			' loop counter
+
+crcVal		VAR	Byte			' CRC test value
+crcErrors	VAR	Byte			' Errors on search
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+CRC_table	DATA	0,94,188,226,97,63,221,131,194,156,126,32,163,253,31,65
+		DATA	157,195,33,127,252,162,64,30,95,1,227,189,62,96,130,220
+		DATA	35,125,159,193,66,28,254,160,225,191,93,3,128,222,60,98
+		DATA	190,224,2,92,223,129,99,61,124,34,192,158,29,67,161,255
+		DATA	70,24,250,164,39,121,155,197,132,218,56,102,229,187,89,7
+		DATA	219,133,103,57,186,228,6,88,25,71,165,251,120,38,196,154
+		DATA	101,59,217,135,4,90,184,230,167,249,27,69,198,152,122,36
+		DATA	248,166,68,26,153,199,37,123,58,100,134,216,91,5,231,185
+		DATA	140,210,48,110,237,179,81,15,78,16,242,172,47,113,147,205
+		DATA	17,79,173,243,112,46,204,146,211,141,111,49,178,236,14,80
+		DATA	175,241,19,77,206,144,114,44,109,51,209,143,12,82,176,238
+		DATA	50,108,142,208,83,13,239,177,240,174,76,18,145,207,45,115
+		DATA	202,148,118,40,171,245,23,73,8,86,180,234,105,55,213,139
+		DATA	87,9,235,181,54,104,138,212,149,203,41,119,244,170,72,22
+		DATA	233,183,85,11,136,214,52,106,43,117,151,201,74,20,246,168
+		DATA	116,42,200,150,21,75,169,247,182,232,10,84,215,137,107,53
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Initialize:
+  GET 127,thisSlot				' location of this code
+  GET 126,caller				' calling program
+  GET 125,ow_pin				' OW bus pin
+  GET 124,dStart				' start of data storage in caller
+
+  crcErrors = 0
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+FirstSearch:
+  lastDisc = 0					' no previous search, no problems
+  doneFlag = No					' this search is not done
+
+NextSearch:
+  moreDevs = Yes				' assume there are move devices
+  IF (doneFlag = No) THEN ResetBus		' intialize for search
+  doneFlag = No
+  GOTO SearchDone
+
+ResetBus:
+  bitIndex = 1					' initialize starting bit
+  discMarker = 0				' no bit collisions yet
+  OWOUT ow_pin,OW_FERst,[SearchROM]		' reset and start search
+     
+ReadBit:
+  OWIN ow_pin,OW_BitMode,[result.Bit1,result.Bit0]
+
+  IF (result <> %11) THEN CheckGoodBit		' if %11, no devices
+  GOTO ExitSearch
+
+CheckGoodBit:
+  IF (result > %00) THEN RecordBit		' if %00, we had a collision
+
+Conflict:
+  IF (bitIndex <> lastDisc) THEN Con_GT	' same as last, set bit to 1
+  tempROM.LowBit(bitIndex-1) = 1
+  GOTO SendBit
+
+Con_GT:
+  IF (bitIndex < lastDisc) THEN Con_LT		' new location, set bit to 0
+  tempROM.LowBit(bitIndex-1) = 0
+  discMarker = bitIndex				' mark the location
+  GOTO SendBit
+
+Con_LT:
+  IF (tempROM.LowBit(bitIndex-1) = 1) THEN SkipMark
+  discMarker = bitIndex				' mark if bit was 0
+SkipMark:
+  GOTO SendBit
+
+RecordBit:
+  '
+  ' write bus bit to our array
+  '
+  tempROM.LowBit(bitIndex-1) = result.Bit1
+
+SendBit:
+  '
+  ' send bit back to bus to keep desired devices online
+  '
+  OWOUT ow_pin,OW_BitMode,[tempROM.LowBit(bitIndex-1)]
+
+  bitIndex = bitIndex + 1			' point to next bit
+  IF (bitIndex < 65) THEN ReadBit		' done with this device?
+  lastDisc = discMarker				' save collsion marker
+  moreDevs = No					' assume we're done
+  IF (lastDisc > 0) THEN SkipDone
+  GOTO SearchDone				' record current device
+
+SkipDone:
+  moreDevs = Yes				' there are more devices
+
+SearchDone:
+  GOSUB CRCcheck
+  IF (crcVal <> 0) THEN DoNext			' don't save if CRC bad
+  devCount = devCount + 1			' increment device count
+  addr = 8 * (devCount - 1) + dStart		' calculate starting address
+  STORE caller					' point to caller EE
+  FOR offset = 0 TO 7
+    WRITE (addr + offset),tempROM(offset)	' write serial number to caller
+  NEXT
+
+DoNext:
+  IF (moreDevs = Yes) THEN NextSearch		' if more, go get them
+
+ExitSearch:
+  PUT 123,crcErrors				' flag any search errors
+  STORE caller					' point to caller EE					' 
+  WRITE (dStart - 1),devCount			' record # devices found
+  RUN caller					' return to calling program
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+' CRC routine to check returned data
+' - value of 0 indicates good CRC check
+
+CRCcheck:
+  STORE thisSlot				' CRC table is stored locally
+  crcVal = 0					' initialize CRC
+  FOR offset = 0 TO 7
+    READ (CRC_table + (crcVal ^ tempROM(offset))),crcVal
+  NEXT
+  IF (crcVal = 0) THEN CRCdone
+  crcErrors = crcErrors + 1
+
+CRCdone:  
+  RETURN

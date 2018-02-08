@@ -1,0 +1,39 @@
+; TUT039.SRC
+;
+; --------------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" 2nd Edition by Guenther Daubach
+; Copyright (c), by Parallax Inc. 2004
+; --------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET   Main
+ 
+org     $08
+Ix      ds 1
+Data    ds 2
+
+Main
+  mov   Ix, #Table
+
+Loop
+  mov   m, #Table >> 8
+
+  mov   w, Ix
+  iread
+  mov   Data, w
+  mov   Data+1, m
+  inc   Ix
+  test  Data
+  sz
+    jmp Loop
+  test  Data+1
+  sz
+    jmp Loop
+  jmp   Main
+
+ 
+org     $400
+Table
+        dw    'PARALLAX'
+        dw    12, 123, 1234, 0

@@ -1,0 +1,187 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - SensorsWithTempVariables.bs2
+' Demonstrates the use of a temporary and multipurpose variable in conjunction
+' with DATA, WRITE, and READ for calculating, storing, and using the qti
+' threshold value.
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+qtiPwrLeft     PIN     10                    ' Left QTI on/off pin P10
+qtiSigLeft     PIN     9                     ' Left QTI signal pin P9
+
+qtiPwrRight    PIN     7                     ' Right QTI on/off pin P7
+qtiSigRight    PIN     8                     ' Right QTI signal pin P8
+
+DummyPin       PIN     6                     ' I/O pin for pulse-decay P6
+
+IrLedLF        PIN     4                     ' Left IR LED connected to P4
+IrSenseLF      PIN     11                    ' Left IR detector to P11
+
+IrLedRF        PIN     15                    ' Right IR LED connected to P15
+IrSenseRF      PIN     14                    ' Right IR detector to P14
+
+IrLedLS        PIN     2                     ' Left IR LED connected to P2
+IrSenseLS      PIN     1                     ' Left IR detector to P1
+
+IrLedRS        PIN     3                     ' Right IR LED connected to P3
+IrSenseRS      PIN     0                     ' Right IR detector to P0
+
+pbSense        PIN     6                     ' Pushbutton connected to P6
+
+LedSpeaker     PIN     5                     ' LED/speaker connected to P5
+
+' -----[ Constants ]----------------------------------------------------------
+
+IrFreq     CON     38500                     ' IR LED transmit frequency
+
+' -----[ Variables ]----------------------------------------------------------
+
+' qtiLeft        VAR     Word                  ' Stores left QTI time
+' qtiRight       VAR     Word                  ' Stores right QTI time
+' qtiThreshold   VAR     Word                  ' Stores black/white threshold
+
+temp           VAR     Word                  ' <--- New temporary variable
+multi          VAR     Word                  ' <--- New multipurpose variable
+
+sensors        VAR     Byte                  ' Sensor flags byte
+
+pushbutton     VAR     sensors.BIT6          ' Stores pushbutton state
+
+qtiLF          VAR     sensors.BIT5          ' Stores snapshot of QtiSigLeft
+qtiRF          VAR     sensors.BIT4          ' Stores snapshot of QtiSigRight
+
+irLS           VAR     sensors.BIT3          ' State of Left Side IR
+irLF           VAR     sensors.BIT2          ' State of Left Front IR
+irRF           VAR     sensors.BIT1          ' State of Right Front IR
+irRS           VAR     sensors.BIT0          ' State of Right Side IR
+
+' -----[ Initialization ]-----------------------------------------------------
+
+GOSUB Calibrate_Qtis                         ' Determine b/w threshold
+
+' Display heading
+DEBUG CLS, " PB", CR,                        ' Pushbutton
+           " |QTI",CR,                       ' QTI line sensors
+           " |||IROD",CR,                    ' Infrared Object Detectors
+           " |||||||",CR,
+           CR,                               ' Sensors byte goes here
+           " |||||||", CR,
+           "  LRLLRR", CR,                   ' Left/right
+           "  FFSFFS"                        ' Front/side
+
+' -----[ EEPROM Data ]--------------------------------------------------------
+
+QtiThresh      DATA    Word 0                ' Word for QTI threshold time
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+DO                                           ' DO...LOOP repeats indefinitely
+
+  GOSUB Read_Line_Sensors                    ' Look for lines
+  GOSUB Read_Object_Detectors                ' Look for objects
+  GOSUB Read_Pushbutton                      ' Check pushbutton
+
+  DEBUG CRSRXY, 0, 4, BIN8 sensors           ' Display Sensors Variable
+                                             ' Delay for slower PCs
+  PAUSE 100
+
+LOOP
+
+' -----[ Subroutine - Calibrate_Qtis ]----------------------------------------
+
+Calibrate_Qtis:
+
+  HIGH qtiPwrLeft                            ' Turn left QTI on
+  HIGH qtiSigLeft                            ' Discharge capacitor
+  PAUSE 1
+
+'   RCTIME qtiSigLeft, 1, qtiLeft              ' Measure charge time
+  RCTIME qtiSigLeft, 1, temp                 ' <--- New measure charge time
+
+  LOW qtiPwrLeft                             ' Turn left QTI off
+  multi = temp                               ' <--- Add
+
+  HIGH qtiPwrRight                            ' Turn right QTI on
+  HIGH qtiSigRight                            ' Discharge capacitor
+  PAUSE 1
+'  RCTIME qtiSigRight, 1, qtiRight              ' Measure charge time
+  RCTIME qtiSigRight, 1, temp                 ' <--- New measure charge time
+
+'  qtiThreshold = (qtiLeft + qtiRight) / 2      ' Calculate average
+  multi = (multi + temp) / 2                  ' <--- New calculate average
+
+'  qtiThreshold = qtiThreshold / 3              ' Take 1/3 average
+  multi = multi / 4                           ' <--- New take 1/4 average
+
+'  IF threshold > 220 THEN                      ' Account for code overhead
+'    threshold = threshold - 220
+'  ELSE
+'    threshold = 0
+'  ENDIF
+
+  IF multi > 220 THEN                         ' <--- New
+    multi = multi - 220                       ' <--- New
+  ELSE                                        ' <--- New
+    multi = 0                                 ' <--- New
+  ENDIF                                       ' <--- New
+
+  WRITE QtiThresh, Word multi                 ' <--- New threshold to EEPROM
+
+  RETURN
+
+' -----[ Subroutine - Read_Line_Sensors ]-------------------------------------
+
+Read_Line_Sensors:
+
+  HIGH qtiPwrLeft                            ' Turn on QTIs
+  HIGH qtiPwrRight
+  HIGH qtiSigLeft                            ' Push signal voltages to 5 V
+  HIGH qtiSigRight
+  PAUSE 1                                    ' Wait 1 ms for capacitors
+
+  READ QtiThresh, Word temp                  ' <-- Add get threshold time
+
+  INPUT qtiSigLeft                           ' Start the decays
+  INPUT qtiSigRight
+
+'  PULSOUT DummyPin, qtiThreshold            ' Wait for threshold time
+  PULSOUT DummyPin, temp                     ' <--- New wait threshold time
+
+  qtiLF  = ~qtiSigLeft                       ' Snapshot of QTI signal states
+  qtiRF = ~qtiSigRight
+
+  LOW qtiPwrLeft                             ' Turn off QTIS
+  LOW qtiPwrRight
+
+  RETURN
+
+' -----[ Subroutine - Read_Object_Detectors ]---------------------------------
+
+Read_Object_Detectors:
+
+  FREQOUT IrLedRS, 1, IrFreq                 ' Right side IR LED headlight
+  irRS = ~IrSenseRS                          ' Save right side IR receiver
+
+  FREQOUT IrLedRF, 1, IrFreq                 ' Repeat for right-front
+  irRF = ~IrSenseRF
+
+  FREQOUT IrLedLF, 1, IrFreq                 ' Repeat for left-front
+  irLF = ~IrSenseLF
+
+  FREQOUT IrLedLS, 1, IrFreq                 ' Repeat for left side
+  irLS = ~IrSenseLS
+
+  RETURN
+
+' -----[ Subroutine - Read_Pushbutton ]---------------------------------------
+
+Read_Pushbutton:
+
+  INPUT pbSense
+  pushbutton = pbSense                       ' Store state of pbSense
+
+  RETURN
+

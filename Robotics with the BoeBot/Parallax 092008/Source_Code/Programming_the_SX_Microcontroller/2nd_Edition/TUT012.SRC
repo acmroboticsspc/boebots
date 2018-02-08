@@ -1,0 +1,49 @@
+; TUT012.SRC
+;
+; --------------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" 2nd Edition by Guenther Daubach
+; Copyright (c), by Parallax Inc. 2004
+; --------------------------------------------------------------------
+
+include "Setup28.inc"
+
+RESET  		 Main
+
+org          $10
+Counter      ds 1
+
+org          $30
+Timers       equ $
+Timer1       ds 1
+ 
+ 
+org          $000
+
+;----------------------------------
+; Subroutine for time delays
+;----------------------------------
+Delay
+  bank       Timers
+  clr        Timer1
+
+:Loop
+  decsz      Timer1
+    jmp      :Loop
+  ret
+  
+org          $100
+;----------------------------------
+; Main program
+;----------------------------------
+Main
+  bank       Counter
+
+:OuterLoop
+  clr        Counter
+
+:InnerLoop
+  call       Delay
+  incsz      Counter
+    jmp      :InnerLoop
+  jmp        :OuterLoop

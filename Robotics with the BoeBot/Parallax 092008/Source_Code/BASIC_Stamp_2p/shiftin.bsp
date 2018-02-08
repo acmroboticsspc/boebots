@@ -1,0 +1,12 @@
+ADres var byte  	'A-to-D result = one byte
+CS    con  0    	'Chip select is P0
+AData con  1   	'ADC data output is P1
+CLK   con  2   	'Clock is P2
+
+		high CS			'Deselect ADC to start.
+again:	low CS			'Activate the ADC0831.
+  		shiftin AData,CLK,msbpost,[ADres\9]
+  		high CS			'Deactivate'0831.
+  		debug ? ADres	'Show us the result.
+  		pause 1000		'Wait a second.
+	goto again			'Do it again.

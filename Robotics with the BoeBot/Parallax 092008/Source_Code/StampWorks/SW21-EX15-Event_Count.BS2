@@ -1,0 +1,68 @@
+' =========================================================================
+'
+'   File....... SW21-EX15-Event_Count.BS2
+'   Purpose.... Holds program for a specific number of external events
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 16 AUG 2006
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Counts extenal events by wait for a low-to-high transition on the event
+' input pin.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+EventIn         PIN     15                      ' event input pin
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+nScan           VAR     Bit                     ' new scan (changed)
+oScan           VAR     Bit                     ' old scan of input
+xScan           VAR     Bit                     ' scan change
+
+eCount          VAR     Word                    ' event count
+target          VAR     Word                    ' target count value
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  DEBUG CLS,
+        "Started...", CR
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  target = 25                                   ' set target value
+  GOSUB Wait_For_Count                          ' wait for 25 pulses
+  DEBUG "Count complete."
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Wait_For_Count:
+  DO
+    nScan = EventIn                             ' capture input
+    xScan = nScan ^ oScan & nScan               ' look for 0 -> 1 change
+    oScan = nScan                               ' save this scan
+
+    IF (xScan = 1) THEN
+      eCount = eCount + 1                       ' add new event
+      DEBUG CRSRXY, 0, 1,
+            "Count = ", DEC eCount, CR
+    ENDIF
+  LOOP UNTIL (eCount = target)
+  RETURN

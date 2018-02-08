@@ -1,0 +1,111 @@
+' =========================================================================
+'
+'   File...... Midi Keyboard.BS2
+'   Purpose... Detect key changes and play through MIDI instrument
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallax.com
+'   Started... 
+'   Updated... 20 JAN 2003
+'
+'   {$STAMP BS2p}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Creates a simple digital keyboard with the BASIC Stamp that sends note
+' and volume [velocity] information to a MIDI instrument.
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+MidiOut         PIN     15                      ' midi serial output
+Keys            VAR     InL                     ' custom keyboard inputs
+
+A2Ddata         PIN      8                      ' ADC0831 data line
+A2Dclock        PIN      9                      ' ADC0831 clock
+A2Dcs           PIN     10                      ' ADC0831 chip select
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+#SELECT $STAMP                                  ' check Stamp type
+  #CASE BS2, BS2e, BS2pe
+    MidiBaud    CON     $8000 + 12              ' 31.25 kBaud -- open
+
+  #CASE BS2sx, BS2p
+    MidiBaud    CON     $8000 + 60
+#ENDSELECT
+
+Channel         CON     0
+NoteOn          CON     $90 | Channel
+NoteOff         CON     $80 | Channel
+StdVolume       CON     64                      ' half volume   
+MiddleC         CON     60
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+scan            VAR     Byte                    ' current scan
+last            VAR     Byte                    ' last scan
+changes         VAR     Byte                    ' changes between scans
+cmd             VAR     Byte                    ' command (on or off)
+note            VAR     Byte                    ' note to play
+velocity        VAR     Byte                    ' volume level
+idx             VAR     Nib                     ' loop counter
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Setup:
+  HIGH A2Dcs                                    ' deselect ADC0831
+  last = Keys                                   ' no changes on start-up
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Get_Keys                              ' check for key changes
+    GOSUB Get_Velocity                          ' get volume level
+    GOSUB Play_Notes                            ' update notes
+  LOOP
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Get_Keys:
+  scan = Keys                                   ' get current keys
+  changes = scan ^ last                         ' find changes
+  last = scan                                   ' save last keys
+  RETURN
+
+
+Get_Velocity:
+  LOW A2Dcs                                     ' select ADC0831
+  SHIFTIN A2Ddata, A2Dclock, MSBPost, [velocity\9]
+  HIGH A2Dcs                                    ' deslect ADC0831
+  velocity = velocity / 2                       ' scale for MIDI
+  RETURN
+
+
+Play_Notes:
+  IF changes THEN 
+    FOR idx = 7 TO 0
+      IF (changes.LowBit(idx)) THEN             ' look for note change
+        cmd = NoteOn - ($10 * scan.LowBit(idx)) ' construct command
+        note = MiddleC + (7 - idx)              ' bit 7 is MiddleC
+        SEROUT MidiOut, MidiBaud, [cmd, note, velocity]
+      ENDIF
+    NEXT
+  ENDIF
+  RETURN

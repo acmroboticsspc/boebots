@@ -1,0 +1,191 @@
+' -----[ Title ]------------------------------------------------------
+'
+' File...... LCD.BS2
+' Purpose... Stamp -> LCD (4-bit interface)
+' Author.... Jon Williams (for BS1)
+'            Claus Kuhnel (adaptions to BS2 & LM041)
+' Started... 16 July 1994
+' Updated... 01 Sept 2001
+
+' -----[ Program Description ]----------------------------------------
+'
+' This program demonstrates the various standard features of an LCD
+' display that uses the Hitatchi HD44780 controller.  
+' The LCD used to test this program was the Hitachi LM041L (16x4).
+'
+' LCD Connections:
+'
+' LCD        (Function)         Stamp
+' ---------------------         -----
+' pin 1         Vss             VSS
+' pin 2         Vdd             VDD
+' pin 3         Vo              
+' pin 4         RS              P3
+' pin 5         R/W             P2
+' pin 6         E               P0
+' pin 7         DB0              
+' pin 8         DB1              
+' pin 9         DB2              
+' pin 10        DB3              
+' pin 11        DB4             P4
+' pin 12        DB5             P5
+' pin 13        DB6             P6
+' pin 14        DB7             P7
+'
+' -----[ Revision History ]-------------------------------------------
+'
+' 07-16-94 : Version 1.0 - compilation of code from last 3 months
+' 09-20-94 : Version 2.0 - adaption to LM041L
+' 09-01-01 : Version 3.0 - adaption to BS2
+'
+' -----[ Directives ]-------------------------------------------------
+'
+'{$STAMP BS2} 			'specifies a BS2
+'
+' -----[ Constants ]--------------------------------------------------
+'
+E		con	0      		' LCD enable pin (1 = enabled)
+RS 		con   3                 ' Register Select (1 = char)
+
+' LCD control characters
+'
+ClrLCD	con   $01               ' clear the LCD
+CrsrHm	con   $02               ' move cursor to home position
+CrsrLf	con   $10               ' move cursor left
+CrsrRt	con   $14               ' move cursor right
+DispLf	con   $18               ' shift displayed chars left
+DispRt	con	$1C               ' shift displayed chars right             
+
+Line1		con	$80			' addr line #1 ¦ 80H
+Line2		con  	$C0			' addr line #2 ¦ 80H
+Line3		con  	$90			' addr line #3 ¦ 80H
+Line4		con  	$D0			' addr line #4 ¦ 80H
+ 
+' -----[ Variables ]--------------------------------------------------
+'
+outp    	var 	byte			' output workspace
+char    	var	byte              ' char sent to LCD
+index   	var	byte              ' loop counter
+
+
+' -----[ Initialization ]---------------------------------------------
+'
+data "THE BASIC STAMP!"     	' preload EEPROM 
+data "A PIC16C57 knows"     	' preload EEPROM
+data "P B A S I C from"     	' preload EEPROM
+data " Parallax Inc.  "     	' preload EEPROM
+	
+	outl = %00000000                ' clear the pins
+	dirl = %11111111                ' set 0-5 as outputs
+	PAUSE 1000                        ' let the LCD settle
+
+' Initialize the LCD (Hitatchi HD44780 controller)
+'
+LCDini: 
+	outl = %00110000                ' 8-bit mode
+	PULSOUT E, 10
+	PAUSE 10
+	PULSOUT E, 10
+	pause 1
+	PULSOUT E, 10
+	pause 1
+	outl = %00100000                ' 4-bit mode
+	PULSOUT E, 10
+	char = %00101000                ' set function for LM041
+	gosub WrLCD
+	char = %00001100                ' disp on, crsr off, blink off
+	gosub WrLCD 
+	char = %00000110                ' inc crsr, no disp shift
+	gosub WrLCD 
+	char = %00000001                ' clear LCD
+	gosub WrLCD
+	HIGH RS                         ' LCD to character mode
+
+
+' -----[ Main Code ]--------------------------------------------------
+'
+Start:  
+	FOR index = 0 TO 15		    
+	  read index, char              ' get char from EEPROM
+	  gosub WrLCD                   ' write it
+	NEXT
+		
+	char = Line2                       ' address second line
+	GOSUB LCD_cmd
+	FOR index = 16 TO 31
+	  read index, char              ' get char from EEPROM
+	  gosub WrLCD                   ' write it
+	NEXT 
+	
+	char = Line3                       ' address third line
+	GOSUB LCD_cmd
+	FOR index = 32 TO 47
+	  read index, char              ' get char from EEPROM
+	  gosub WrLCD                   ' write it
+	NEXT 
+	
+	char = Line4                   ' address forth line
+	GOSUB LCD_cmd
+	FOR index = 48 TO 63
+	  read index, char              ' get char from EEPROM
+	  gosub WrLCD                   ' write it
+	NEXT 
+	PAUSE 1000                      ' wait 2 seconds
+
+	char = ClrLCD                   ' clear the LCD
+	GOSUB LCD_cmd
+	PAUSE 500
+
+	GOTO Start                      ' do it all over
+
+
+' -----[ Subroutines ]------------------------------------------------
+'
+'
+' Send command to the LCD
+'
+' Load char with command value, then call
+'
+'   Clear the LCD............. $01, %00000001
+'   Home the cursor........... $02, %00000010
+'   Display control........... (see below)
+'   Entry mode................ (see below)
+'   Cursor left............... $10, %00010000
+'   Cursor right.............. $14, %00010100
+'   Scroll display left....... $18, %00011000
+'   Scroll display right...... $1C, %00011100
+'   Set CG RAM address........      %01aaaaaa (Character Generator)
+'   Set DD RAM address........      %1aaaaaaa (Display Data)
+'
+' Display control byte:
+'
+'   % 0 0 0 0 1 D C B
+'               | | -- blink character under cursor (1=blink)
+'               | ---- cursor on/off (1=on)
+'               ------ display on/off (1=on)
+'
+' Entry mode byte:
+'
+'   % 0 0 0 0 0 1 X S
+'                 | --- shift display (S=1), left (X=1), right (X=0)
+'                 ---- cursor move: right (X=1), left (X=0)
+'
+LCD_cmd: 
+	LOW RS
+	gosub WrLCD
+	HIGH RS
+	RETURN
+
+' Write ASCII char to LCD 
+'
+WrLCD:  
+	outl = outl & %00001000         ' RS = 1, data bus clear
+	outp = char & %11110000         ' mask the high nibble
+	outl = outl | outp              ' output the nibble
+	PULSOUT E, 10                    ' strobe the Enable line
+	outl = outl & %00001000
+	outp = char & %00001111         ' get low nibble
+	outp = outp << 4
+	outl = outl | outp
+	PULSOUT E, 10
+	RETURN

@@ -1,0 +1,7 @@
+' Program Listing 42.2
+Private Sub btnSend_Click()
+  SendMsg 1, &HF0 + updnHouse.Value, updnUnit.Value * 16 + x10, lamp
+  ' start the response timer
+  Timer1.Interval = timeOut
+  Timer1.Enabled = True
+End Sub

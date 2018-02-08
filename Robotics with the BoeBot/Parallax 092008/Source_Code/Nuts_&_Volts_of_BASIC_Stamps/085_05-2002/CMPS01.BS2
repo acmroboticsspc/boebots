@@ -1,0 +1,261 @@
+' ==============================================================================
+'
+'   File...... CMPS01.BS2
+'   Purpose... Daventech CMPS01 Electronic Compass Demo
+'   Author.... Jon Williams
+'   E-mail.... jonwms@aol.com
+'   Started... 10 MAR 2002
+'   Updated... 29 MAR 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' This program demonstrates essential I2C routines and communication with the
+' Daventech CMPS01 electronic compass.  The Daventech compass behaves very
+' like a typical I2C memory device and the routines to read from and write to
+' it are identical to those used with EEPROMs.
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+
+SDA             CON     8                       ' I2C serial data line
+SCL             CON     9                       ' I2C serial clock line
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+WrCMPS01        CON     $C0                     ' write to compass
+RdCMPS01        CON     $C1                     ' read from compass
+
+Ack             CON     0                       ' acknowledge bit
+Nak             CON     1                       ' no ack bit
+
+' Compass registers
+'
+CMPS01_Rev      CON      0
+CMPS01_Brads    CON      1                      ' bearing, 0 - 255
+CMPS01_DegHi    CON      2                      ' degrees, high byte
+CMPS01_DegLo    CON      3                      ' degrees, low byte
+CMPS01_S1THi    CON      4                      ' sensor 1 test, high
+CMPS01_S1TLo    CON      5                      ' sensor 1 test, low
+CMPS01_S2THi    CON      6                      ' sensor 2 test, high
+CMPS01_S2TLo    CON      7                      ' sensor 2 test, low
+CMPS01_S1CHi    CON      8                      ' sensor 1 cal, high
+CMPS01_S1CLo    CON      9                      ' sensor 1 cal, low
+CMPS01_S2CHi    CON     10                      ' sensor 2 cal, high
+CMPS01_S2CLo    CON     11                      ' sensor 2 cal, low
+CMPS01_X1       CON     12                      ' not used
+CMPS01_X2       CON     13                      ' not used
+CMPS01_CalDone  CON     14                      ' calibration done flag
+CMPS01_CalCmd   CON     15                      ' calibration cmd register
+
+CrsrXY          CON     2                       ' DEBUG Position Control
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+i2cSDA          VAR     Nib                     ' I2C serial data pin
+i2cData         VAR     Word                    ' data to/from device
+i2cReg          VAR     Byte                    ' register address
+i2cWork         VAR     Byte                    ' work byte for TX routine
+i2cAck          VAR     Bit                     ' Ack bit from device
+
+temp            VAR     Word                    ' for rj printing
+digits          VAR     Nib
+width           VAR     Nib
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Init:
+  PAUSE 250
+  DEBUG CLS
+  DEBUG CrsrXY, 0, 0, "Devantech CMPS01 Compass Demo"
+  DEBUG CrsrXY, 0, 1, "-----------------------------"
+
+  i2cSDA = SDA                                  ' define SDA pin
+  i2cReg = CMPS01_Rev                           ' compass revision number
+  GOSUB Read_Byte
+  DEBUG CrsrXY, 0, 3, "Rev Num... "
+  temp = i2cData
+  width = 3
+  GOSUB RJ_Print
+
+  DEBUG CrsrXY, 0, 5, "Brads..... "
+  DEBUG CrsrXY, 0, 6, "Degrees... "
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  i2cReg = CMPS01_Brads                         ' get brads, 0 - 255
+  GOSUB Read_Byte
+  DEBUG CrsrXY, 11, 5
+  temp = i2cData
+  GOSUB RJ_Print
+
+  i2cReg = CMPS01_DegHi                         ' get degrees, 0.0 - 359.9
+  GOSUB Read_Word
+  DEBUG CrsrXY, 11, 6
+  temp = i2cData / 10
+  GOSUB RJ_Print
+  DEBUG ".", DEC1 i2cData, "  "
+
+  PAUSE 250
+  GOTO Main
+  END
+
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+RJ_Print:                                       ' right justify
+  digits = width
+  LOOKDOWN temp, <[0,10,100,1000,65535], digits
+  DEBUG REP " "\(width - digits), DEC temp
+  RETURN
+
+
+' ------------------------------------------------------------------------------
+' Compass Access Subroutines
+' ------------------------------------------------------------------------------
+
+' Writes low byte of i2cData to i2cReg
+
+Write_Byte:
+  GOSUB I2C_Start
+  i2cWork = WrCMPS01
+  GOSUB I2C_TX_Byte                             ' send device address
+  i2cWork = i2cReg
+  GOSUB I2C_TX_Byte                             ' send register number
+  i2cWork = i2cData.LowByte
+  GOSUB I2C_TX_Byte                             ' send the data
+  GOSUB I2C_Stop
+  RETURN
+
+
+' Writes i2cData to i2cReg
+
+Write_Word:
+  GOSUB I2C_Start
+  i2cWork = WrCMPS01
+  GOSUB I2C_TX_Byte                             ' send device address
+  i2cWork = i2cReg
+  GOSUB I2C_TX_Byte                             ' send register number
+  i2cWork = i2cData.HighByte
+  GOSUB I2C_TX_Byte                             ' send the data - high byte
+  i2cWork = i2cData.LowByte
+  GOSUB I2C_TX_Byte                             ' send the data - low byte
+  GOSUB I2C_Stop
+  RETURN
+
+
+' Read i2cData (8 bits) from i2cReg
+
+Read_Byte:
+  GOSUB I2C_Start
+  i2cWork = WrCMPS01
+  GOSUB I2C_TX_Byte                             ' send compass address
+  i2cWork = i2cReg
+  GOSUB I2C_TX_Byte                             ' send register number
+  GOSUB I2C_Start                               ' repeat start (sets register)
+  i2cWork = RdCMPS01
+  GOSUB I2C_TX_Byte                             ' send read command
+  GOSUB I2C_RX_Byte_Nak
+  GOSUB I2C_Stop
+  i2cData = i2cWork                             ' return the data
+  RETURN
+
+
+' Read i2cData (16 bits) from i2cReg
+
+Read_Word:
+  GOSUB I2C_Start
+  i2cWork = WrCMPS01
+  GOSUB I2C_TX_Byte                             ' send compass address
+  i2cWork = i2cReg
+  GOSUB I2C_TX_Byte                             ' send register number
+  GOSUB I2C_Start                               ' repeat start (sets register)
+  i2cWork = RdCMPS01
+  GOSUB I2C_TX_Byte                             ' send read command
+  GOSUB I2C_RX_Byte
+  i2cData.HighByte = i2cWork                    ' read high byte of data
+  GOSUB I2C_RX_Byte_Nak
+  GOSUB I2C_Stop
+  i2cData.LowByte = i2cWork                     ' read low byte of data
+  RETURN
+
+
+' ------------------------------------------------------------------------------
+' Low Level I2C Subroutines
+' ------------------------------------------------------------------------------
+
+' --- Start ---
+
+I2C_Start:                                      ' I2C start bit sequence
+  INPUT i2cSDA
+  INPUT SCL
+  LOW i2cSDA                                    ' SDA -> low while SCL high
+
+Clock_Hold:
+  IF (Ins.LowBit(SCL) = 0) THEN Clock_Hold      ' device ready?
+  RETURN
+
+
+' --- Transmit ---
+
+I2C_TX_Byte:
+  SHIFTOUT i2cSDA,SCL,MSBFIRST,[i2cWork\8]      ' send byte to device
+  SHIFTIN i2cSDA,SCL,MSBPRE,[i2cAck\1]          ' get acknowledge bit
+  RETURN
+
+
+' --- Receive ---
+
+I2C_RX_Byte_Nak:
+  i2cAck = Nak                                  ' no Ack = high
+  GOTO I2C_RX
+
+I2C_RX_Byte:
+  i2cAck = Ack                                  ' Ack = low
+
+I2C_RX:
+  SHIFTIN i2cSDA,SCL,MSBPRE,[i2cWork\8]         ' get byte from device
+  SHIFTOUT i2cSDA,SCL,LSBFIRST,[i2cAck\1]       ' send ack or nak
+  RETURN
+
+
+' --- Stop ---
+
+I2C_Stop:                                       ' I2C stop bit sequence
+  LOW i2cSDA
+  INPUT SCL
+  INPUT i2cSDA                                  ' SDA --> high while SCL high
+  RETURN

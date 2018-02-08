@@ -1,0 +1,33 @@
+; TUT022.SRC
+;
+; --------------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" 2nd Edition by Guenther Daubach
+; Copyright (c), by Parallax Inc. 2004
+; --------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET   Main
+
+TRIS    equ $0f
+
+org     $08
+Timer   ds 1
+Counter ds 1
+
+org     $000
+;-----------------------------------
+; ISR
+;-----------------------------------
+  decsz Timer
+    reti
+  xor   rb, #%00000001
+  reti
+  
+Main
+  mode TRIS
+  mov  !rb, #%11111110
+  mov  !option, #%10000111
+:Loop
+  inc  Counter
+  jmp  :Loop

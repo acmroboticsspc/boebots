@@ -1,0 +1,38 @@
+'********************************************************************************************
+'{$STAMP BS2}										TSTAT.bs2
+'												 05/23/00
+'	This program shows how to use the LED Terminal AppMod with the BS2
+'	to act as a simple display for a thermostat.
+'********************************************************************************************
+
+N19K2		con	32+$8000
+DP2		con	$02
+Temp		var	word
+
+Start:	Temp = 849						'84.9 degrees
+		serout 6,N19K2,["!LT0ASC out",$0,$0]
+		pause 400
+		serout 6,N19K2,["!LT0ASCside",$0,$0]
+		pause 400
+		serout 6,N19K2,["!LT0ASCTemp",$0,$0]
+		pause 800
+		serout 6,N19K2,["!LT0BIN",Temp.lowbyte,Temp.highbyte,DP2,$0]
+		pause 1800
+		Temp = 745						'74.5 degrees
+		serout 6,N19K2,["!LT0ASC in ",$0,$0]
+		pause 400
+		serout 6,N19K2,["!LT0ASCside",$0,$0]
+		pause 400
+		serout 6,N19K2,["!LT0ASCTemp",$0,$0]
+		pause 800
+		serout 6,N19K2,["!LT0BIN",Temp.lowbyte,Temp.highbyte,DP2,$0]
+		pause 1800
+		serout 6,N19K2,["!LT0ASCTemp",$0,$0]
+		pause 400
+		serout 6,N19K2,["!LT0ASC set",$0,$0]
+		pause 400
+		serout 6,N19K2,["!LT0ASC at ",$0,$0]
+		pause 800
+		serout 6,N19K2,["!LT0ASC","0742",DP2,$0]
+		pause 1800
+		goto Start

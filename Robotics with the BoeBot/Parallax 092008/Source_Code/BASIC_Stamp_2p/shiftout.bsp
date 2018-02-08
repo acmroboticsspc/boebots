@@ -1,0 +1,10 @@
+DataP  con 0     	'Data pin to 74HC595
+Clock  con 1     	'Shift clock to '595
+Latch  con 2     	'Moves data from shift
+                 	'register to output latch.
+counter var byte 	'Counter for demo program.
+again:	shiftout DataP,Clock,msbfirst,[counter]
+  	pulsout Latch,1   	'Transfer to outputs.
+  	pause 50           'Wait briefly.
+  	counter = counter+1	'Increment counter.
+		goto Again			'Do it again.

@@ -1,0 +1,39 @@
+' Applied Robotics with the SumoBot - SymbolNamesVsAddressContents.bs2
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+Numbers        DATA    7, 20, 11, 2, 80
+RunStatus      DATA    0
+UndefData      DATA    (20)
+Alphabet       DATA    "ABCDEFG"
+
+temp           VAR     Word
+counter        VAR     Byte
+
+DEBUG "Address of Numbers..........", DEC Numbers, CR
+
+DEBUG "Value stored at Numbers....."
+READ Numbers, temp
+DEBUG DEC temp, CR
+
+DEBUG "Value at (Numbers + 1)....."
+READ Numbers + 1, temp
+DEBUG DEC temp, CR, CR
+
+DEBUG "Address of RunStatus........", DEC RunStatus, CR
+DEBUG "Value stored at RunStatus..."
+READ RunStatus, temp
+DEBUG DEC temp, CR
+
+DEBUG "Address of UndefData........", DEC UndefData, CR, CR
+
+DEBUG "Address of Alphabet........", DEC Alphabet, CR
+DEBUG "Values stored........."
+FOR counter = 0 TO 6
+  READ Alphabet + counter, temp
+  DEBUG temp
+  PAUSE 200
+NEXT
+
+END

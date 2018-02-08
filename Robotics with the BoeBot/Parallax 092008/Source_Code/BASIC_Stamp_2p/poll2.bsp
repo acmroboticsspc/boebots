@@ -1,0 +1,14 @@
+'{$STAMP BS2p, pollrun}
+
+InitPolling:
+	POLLIN 	8,0		' If this polled input is Lo
+	POLLIN	9,0		' or this input is Lo
+	POLLOUT 	11,0 		' then the polled output is Lo
+	POLLRUN	1		' and program in Slot #1 runs.
+	POLLMODE 	4		' All polling functions enabled
+
+Loop:					' This in the "main" program
+	DEBUG "."
+	GOTO LOOP
+
+

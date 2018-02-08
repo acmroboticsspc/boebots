@@ -1,0 +1,94 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 10.1
+; 19.2K RS232 transmitter
+;=======================================================================
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		freq 	50000000
+		reset	reset_entry
+;
+;
+; I/O definition
+;
+tx_pin		=	ra.3
+;
+;
+; Variables
+;
+		org	8
+
+temp		ds	1
+
+
+		org	10h			
+serial		=	$
+
+tx_high	ds	1			
+tx_low	ds	1
+tx_count	ds	1
+tx_divide	ds	1
+txdivisor	equ	16   		; 16 periods per bit
+
+		org	0
+;
+;
+; Interrupt routine - UART
+;
+interrupt	
+		bank	serial			
+		test	tx_count	; busy?
+		jz 	noisr		; no byte being sent
+		dec	tx_divide
+		jnz   	noisr
+		mov	tx_divide,#txdivisor   	; ready for next		
+		stc                           	; ready stop bit
+		rr	tx_high			; go to next bit
+		rr	tx_low			
+		dec	tx_count		; count-1
+		movb	tx_pin,/tx_low.6	; output next bit
+noisr
+		mov	w,#-163		;interrupt every 163 clocks
+		retiw				
+;
+
+;***********************************************************************
+;
+;
+; Send byte via serial port
+;
+send_byte	bank	serial
+
+:wait		test	tx_count	;wait for not busy
+		jnz	:wait
+
+		mov	tx_high,w
+		clrb  	tx_low.7   	; set start bit
+		mov	tx_count,#10	;1 start + 8 data + 1 stop bit
+		ret
+
+reset_entry	mov	ra,#%0000	;init ra
+		mov	!ra,#%0111
+
+		clr	fsr		;reset all ram banks
+:loop		setb	fsr.4
+		clr	ind
+		ijnz	fsr,:loop
+		mov	tx_divide,txdivisor
+		mov	!option,#%10011111
+
+; **** Your code goes here ****
+xloop
+	      	mov 	w,#'A'
+		call 	send_byte
+		mov 	w,#'B'
+		call 	send_byte
+		mov 	w,#'C'
+		call 	send_byte
+		mov 	w,#13
+		call 	send_byte
+		mov 	w,#10
+		call 	send_byte
+		jmp 	xloop
+

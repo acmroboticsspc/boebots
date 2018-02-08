@@ -1,0 +1,94 @@
+' =========================================================================
+'
+'   File....... SW21-EX26-Servo_Control.BS2
+'   Purpose.... Servo control and positioning with a potentiomenter
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program shows how to control a standard servo with the BASIC Stamp.
+' Servo position is controlled by reading position of a potentiometer that
+' is part of opposing RCTIME networks.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+PotCW           PIN     0                       ' clockwise pot input
+PotCCW          PIN     1                       ' counter-cw pot input
+Servo           PIN     2                       ' servo control pin
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+Scale           CON     $00C6                   ' to scale RCTIME values
+Center          CON     1500                    ' servo center position
+
+#SELECT $STAMP
+  #CASE BS2, BS2E, BS2PE
+    PwAdj       CON     $0080                   ' pulse width adjust (0.5)
+  #CASE BS2SX, BS2P, BS2PX
+    PwAdj       CON     $0140                   ' pulse width adjust (1.25)
+#ENDSELECT
+
+
+#DEFINE _Testing = 0                            ' 1 for POT testing
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+rcRt            VAR     Word                    ' rc reading - right
+rcLf            VAR     Word                    ' rc reading - left
+diff            VAR     Word                    ' difference
+sPos            VAR     Word                    ' servo position
+pWidth          VAR     Word                    ' pulse width for servo
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  LOW Servo                                     ' initialize for PULSOUT
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  HIGH PotCW                                    ' read clockwise position
+  PAUSE 1
+  RCTIME PotCW, 1, rcRt
+
+  HIGH PotCCW                                   ' read ccw position
+  PAUSE 1
+  RCTIME PotCCW, 1, rcLf
+
+  #IF _Testing #THEN                            ' display raw values
+    DEBUG HOME,
+          "CW (raw) ", TAB, DEC rcRt, CLREOL, CR,
+          "CCW (raw)", TAB, DEC rcLf, CLREOL, CR
+  #ENDIF
+
+  rcRt = (rcRt */ Scale) MAX 500                ' scale RCTIME to 0-500
+  rcLf = (rcLf */ Scale) MAX 500
+  sPos = rcLf - rcRt                            ' position (-500 to 500)
+  pWidth = (Center + sPos)                      ' finalize pulse width
+
+  #IF _Testing #THEN                            ' display scales values
+    DEBUG "CW ", TAB, TAB, DEC rcRt, CLREOL, CR,
+          "CCW", TAB, TAB, DEC rcLf, CLREOL, CR,
+          "Pos", TAB, TAB, SDEC sPos, CLREOL, CR,
+          "Pulse", TAB, TAB, DEC pWidth, CLREOL
+    PAUSE 100
+  #ELSE
+    PULSOUT Servo, (pWidth */ PwAdj)            ' move the servo
+    PAUSE 20                                    ' servo refresh delay
+  #ENDIF
+
+  GOTO Main

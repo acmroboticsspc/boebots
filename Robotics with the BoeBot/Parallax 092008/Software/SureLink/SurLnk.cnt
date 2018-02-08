@@ -1,0 +1,97 @@
+:Base SureLink.hlp>Help1
+:Title SureLink
+1 Welcome=Welcome
+1 Product Line=Product_Line
+1 SureLink Control Panel Software
+2 Jumper Settings
+3 Jumper Settings=Jumper_Settings
+3 Modes=Which_Mode
+3 RF Data Rate=RF_Data_Rate
+3 Point-to-Point=Master/Slave
+3 Serial Baud Rate=Serial_Baud_Rate
+3 RF Channel=RF_Channel
+3 DB9 Serial=DB9_Serial
+3 DB9 Flow Control=DB9_Flow_Control
+2 Com Port
+3 Com Port=Communication_Port
+3 Port Settings
+4 Port Settings=Port_Settings
+3 Port Status
+4 Port Status=Port_Status
+2 Config Memory
+3 Config Memory=Configuration
+3 Configuration
+4 Encryption Key=Encrypt_Key
+4 Channel 12-15 frequencies=Chan_Freq
+4 Temperature calibration=Temp_Cal
+3 Power up Configuration
+4 Modes=Config_Modes
+4 RF Data Rate=RF_Data_Rate
+4 RF Channel=RF_Channel
+4 Point-to-Point=Master/Slave
+4 UART settings=UART_settings
+4 UART Enable=UART_Enable
+4 Unit Address=Unit_Address
+4 Output=Output
+2 Flash Memory
+3 Flash Memory=Flash_Memory
+3 Read Flash Memory=Read_Flash_Memory
+3 Program Flash Memory=Program_Flash_Memory
+3 Load Binary File=Load_Binary_File
+3 Save Binary File=Save_Binary_File
+2 Command
+3 Command Builder (Command Mode)=Command_Builder
+3 Command References
+4 Command Structure Reference=Command_Structure
+4 Registers=Registers
+4 Response Equates=Equates
+4 Temperature and Voltage Charts=Tables
+3 Command List
+4 Connect=Connect
+4 Disconnect=Disconnect
+4 Read Status=Read_Status
+4 Read /Status=Read_/Status
+4 Write Registers Command=Write_Registers
+4 Read Registers Command=Read_Registers
+4 Write Flash=Write_Flash
+4 Read Flash=Read_Flash
+4 Erase Flash=Erase_Flash
+4 Send Serial Data=Send_Serial_Data
+4 NOP=NOP
+4 Set RF Channel=Set_RF_Channel
+4 Set RF Data Rate=Set_RF_Data_Rate
+4 Set UART=SET_UART
+4 Select A/D Channel=Select_AD_Channel
+4 Read A/D=Read_AD
+4 Set Port Direction=Set_Port_Direction
+4 Set Port Pins=Set_Port_Pins
+4 Read Port Pins=Read_Port_Pins
+4 Read Version=Read_Version
+4 Read RF Status=Read_RF_Status
+2 Terminal
+3 Terminal=Terminal
+1 SureLink
+2 Modes
+3 Demo Mode=Demo_Mode
+3 Cable Link Mode=Cable_Link_Mode
+3 Command Mode=Command_Mode
+3 AT Command Mode=AT_Command_Mode
+3 Peripheral Mode=Peripheral_Mode
+3 RC Mode=RC_Mode
+2 Command references
+3 Command Structure=Command_Structure
+3 Temperature and Voltage Charts=Tables
+3 Registers=Registers
+3 Response Equates=Equates
+2 Specs
+3 Hardware Specs=SureLink
+3 Pin Description=SureLink_Header
+1 QuickLink
+2 Specs
+3 Hardware Specs=QuickLink
+3 Header=SureLink_Header
+3 Jumpers=QuickLink_Jumpers
+3 Schematic=!EF(`QuickLink232.pdf',`',1)
+3 PCB Drawing=!EF(`QuickLinkpcb.pdf',`',1)
+1 Can Removal
+2 Can Removal=Warning

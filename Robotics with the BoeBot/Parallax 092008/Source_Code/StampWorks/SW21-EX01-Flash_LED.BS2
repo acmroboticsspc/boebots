@@ -1,0 +1,44 @@
+' =========================================================================
+'
+'   File....... SW21-EX01-Flash_LED.BS2
+'   Purpose.... Simple LED Flasher
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Flashes an LED connected to P0.  This program will work, unmodified, on
+' any BS2-family module.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+AlarmLed        PIN     0                       ' LED on P0
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+FlashTm         CON     500                     ' delay 500 milliseconds
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  HIGH AlarmLed                                 ' turn the LED on
+  PAUSE FlashTm
+  LOW AlarmLed                                  ' turn the LED off
+  PAUSE FlashTm
+  GOTO Main

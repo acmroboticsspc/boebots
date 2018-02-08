@@ -1,0 +1,76 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - PushbuttonMode.bs2
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+pbSense        PIN     6                     ' Pushbutton connected to P6
+LedSpeaker     PIN     5                     ' LED/speaker connected to P5
+
+' -----[ Variables ]----------------------------------------------------------
+
+temp            VAR     Word                 ' Temporary variable
+counter         VAR     Byte                 ' Loop counting variable.
+
+' -----[ EEPROM Data ]--------------------------------------------------------
+
+ModeSelect      DATA    0                    ' Program
+
+' -----[ Initialization ]-----------------------------------------------------
+
+IF pbSense = 1 THEN GOSUB Mode_Select        ' Call Mode_Select subroutine
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+READ ModeSelect, temp                        ' Fetch mode from EEPROM
+
+IF temp = 0 THEN                             ' Mode = 0 -> no mode selected
+  DEBUG CR, "No mode selected",
+        CR, "Hold down pushbutton",
+        CR, "then press/release",
+        CR, "Reset button."
+ELSE                                         ' mode <> 0 -> display mode
+  DEBUG CR, CR, "Operating in mode ", CR     ' Mode Message
+  SELECT temp                                ' Select mode value to display
+    CASE 1
+      DEBUG "one"
+    CASE 2
+      DEBUG "two"
+    CASE 3
+      DEBUG "three"
+    CASE 4
+      DEBUG "four"
+    CASE 5
+      DEBUG "five"
+  ENDSELECT
+ENDIF
+
+END                                          ' End program
+
+' -----[ Subroutine - Mode_Select ]-------------------------------------------
+
+' Selects mode of operation
+
+Mode_Select:
+
+  DEBUG CR,                                  ' Display user instructions
+        CR, "Release pushbutton after",
+        CR, "number of beeps to select",
+        CR, "mode (1 to 5)."
+
+  FOR temp = 1 TO 5                          ' Cycle 5 times
+    FOR counter = 1 TO temp                  ' temp beeps, 1/second
+      PAUSE 100
+      FREQOUT LedSpeaker, 100, 4000
+    NEXT
+    PAUSE 1000                               ' 1 second between beeps
+    IF pbSense = 0 THEN                      ' Button released?
+      WRITE ModeSelect, temp                 ' Record mode to EEPROM
+      EXIT                                   ' Exit FOR...NEXT loop
+    ENDIF
+  NEXT
+
+  RETURN
+

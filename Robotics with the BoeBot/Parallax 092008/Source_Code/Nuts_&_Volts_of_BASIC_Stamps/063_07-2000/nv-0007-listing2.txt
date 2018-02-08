@@ -1,0 +1,271 @@
+' Nuts & Volts - Stamp Applications
+' July 2000 (Listing 2)
+
+' ========================================================================
+' Program... StampToPC.vbp
+' Author.... Jon Williams
+' Started... 26 MAY 2000
+' Updated... 26 MAY 2000
+' ========================================================================
+
+Option Explicit
+
+Dim showData As Boolean                 ' okay to show incoming data
+Dim rxBuffer As String                  ' buffer for incoming characters
+Dim multiplier As Single                ' analog multiplier
+
+Private Sub Form_Load()
+
+  ' center form
+  Me.Left = (Screen.Width - Me.Width) / 2
+  Me.Top = (Screen.Height - Me.Height) / 2
+  Me.Caption = App.Title
+  
+  ' setup comm object
+  With MSComm1
+    .CommPort = 1
+    .Settings = "9600,N,8,1"            ' setup for DEBUG
+    .DTREnable = mnuPortResetStamp.Checked
+    .RThreshold = 1                     ' process one char at a time
+    .InputLen = 1
+    .InputMode = comInputModeText       ' input will be strings
+  End With
+  
+  multiplier = 1#                       ' analog multiplier
+  SetSpan ("0,100")                     ' set span of progress bar
+  ClearForm
+  showData = False                      ' wait for reset
+  
+End Sub
+
+Private Sub Form_Unload(Cancel As Integer)
+
+  If MSComm1.PortOpen Then MSComm1.PortOpen = False
+  
+End Sub
+
+Private Sub mnuFileExt_Click()
+
+  Unload Me
+  
+End Sub
+
+Private Sub mnuPortComX_Click(Index As Integer)
+
+  ' deselect last port
+  mnuPortComX(MSComm1.CommPort).Checked = False
+  ' select new
+  MSComm1.CommPort = Index
+  mnuPortComX(Index).Checked = True
+  
+End Sub
+
+Private Sub mnuPortConnect_Click()
+
+  Dim x As Byte
+
+  If Not (MSComm1.PortOpen) Then
+    ' open the port
+    On Error GoTo PortError
+    MSComm1.PortOpen = True
+    ' update the title bar
+    Me.Caption = App.Title & " [Connected]"
+    ' update port menu
+    For x = 1 To 4
+      mnuPortComX(x).Enabled = False
+    Next
+    mnuPortConnect.Caption = "&Disconnect"
+  Else
+    ' close the port
+    MSComm1.PortOpen = False
+    ' update the title bar
+    Me.Caption = App.Title
+    ' update port menu
+    For x = 1 To 4
+      mnuPortComX(x).Enabled = True
+    Next
+    mnuPortConnect.Caption = "&Connect"
+  End If
+  Exit Sub
+  
+PortError:
+  MsgBox "Could not open Com" & Trim(Str(MSComm1.CommPort)) & ". " & _
+         vbCr & "Please select another port.", _
+         vbExclamation + vbOKOnly, App.Title
+         
+  On Error GoTo 0
+  
+End Sub
+
+Private Sub mnuPortResetStamp_Click()
+
+  mnuPortResetStamp.Checked = Not (mnuPortResetStamp.Checked)
+  MSComm1.DTREnable = mnuPortResetStamp.Checked
+
+End Sub
+
+Private Sub MSComm1_OnComm()
+
+  Dim newChar As String
+  
+  Select Case MSComm1.CommEvent
+    Case comEvReceive
+      newChar = MSComm1.Input
+      If newChar = Chr(13) Then
+        ProcessBuffer (rxBuffer)
+        rxBuffer = ""
+      Else
+        rxBuffer = rxBuffer & newChar
+      End If
+      
+    ' process other events here
+    
+  End Select
+  
+End Sub
+
+Private Sub ProcessBuffer(ByVal strBuffer As String)
+
+  Dim leadChar As String
+  Dim param As String
+  
+  ' get leading character
+  leadChar = Mid(strBuffer, 1, 1)
+  
+  Select Case leadChar
+    Case "!"
+      ' command string
+      DoCommand (strBuffer)
+    Case "%"
+      ' binary data
+      param = Trim(Mid(strBuffer, 2))
+      If showData Then ShowDigital (Bin2Dec(param))
+    Case Else
+      If IsNumeric(strBuffer) Then
+        ' buffer has analog data
+        If showData Then ShowAnalog (CLng(strBuffer))
+      Else
+        ' buffer contains message
+        sbarMessage.SimpleText = Trim(strBuffer)
+      End If
+  End Select
+   
+End Sub
+
+Private Function DoCommand(ByVal theCommand As String)
+
+  Dim delimPos As Integer
+  Dim cmd As String
+  Dim param As String
+  
+  ' remove any leading or trailing spaces
+  theCommand = Trim(theCommand)
+  
+  delimPos = InStr(1, theCommand, " ")
+  If delimPos = 0 Then
+    ' no parameter(s)
+    cmd = UCase(theCommand)
+  Else
+    ' command has parameter(s)
+    ' - get command
+    cmd = UCase(Mid(theCommand, 1, delimPos - 1))
+    ' extract parameters from command string
+    param = Mid(theCommand, delimPos + 1)
+  End If
+  
+  ' process the command
+  Select Case cmd
+    Case "!RSET"
+      ClearForm
+      showData = True
+    Case "!CLRM"
+      If showData Then sbarMessage.SimpleText = ""
+    Case "!USRS"
+      If showData Then sbarMessage.SimpleText = param
+    Case "!AMIN"
+      pbarAnalog.Min = CLng(param)
+    Case "!AMAX"
+      pbarAnalog.Max = CLng(param)
+    Case "!AMUL"
+      multiplier = CSng(param)
+    Case "!SPAN"
+      SetSpan (param)
+  End Select
+
+End Function
+
+Private Function Bin2Dec(ByVal binValue As String) As Long
+
+  Dim temp As Long
+  Dim binLen As Integer
+  Dim x As Integer
+  
+  temp = 0
+  binLen = Len(binValue)
+  For x = 1 To binLen
+    ' add bit value if "1"
+    If Mid(binValue, x, 1) = "1" Then
+      temp = temp + 2 ^ (binLen - x)
+    End If
+  Next
+  
+  Bin2Dec = temp
+
+End Function
+
+Private Sub SetSpan(ByVal span As String)
+
+  Dim comma As Integer
+  
+  comma = InStr(1, span, ",")
+  If comma = 0 Then Exit Sub            ' improper format - exit
+  
+  ' update progress bar
+  pbarAnalog.Min = CLng(Mid(span, 1, comma - 1))
+  pbarAnalog.Max = CLng(Mid(span, comma + 1))
+  
+  ' update legends
+  lblSpanMin.Caption = Str(pbarAnalog.Min)
+  lblSpanMax.Caption = Str(pbarAnalog.Max)
+  
+End Sub
+
+Private Sub ShowAnalog(ByVal aValue As Long)
+
+  aValue = CLng(CSng(aValue) * multiplier)
+
+  ' show value
+  lblAnalogValue.Caption = Trim(Str(aValue))
+  
+  ' check limits and show on progress bar
+  If aValue > pbarAnalog.Max Then aValue = pbarAnalog.Max
+  If aValue < pbarAnalog.Min Then aValue = pbarAnalog.Min
+  pbarAnalog.Value = aValue
+  
+End Sub
+
+Private Sub ShowDigital(ByVal digValue As Long)
+
+  Dim mask As Long
+  Dim led As Byte
+    
+  For led = 0 To 3
+    If (digValue And (2 ^ led)) > 0 Then
+      ' channel off - extinguish
+      lblDigitalInput(led).BackColor = &H8000000F
+    Else
+      ' channel on - light
+      lblDigitalInput(led).BackColor = vbGreen
+    End If
+  Next
+
+End Sub
+
+Private Sub ClearForm()
+
+  ShowAnalog (0)
+  ShowDigital (&HFFFF)                  ' all off (active low)
+  sbarMessage.SimpleText = ""
+  
+End Sub
+

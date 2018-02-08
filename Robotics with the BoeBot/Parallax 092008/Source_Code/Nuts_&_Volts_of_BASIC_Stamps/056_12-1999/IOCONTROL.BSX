@@ -1,0 +1,119 @@
+'Program Listing 58.3: IOControl.bsx
+
+'IOControl
+'The IOControl program sets the pin direction and output levels of the 
+'Relay,'GPIO1, and GPIO2 pins. The pin direction and voltage level are 
+'determined by the value in Dat1 sent by the Master unit.
+'
+'The values are defined as, 
+'	Dat1,2	GPIO1 direction 1 = output
+'	Dat1,3	GPIO2 direction 1 = output
+'	Dat1,5	Relay voltage level
+'	Dat1,6	GPIO1 voltage level
+'	Dat1,7	GPIO2 voltage level
+
+'I/O pin designations
+AD_Clk		CON	0		'ADC0831 clock pin
+AD_Dat		CON	1		'ADC0831 data pin
+AD_CS		CON	8		'ADC0831 chip select (asserted low)
+Relay		CON	9		'Relay control pin (asserted high)
+GPIO1		CON	10		'General purpose I/O pin
+GPIO2		CON	11		'General purpose I/O pin
+
+'Communication Constants 
+Data_Out	CON	5		'TTL data out pin
+TX_RX		CON	6		'Receive enable(asserted low)
+Data_In		CON	7		'TTL data in pin
+Baud		CON	45		'38.4kbps, 8N1 true data
+
+'Internally used registers
+Addr		var	byte		'Address of unit
+Comm_Flag	var	byte		'flag bits for unit
+Mstr	var 	Comm_Flag.bit0	'Set for Master unit cleared for Slave
+Sl	var	Comm_Flag.bit1	'Set if Slave # 1 is present on RS-485 bus
+S2	var	Comm_Flag.bit2	'Set if Slave # 2 is present on RS-485 bus
+S3	var	Comm_Flag.bit3	'Set if Slave # 3 is present on RS-485 bus
+S4	var	Comm_Flag.bit4	'Set if Slave # 4 is present on RS-485 bus
+S5	var	Comm_Flag.bit5	'Set if Slave # 5 is present on RS-485 bus
+S6	var	Comm_Flag.bit6	'Set if Slave # 6 is present on RS-485 bus
+S7	var	Comm_Flag.bit7	'Set if Slave # 7 is present on RS-485 bus
+
+'Communication message string variables bytes(8 total)
+Addr_Req	var	byte		'Unit address of message destination
+Prgm_Req	var	byte		'Request execution of this program
+Dat1		var	byte		'Data byte 1
+Dat2		var	byte		'Data byte 2
+Dat3		var	byte		'Data byte 3
+Dat4		var	byte		'Data byte 4
+Dat5		var	byte		'Data byte 5
+Checksum	var	byte		'Sum of previous bytes
+
+'Storage Registers
+Put_Addr		var	byte	'Put address location
+Get_Addr		var	byte	'Get address location
+
+'Working registers
+Loop1		var	byte		'For...Next variable
+Work1		var	byte		'General purpose register 
+Work2		var	byte		'General purpose register 
+Work3		var	byte		'General purpose register 
+Work4		var	byte		'General purpose register 
+WorkBig		var	word		'Word sized general purpose register
+
+'A/D registers
+ResultA_D	var	byte		'Result of A to D measurement
+MaxA_D		var	byte		'Storage for maximum A to D result
+MinA_D		var	byte		'Storage for minimum A to D result
+AvgA_D		var	byte		'Storage for avg. A to D result
+
+'Program constants
+AD_Samples	CON	128		'Number of samples taken
+DirFlag		CON	6		'Flag set to skip direction setting routine
+
+'*******************************************************************
+Main_Program:
+
+GET	DirFlag,Work2
+If Work2 = 10 Then Get_Address
+
+Comm_Flag 	= %00000000	
+Outs 		= %0000000100100000	'Set output pin values
+Dirs 		= %0000001101100011	'Set pin direction values
+
+Get_Address:
+Addr	= (INL&%0011100)/4		'Get unit address from P4-2
+
+'Set I/O Direction		
+	GET		0,Work1		'Dat1 from Mater stored in RAM0 
+	Work1.NIB0	= Work1.NIB0&%1100
+'Clear 2 low bits of desired dir. reg.	
+	Work2.NIB0	= DIRC&%0011	
+'Clear 2 high bits of actual dir. reg.
+	DIRC	         = Work2.NIB0+Work1.NIB0	
+'Sum of high and low bits is direction
+	DEBUG	"DIRC	= ",BIN4 DIRC,CR	'Display direction nibble
+
+'Set output levels
+	GET		0,Work1		'Dat1 from Master stored in RAM0 
+	Work1.NIB1	= Work1.NIB1&%1110		
+'High nibble has voltage levels
+	OUTC		= Work1.NIB1	'Set output levels	
+	DEBUG	"OUTC	= ",BIN4 OUTC,CR	'Display output register
+	
+	Dat1 		= 0		'Clear returned data
+	If DIRC	= %1111 Then No_Inputs		
+'If direction = %1111 then skip 
+		Dat1	= INC&%1100	'Dat1 equals values at GPIO1,2
+	DEBUG	"INC	= ",BIN4 INC,CR 'Display input values
+
+No_Inputs:				'Send data to Master
+	Checksum 	= Dat1	
+	HIGH		Data_Out	'Set output high
+	HIGH		TX_RX		'Enable transmission on RS-485
+	SEROUT	Data_Out,Baud,[$00,$00,Dat1,$00,$00,$00,$00,Checksum]
+	PAUSE		1
+	LOW		TX_RX		'Enable receiver on RS-485
+
+	PUT		DirFlag,10
+	RUN		0		'Return to main program
+END

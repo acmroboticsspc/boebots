@@ -1,0 +1,110 @@
+---------
+-- TOP --
+---------
+
+include "pxl_.inc";
+include "altsyncram.inc";
+
+subdesign top
+(
+	clka		: input;		-- Clock socket inputs
+	clkb		: input;
+
+	clkn		: input;		-- IO pin clock inputs 
+	clks		: input;
+
+	n[31..0]	: bidir;		-- IO pins
+	e[31..0]	: bidir;
+	s[31..0]	: bidir;
+	w[31..0]	: bidir;
+
+	rx			: input;		-- DB9 serial port signals
+	tx			: output;
+
+	led[7..0]	: output;		-- LEDs
+
+	px[2..0]	: input;		-- PX Loader inputs
+)
+
+variable
+
+	clk			: node;			-- main clock
+
+	cnt[39..0]	: dff;			-- counter
+
+	ntri[31..0]	: tri;			-- IO pin tri's
+	etri[31..0]	: tri;
+	stri[31..0]	: tri;
+	wtri[31..0]	: tri;
+
+	pxl			: pxl_			-- pxl (512 x 8)
+				  with (
+					a_exp = 9,
+					d_exp = 3);
+
+	ram			: altsyncram	-- ram (512 x 8)
+				  with (
+					operation_mode = "single_port",
+					widthad_a = 9,
+					width_a = 8);
+begin
+
+	-- clock
+
+	clk					= clka;
+
+
+	-- counter
+
+	cnt[].clk			= clk;
+	cnt[]				= cnt[] + 1;
+
+
+	-- output counter to IO pins
+
+	ntri[].oe			= vcc;
+	ntri[]				= cnt[31..0];
+
+	etri[].oe			= vcc;
+	etri[]				= cnt[31..0];
+
+	stri[].oe			= vcc;
+	stri[]				= cnt[31..0];
+
+	wtri[].oe			= vcc;
+	wtri[]				= cnt[31..0];
+
+	n[]					= ntri[];
+	e[]					= etri[];
+	s[]					= stri[];
+	w[]					= wtri[];
+
+
+	-- echo rx to tx
+
+	tx					= rx;
+
+
+	-- PX Loader example
+
+	pxl.clk				= clk;
+	pxl.px[]			= px[];
+
+	ram.clock0			= clk;
+
+	case pxl.load is
+		when 0			=> ram.wren_a		= gnd;
+						   ram.address_a[]	= cnt[22+8..22+0];
+						   ram.data_a[]		= gnd;
+
+		when 1			=> ram.wren_a		= pxl.w;
+						   ram.address_a[]	= pxl.a[];
+						   ram.data_a[]		= pxl.d[];
+	end case;
+
+
+	-- output ram data to LEDs
+
+	led[] = ram.q_a[];
+
+end;

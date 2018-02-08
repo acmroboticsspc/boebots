@@ -1,0 +1,148 @@
+'Code Listing 57.1: Master_Prgm.bsx
+'******************************************************************
+'Master Program
+'The Master program controls communication and data display. For a
+'unit designated as a Master unit (addresss = 0) this program is
+'used to poll the various slave units. If a unit is a Slave unit
+'(address <> 0) then this program is where the unit waits for 
+'commands. 
+'
+'{$STAMP BS2SX,C:\Parallax\Analog.bsx}
+'0:Master_Prgm.bsx
+
+'I/O pin designations
+AD_Clk	CON	0		'ADC0831 clock pin	
+AD_Dat	CON	1		'ADC0831 data pin
+AD_CS	CON	8		'ADC0831 chip select(asserted low)
+
+'Communication Constants 
+Data_Out CON	5		'TTL data out pin
+TX_RX	CON	6		'Receive enable(asserted low)
+Data_In	CON	7		'TTL data in pin
+Baud	CON	45		'38.4kbps, 8N1 true data
+
+'Internally used registers
+Addr		var	byte	'Address of unit
+Comm_Flag	var	byte	'flag bits for unit
+Mstr	var 	Comm_Flag.bit0	'Set for Master unit cleared for Slave
+Sl	var	Comm_Flag.bit1	'Set if Slave # 1 is present on RS-485 bus
+S2	var	Comm_Flag.bit2	'Set if Slave # 2 is present on RS-485 bus
+S3	var	Comm_Flag.bit3	'Set if Slave # 3 is present on RS-485 bus
+S4	var	Comm_Flag.bit4	'Set if Slave # 4 is present on RS-485 bus
+S5	var	Comm_Flag.bit5	'Set if Slave # 5 is present on RS-485 bus
+S6	var	Comm_Flag.bit6	'Set if Slave # 6 is present on RS-485 bus
+S7	var	Comm_Flag.bit7	'Set if Slave # 7 is present on RS-485 bus
+
+'Communication message string variables bytes(8 total)
+Addr_Req	var	byte	'Unit address of message destination
+Prgm_Req	var	byte	'Request execution of this program
+Dat1		var	byte	'Data byte 1
+Dat2		var	byte	'Data byte 2
+Dat3		var	byte	'Data byte 3
+Dat4		var	byte	'Data byte 4
+Dat5		var	byte	'Data byte 5
+Checksum	var	byte	'Sum of previous bytes
+
+'Storage Registers
+Put_Addr	var	byte	'Put address location				
+Get_Addr	var	byte	'Get address location
+'Working registers
+Loop1		var	byte	'For...Next variable		
+Work1		var	byte	'General purpose register 
+Work2		var	byte	'General purpose register 
+Work3		var	byte	'General purpose register 
+Work4		var	byte	'General purpose register 
+WorkBig		var	word	'Word sized general purpose register
+
+
+'A/D registers
+ResultA_D	var	byte	'Result of A to D measurement
+MaxA_D		var	byte	'Storage for maximum A to D result	
+MinA_D		var	byte	'Storage for minimum A to D result	
+AvgA_D		var	byte	'Storage for avg. A to D result	
+	
+'*******************************************************************
+Main_Program:
+
+Outs = %0000000100100000	'Set output pin values	
+Dirs = %0000000101100011	'Set pin direction values
+
+Get_Address:
+  Comm_Flag = %00000000
+  Addr = (INL&%0011100)/4	'Get unit address from P4-2
+  If Addr <> 0 then No_Master
+  Mstr = 1
+
+No_Master:	
+  Pause	2000	
+
+'Addr and Comm Flag register Debug statements
+'Debug	"Address = ", BIN8 Addr,CR
+'Debug	"Comm Flag = ", BIN8 Comm_Flag,CR
+'Pause	1000
+
+If Mstr = 1 then Master_Program
+Goto	Slave_Program	
+
+'*******************************************************************
+Master_Program:
+
+For Addr_Req = 1 to 7
+	Pause		1000
+	Prgm_Req	= 1			
+	Checksum 	= Addr_Req+Prgm_Req+Dat1+Dat2+Dat3+Dat4+Dat5
+	HIGH		Data_Out	'Set output high
+	HIGH		TX_RX		'Enable transmission on RS-485
+	SEROUT		Data_Out,Baud,[Addr_Req,Prgm_Req,Dat1,Dat2,Dat3,Dat4,
+Dat5,Checksum]
+	PAUSE		1
+	LOW		TX_RX		'Enable receiver on RS-485
+	SERIN		Data_In,Baud,500,No_Data,[Work1,Work2,Dat1,Dat2,Dat3,Dat4,
+Dat5,Checksum]
+					'Test checksum	
+	Work4 	= Work1+Work2+Dat1+Dat2+Dat3+Dat4+Dat5
+	If Work4 <> Checksum Then Bad_Data
+					'Set flag for unit that responds
+	Work3 = %00000001		'Set up pointer bit
+	Work3 = Work3 << Addr_Req	'Rotate "1" into Slave location	
+	Comm_Flag 	= Comm_Flag+Work3
+'Add pointer bit to designate active Slave	
+					 'Display incoming data
+	Debug "Address of Sender = ",DEC Addr_Req,CR
+	Debug "Data byte 1  = ",DEC Dat1,CR
+	Debug "Data byte 2  = ",DEC Dat2,CR
+	Debug "Data byte 3  = ",DEC Dat3,CR
+	Debug "Data byte 4  = ",DEC Dat4,CR
+	Debug "Data byte 5  = ",DEC Dat5,CR
+Send_Next_Addr:
+	Next
+	Goto	Done_Polling
+Bad_Data:
+	Debug	"Checksum Invalid Addr: ",DEC Addr_Req,cr
+	Goto	Send_Next_Addr
+No_Data:
+	Debug	"No Data Returned Addr: ",DEC Addr_Req,cr
+	Goto	Send_Next_Addr
+Done_Polling:
+	Debug	"Comm_Flag = ", BIN8 Comm_Flag,CR		
+	Pause	3000
+	Goto	Get_Address 
+
+
+'*******************************************************************
+Slave_Program:
+	Debug	"Slave Program ",CR		
+	LOW	TX_RX			'Enable receiver on RS-485
+	SERIN	Data_In,Baud,[Addr_Req,Prgm_Req,Dat1,Dat2,Dat3,Dat4,Dat5,Checksum]			
+					'Test checksum	
+	If Addr_Req <> Addr Then Bad_Address
+	Work4 	= Addr_Req+Prgm_Req+Dat1+Dat2+Dat3+Dat4+Dat5
+ 	If Work4 <> Checksum Then Bad_Sum
+	RUN	Prgm_Req		'Execute requested program
+Bad_Sum:
+	Debug	"Checksum Invalid: ",cr
+	Goto	Slave_Program
+Bad_Address:
+	Debug	"Wrong Address: ",DEC Addr_Req,cr
+	Goto	Slave_Program
+END

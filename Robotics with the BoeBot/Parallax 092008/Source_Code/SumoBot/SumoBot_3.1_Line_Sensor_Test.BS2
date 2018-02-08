@@ -1,0 +1,44 @@
+' -----[ Title ]----------------------------------------------------------------
+' Mini Sumo 3.1 : Line Sensor Test
+' {$STAMP BS2}
+
+' -----[ I/O Definitions ]------------------------------------------------------
+
+LLineSnsrPwr    CON     10                      ' left line sensor power
+LLineSnsrIn     CON      9                      ' left line sensor input
+RLineSnsrPwr    CON      7                      ' right line sensor power
+RLineSnsrIn     CON      8                      ' right line sensor input
+
+' -----[ Constants ]------------------------------------------------------------
+
+ClrEOL          CON     11                      ' clear to end of line (DEBUG)
+
+' -----[ Variables ]------------------------------------------------------------
+
+leftSense       VAR     Word                    ' left sensor raw reading
+rightSense      VAR     Word                    ' right sensor raw reading
+
+' -----[ Main Code ]------------------------------------------------------------
+
+Read_Left:
+  HIGH LLineSnsrPwr                             ' activate sensor
+  HIGH LLineSnsrIn                              ' discharge QTI cap
+  PAUSE 1
+  RCTIME LLineSnsrIn, 1, leftSense              ' read sensor value
+  LOW LLineSnsrPwr                              ' deactivate sensor
+
+Read_Right:
+  HIGH RLineSnsrPwr                             ' activate sensor
+  HIGH RLineSnsrIn                              ' discharge QTI cap
+  PAUSE 1
+  RCTIME RLineSnsrIn, 1, rightSense             ' read sensor value
+  LOW RLineSnsrPwr                              ' deactivate sensor
+
+Display:
+  DEBUG Home
+  DEBUG "Left ", TAB, "Right", CR
+  DEBUG "-----", TAB, "-----", CR
+  DEBUG DEC leftSense, ClrEOL, TAB, DEC rightSense, ClrEOL
+
+  PAUSE 100
+  GOTO Read_Left

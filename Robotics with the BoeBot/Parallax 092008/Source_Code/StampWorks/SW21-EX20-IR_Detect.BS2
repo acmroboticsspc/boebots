@@ -1,0 +1,74 @@
+' =========================================================================
+'
+'   File....... SW21-EX20-IR_Detect.BS2
+'   Purpose.... Infrared Detection
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program uses FREQOUT without a filter to modulate an IR LED for
+' detection by a demodulating receiver.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+IrLed           PIN     0                       ' IR LED output
+IrDectect       PIN     1                       ' detector input
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+#SELECT $STAMP
+  #CASE BS2, BS2E
+    IrMod       CON     38500                   ' 38.5k / 1 Hz (harmonic)
+    ModTime     CON     1                       ' 1 ms
+  #CASE BS2SX
+    IrMod       CON     15400                   ' 38.5k / 2.5 Hz
+    ModTime     CON     3
+  #CASE BS2P
+    IrMod       CON     10212                   ' 38.5k / 3.77 Hz
+    ModTime     CON     4
+  #CASE BS2PE
+    IrMod       CON     25497                   ' 38.5k / 1.51 Hz
+    ModTime     CON     1
+  #CASE BS2PX
+    IrMod       CON     6395                    ' 38.5k / 6.02 Hz
+    ModTime     CON     6
+#ENDSELECT
+
+NoDetect        CON     1
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+object          VAR     Bit
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Scan_IR
+    IF (object = NoDetect) THEN
+      DEBUG HOME, "All clear", CLREOL
+    ELSE
+      DEBUG HOME, "Intruder Alert!", CLREOL
+    ENDIF
+    PAUSE 100
+  LOOP
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Scan_IR:
+  FREQOUT IrLed, ModTime, IrMod                 ' module IR LED
+  object = IrDectect                            ' scan detector
+  RETURN

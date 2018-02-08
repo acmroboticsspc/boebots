@@ -1,0 +1,177 @@
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... PARROT.BS2
+' Purpose... ISD25xxx Controller
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 03 APR 1999
+' Updated... 29 JUL 2000
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program, based on an original by Mike Politoski, controls anISD25xxx
+' series ChipCorder(r) IC.  This program allows the user to record a
+' message (length determined by the chip) and play it back several times
+' to train a parrot or other talking bird.
+'
+' Note: The ISD25xxx is configured for Mode 6, push-button mode.
+'
+' Modes:
+'
+' - Record:   Press and hold record button
+' - Play:     Press play button
+' - Training: Press start button
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+LEDr_	CON	 6			' recording LED 
+LEDp_	CON	 7			' playback LED 
+LEDt_	CON	 8			' training LED
+
+PR	CON	 9			' ISD Play/Record_
+PD	CON	10			' ISD Power Down
+CE_	CON	11			' ISD Chip Enable
+
+BtnRec	VAR	In12			' Record control button
+BtnPlay	VAR	In13			' Play control button
+BtnGo	VAR	In14			' Start control button
+RecRun	VAR	In15			' recording/running out from ISD
+bPort	VAR	InD			' buttons port
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+On	CON	0			' active low
+Off	CON	1
+
+Yes	CON	1			' active high
+No	CON	0
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+btns	VAR	Nib			' debounced inputs
+state	VAR	Byte			' button input state
+delay	VAR	Word			' delay before training
+x	VAR	Byte			' loop counter
+y	VAR	Word			' loop counter
+plays	VAR	Word			' plays counter
+
+
+' -----[ Initialization ]--------------------------------------------------
+'
+Init:
+  HIGH PD				' reset ISD address
+  HIGH CE_
+  HIGH PR				' default to Play mode
+  HIGH LEDr_				' record LED off
+  HIGH LEDp_				' play LED off
+  HIGH LEDt_				' train LED off
+  PAUSE 30				' allow device to reset
+  LOW PD				' bring out of reset
+
+
+' -----[ Main Code ]-------------------------------------------------------
+'
+Main:	
+  GOSUB GetBtn
+  IF btns > %000 THEN Main			' wait for release
+
+Scan:	
+  GOSUB GetBtn
+  LOOKDOWN btns,[%000, %001, %010, %100],state
+  BRANCH state,[Scan, _Rec, _Play, _Train]
+  GOTO Scan
+
+_Rec:	
+  PAUSE 250				' time to get ready
+  LOW PR				' record mode
+  GOSUB Blip				' initiate recording
+  LOW LEDr_				' record LED on
+
+RLoop:	
+  GOSUB GetBtn
+  IF btns = %001 THEN RLoop		' record until release
+  HIGH PD				' reset device
+  GOTO Init
+
+_Play:	
+  PAUSE 500				' time to release play
+  HIGH PR				' playback mode
+  GOSUB Blip				' initiate playback
+  LOW LEDp_				' play LED on
+
+PLoop:
+  GOSUB GetBtn
+  IF btns > %000 THEN Init		' abort if any button pressed
+  IF RecRun = Yes THEN PLoop		' check until message done
+  HIGH PD				' reset device
+  GOTO Init
+
+_Train: 
+  PAUSE 500				' time to release start button
+
+  FOR delay = 1 to 280			' 5 minute delay
+    LOW LEDt_				' train LED on
+	  
+    FOR y = 1 TO 9			' ~1/2 second delay
+      GOSUB GetBtn			' - check inputs
+      IF btns > %000 THEN Init		' abort if button pressed	
+    NEXT
+	    
+    HIGH LEDt_				' train LED off
+	  
+    FOR y = 1 TO 9			' ~1/2 second delay
+      GOSUB GetBtn			' - check inputs
+      IF btns > %000 THEN Init		' abort if button pressed	
+    NEXT
+	  
+  NEXT ' delay
+	
+  LOW LEDt_				' train LED on
+  FOR plays = 1 TO 100			' play message 100 times
+    HIGH PR				' play mode
+    GOSUB Blip				' initiate play
+    LOW LEDp_				' play LED on
+
+SLoop:	  
+    GOSUB GetBtn			
+    IF btns > %000 THEN Init		' abort if any button pressed
+    IF RecRun = Yes THEN SLoop		' wait until finished playing
+    HIGH PD				' reset the ISD
+    HIGH LEDp_				' play LED off
+    PAUSE 25
+    LOW PD				' out of reset
+	  
+    FOR y = 1 TO 500			' 30 second delay between plays
+      GOSUB GetBtn			' scan buttons
+      IF btns > 0 THEN Init		' abort if button pressed
+    NEXT
+	  
+  NEXT
+
+  GOTO Init				' reset and start over
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+'
+Blip:	
+  LOW CE_				' initiate playback or record
+  PAUSE 25
+  HIGH CE_
+  RETURN
+
+
+' scan and debounce button inputs
+' - inputs must stay low for 50 ms
+' - any debounced button returns high bit in "btns"
+'
+GetBtn:	
+  btns = %0111				' scan record, play and wait
+  FOR x = 1 TO 5
+    btns = btns & ~bPort		' check current state
+    PAUSE 10
+  NEXT
+  RETURN

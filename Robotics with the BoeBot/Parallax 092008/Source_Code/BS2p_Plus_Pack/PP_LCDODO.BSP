@@ -1,0 +1,174 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' BS2p Plus Pack
+'
+' File...... PP_LCDODO.BSP
+' Purpose... Advanced LCD Demo - rewriting CGRAM on the fly
+' Author.... Parallax, Inc.
+' E-mail.... stamptech@parallaxinc.com
+' Started...
+' Updated... 26 SEP 2001
+
+' {$STAMP BS2p}
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program demonstrates LCD character animation by writing to the
+' character map (in CGRAM) for a character that is already displayed. The
+' refresh cycle of the LCD will cause the character to change when its
+' map is changed.  This technique (originally by Scott Edwards) allows
+' the programmer to create advanced animations by storing character (cell)
+' definitions in the Stamp's EEPROM.
+'
+' This program displays a rolling odometer type reading (last digit
+' "rolls").  Character definitions are copied from the standard set
+' (using "LCD Character Creator" software from Parallax).
+'
+' Each character definition is separated by 2 blank lines in order to create
+' 10 lines per "rolling" character.  This makes the math for calculating
+' the starting line of the roller very easy.
+'
+' To run this program on the BS2p Demo Board, connect the LCD and install
+' Jumper X6. Adjust contrast pot for best display.
+'
+' Refer to the Hitachi HD44780 documentation for details on LCD control.
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+LCDpin          CON     0                       ' connect LCD to OutL
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+NoCmd           CON     $00                     ' No command in LCDOUT
+ClrLCD          CON     $01                     ' clear the LCD
+CrsrHm          CON     $02                     ' move cursor to home position
+CrsrLf          CON     $10                     ' move cursor left
+CrsrRt          CON     $14                     ' move cursor right
+DispLf          CON     $18                     ' shift displayed chars left
+DispRt          CON     $1C                     ' shift displayed chars right
+DDRam           CON     $80                     ' Display Data RAM control
+CGRam           CON     $40                     ' Custom character RAM
+Line1           CON     $80                     ' DDRAM address of line 1
+Line2           CON     $C0                     ' DDRAM address of line 2
+
+CLines          CON     8                       ' lines per character
+OdoChar         CON     0                       ' animated odometer character
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+cmd             VAR     Byte                    ' commnand sent to LCD
+char            VAR     Byte                    ' character sent to LCD
+addr            VAR     Byte                    ' EE starting address of map
+cNum            VAR     Nib                     ' character number
+idx             VAR     Nib                     ' loop counter
+
+counter         VAR     Word
+hundreds        VAR     Byte                    ' hundredths value of counter
+
+temp            VAR     Word                    ' temp value for RJ display
+width           VAR     Nib                     ' width of rt justified
+pos             VAR     Byte                    ' LCD display position
+digits          VAR     Nib                     ' digits to display
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+' rolling odometer character definitions
+'
+Char0           DATA    $0E,$11,$13,$15,$19,$11,$0E,$00,$00,$00
+Char1           DATA    $04,$0C,$04,$04,$04,$04,$0E,$00,$00,$00
+Char2           DATA    $0E,$11,$01,$02,$04,$08,$1F,$00,$00,$00
+Char3           DATA    $1F,$02,$04,$02,$01,$11,$0E,$00,$00,$00
+Char4           DATA    $02,$06,$0A,$12,$1F,$02,$02,$00,$00,$00
+Char5           DATA    $1F,$10,$1E,$01,$01,$11,$0E,$00,$00,$00
+Char6           DATA    $06,$08,$10,$1E,$11,$11,$0E,$00,$00,$00
+Char7           DATA    $1F,$01,$02,$04,$08,$08,$08,$00,$00,$00
+Char8           DATA    $0E,$11,$11,$0E,$11,$11,$0E,$00,$00,$00
+Char9           DATA    $0E,$11,$11,$0F,$01,$02,$0C,$00,$00,$00
+
+
+' inverted character definitions (white on black)
+'
+Char0i          DATA    $11,$0E,$0C,$0A,$06,$0E,$11,$1F,$1F,$1F
+Char1i          DATA    $1B,$13,$1B,$1B,$1B,$1B,$11,$1F,$1F,$1F
+Char2i          DATA    $11,$0E,$1E,$1D,$1B,$17,$00,$1F,$1F,$1F
+Char3i          DATA    $00,$1D,$1B,$1D,$1E,$0E,$11,$1F,$1F,$1F
+Char4i          DATA    $1D,$19,$15,$0D,$00,$1D,$1D,$1F,$1F,$1F
+Char5i          DATA    $00,$0F,$01,$1E,$1E,$0E,$11,$1F,$1F,$1F
+Char6i          DATA    $19,$17,$0F,$01,$0E,$0E,$11,$1F,$1F,$1F
+Char7i          DATA    $00,$1E,$1D,$1B,$17,$17,$17,$1F,$1F,$1F
+Char8i          DATA    $11,$0E,$0E,$11,$0E,$0E,$11,$1F,$1F,$1F
+Char9i          DATA    $11,$0E,$0E,$10,$1E,$1D,$13,$1F,$1F,$1F
+
+
+MapStart        CON     Char0i
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  PAUSE 500                                     ' let the LCD settle
+  LCDCMD LCDpin,%00110000 : PAUSE 5             ' 8-bit mode
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00100000 : PAUSE 0             ' 4-bit mode
+  LCDCMD LCDpin,%00101000 : PAUSE 0             ' 2-line mode
+  LCDCMD LCDpin,%00001100 : PAUSE 0             ' no crsr, no blink
+  LCDCMD LCDpin,%00000110                       ' inc crsr, no disp shift
+
+  cNum = OdoChar
+  addr = 0
+  GOSUB Update_CC                               ' put "0" into custom character
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  LCDOUT LCDpin,ClrLCD,["ROLLER   COUNTER"]
+  LCDOUT LCDpin,Line2, ["   0",OdoChar,"       0.00"]
+  PAUSE 1000
+
+Show_Counters:
+  FOR counter = 0 TO 999
+    FOR hundreds = 0 TO 99
+      temp = counter                            ' display odometer version
+      width = 3
+      pos = Line2 + 1
+      GOSUB RJ_Print
+      addr = hundreds
+      GOSUB Update_CC                           ' update rolling character
+      pos = Line2 + 10                          ' display digital version
+      GOSUB RJ_Print
+      LCDOUT LCDpin,NoCmd,[".",DEC2 hundreds]
+      PAUSE 100
+    NEXT
+  NEXT
+
+  GOTO Main
+  END
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'
+Update_CC:                                      ' update custom character
+  LCDCMD LCDpin,(CGRam + (cNum * CLines))       ' point to character map
+  FOR idx = 0 TO (CLines - 1)
+    READ MapStart + (addr + idx // 100),char
+    LCDOUT LCDpin,NoCmd,[char]                  ' write to LCD CGRAM
+  NEXT
+  RETURN
+
+
+RJ_Print:                                       ' right justified printing
+  digits = width
+  LOOKDOWN temp,<[0,10,100,1000,65535],digits
+  LCDOUT LCDpin,pos,[REP " "\(width-digits),DEC temp]
+  RETURN

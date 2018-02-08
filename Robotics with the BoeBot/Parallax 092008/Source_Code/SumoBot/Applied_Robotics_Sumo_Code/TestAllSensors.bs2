@@ -1,0 +1,165 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - TestAllSensors.bs2
+' This program is a combination of the following:
+
+'  - QtiPulseDecayTrick.bs2
+'  - TestFrontIrObjectDetectors.bs2
+'  - TestSideIrObjectDetectors.bs2
+'  - TestPushButton.bs2
+'  - TestLedSpeaker.bs2
+
+' Important: You must start with the QTIs seeing black.
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+qtiPwrLeft     PIN     10                    ' Left QTI on/off pin P10
+qtiSigLeft     PIN     9                     ' Left QTI signal pin P9
+
+qtiPwrRight    PIN     7                     ' Right QTI on/off pin P7
+qtiSigRight    PIN     8                     ' Right QTI signal pin P8
+
+DummyPin       PIN     6                     ' I/O pin for pulse-decay P6
+
+IrLedLF        PIN     4                     ' Left IR LED connected to P4
+IrSenseLF      PIN     11                    ' Left IR detector to P11
+
+IrLedRF        PIN     15                    ' Right IR LED connected to P15
+IrSenseRF      PIN     14                    ' Right IR detector to P14
+
+IrLedLS        PIN     2                     ' Left IR LED connected to P2
+IrSenseLS      PIN     1                     ' Left IR detector to P1
+
+IrLedRS        PIN     3                     ' Right IR LED connected to P3
+IrSenseRS      PIN     0                     ' Right IR detector to P0
+
+pbSense        PIN     6                     ' Pushbutton connected to P6
+
+LedSpeaker     PIN     5                     ' LED/speaker connected to P5
+
+' -----[ Constants ]----------------------------------------------------------
+
+IrFreq     CON     38500                     ' IR LED transmit frequency
+
+' -----[ Variables ]----------------------------------------------------------
+
+qtiLeft        VAR     Word                  ' Stores left QTI time
+qtiRight       VAR     Word                  ' Stores right QTI time
+
+qtiThreshold   VAR     Word                  ' Stores black/white threshold
+
+irLS           VAR     Bit                   ' State of Left Side IR
+irLF           VAR     Bit                   ' State of Left Front IR
+irRF           VAR     Bit                   ' State of Right Front IR
+irRS           VAR     Bit                   ' State of Right Side IR
+
+qtiStateLeft   VAR     Bit                   ' Stores snapshot of QtiSigLeft
+qtiStateRight  VAR     Bit                   ' Stores snapshot of QtiSigRight
+
+pushbutton     VAR     Bit                   ' Stores pushbutton state
+
+' -----[ Initialization ]-----------------------------------------------------
+
+GOSUB Calibrate_Qtis                         ' Determine b/w threshold
+
+DEBUG CLS                                    ' Clear Debug Terminal
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+DO                                           ' DO...LOOP repeats indefinitely
+
+  GOSUB Read_Line_Sensors                    ' Look for lines
+  GOSUB Read_Object_Detectors                ' Look for objects
+  GOSUB Read_Pushbutton                      ' Check pushbutton
+
+  DEBUG HOME,                                ' Display all sensors states
+        ? irLS,
+        ? irLF,
+        ? irRF,
+        ? irRS,
+        ? qtiStateLeft,
+        ? qtiStateRight,
+        ? pushbutton
+                                             ' Delay for slower PCs
+  PAUSE 100
+
+LOOP
+
+' -----[ Subroutine - Calibrate_Qtis ]----------------------------------------
+
+Calibrate_Qtis:
+
+  HIGH qtiPwrLeft                            ' Turn left QTI on
+  HIGH qtiSigLeft                            ' Discharge capacitor
+  PAUSE 1
+  RCTIME qtiSigLeft, 1, qtiLeft              ' Measure charge time
+  LOW qtiPwrLeft                             ' Turn left QTI off
+
+  HIGH qtiPwrRight                           ' Turn right QTI on
+  HIGH qtiSigRight                           ' Discharge capacitor
+  PAUSE 1
+  RCTIME qtiSigRight, 1, qtiRight            ' Measure charge time
+
+  GOSUB Read_Line_Sensors                    ' Get reflection values
+  qtiThreshold = (qtiLeft + qtiRight) / 2    ' Calculate average
+  qtiThreshold = qtiThreshold / 4            ' Take 1/4 average
+
+  IF qtiThreshold > 220 THEN                 ' Account for code overhead
+    qtiThreshold = qtiThreshold - 220
+  ELSE
+    qtiThreshold = 0
+  ENDIF
+
+  RETURN
+
+' -----[ Subroutine - Read_Line_Sensors ]-------------------------------------
+
+Read_Line_Sensors:
+
+  HIGH qtiPwrLeft                            ' Turn on QTIs
+  HIGH qtiPwrRight
+  HIGH qtiSigLeft                            ' Push signal voltages to 5 V
+  HIGH qtiSigRight
+  PAUSE 1                                    ' Wait 1 ms for capacitors
+
+  INPUT qtiSigLeft                           ' Start the decays
+  INPUT qtiSigRight
+  PULSOUT DummyPin, qtiThreshold             ' Wait for threshold time
+
+  qtiStateLeft  = ~ qtiSigLeft               ' Snapshot of QTI signal states
+  qtiStateRight = ~ qtiSigRight
+
+  LOW qtiPwrLeft                             ' Turn off QTIS
+  LOW qtiPwrRight
+
+  RETURN
+
+' -----[ Subroutine - Read_Object_Detectors ]---------------------------------
+
+Read_Object_Detectors:
+
+  FREQOUT IrLedRS, 1, IrFreq                 ' Right side IR LED headlight
+  irRS = ~IrSenseRS                          ' Save right side IR receiver
+
+  FREQOUT IrLedRF, 1, IrFreq                 ' Repeat for right-front
+  irRF = ~IrSenseRF
+
+  FREQOUT IrLedLF, 1, IrFreq                 ' Repeat for left-front
+  irLF = ~IrSenseLF
+
+  FREQOUT IrLedLS, 1, IrFreq                 ' Repeat for left side
+  irLS = ~IrSenseLS
+
+  RETURN
+
+' -----[ Subroutine - Read_Pushbutton ]---------------------------------------
+
+Read_Pushbutton:
+
+  INPUT pbSense
+  pushbutton = pbSense                       ' Store state of pbSense
+
+  RETURN
+

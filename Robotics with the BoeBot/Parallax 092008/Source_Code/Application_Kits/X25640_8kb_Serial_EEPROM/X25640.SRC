@@ -1,0 +1,178 @@
+; Program: X25640.SRC
+; Routines to read and write the XICOR X25640 8k serial EEPROM
+; via a three-wire serial interface.
+
+; Connect the PIC pins below to the like-named pins of the X25640.
+; If you change these connections, be sure to change these equates
+; <<AND>> the values DataIn and DataOut so that the DATA line is
+; an input during reads and an output during writes. If the EEPROM
+; shares a port with other I/O, make sure that the values you give
+; to DataIn and DataOut correctly set the data direction for the
+; other pins as well. For the purposes of this program, DataIn just
+; consists of a 1 in the bit position corresponding to the DATA pin
+; assignment. Since the DATA pin is in position 0 (ra.0), DataIn
+; is 0001.
+DATA    =       ra.0
+SCK     =       ra.1
+CS      =       ra.2
+DataIn  =       1
+DataOut =       0
+
+; Opcodes for XICOR 25640:
+WREN    =       6       ; Write-enable.
+WRDI    =       4       ; Write-disable.
+RDSR    =       5       ; Read status register.
+WRSR    =       1       ; Write status register (not used here).
+READ    =       3       ; Read the EEPROM.
+WRITE   =       2       ; Write to the EEPROM.
+
+	org     8
+shifts  ds      1       ; Shift counter.
+addrH   ds      1
+addrL   ds      1
+EEdata  ds      1
+temp    ds      1
+
+; Device data and reset vector
+	device  pic16c55,xt_osc,wdt_off,protect_off
+	reset   start
+	org     0
+
+; This program write-enables the EEPROM, writes a byte to one of its
+; memory locations, waits for the write-in-progress bit of the status
+; register to reset (indicating that the write is complete), then
+; reads back the previously written data.
+
+start   mov     ra,#4           ; Initialize ra with CS high (EEPROM off).
+	mov     !ra,#DataOut    ; Set data direction to output.
+	mov     !rc,#0          ; Make all of rc output for LEDs.
+	clr     rc
+	call    Write_enable    ; Send write-enable opcode to EEPROM.
+	mov     addrH,#01fh     ; Now set up the EEPROM address (0-1FFFh).
+	mov     addrL,#0ffh
+	mov     EEdata,#99      ; And data to be written to that address.
+	call    Write_byte      ; Write the data.
+	call    Write_disable
+
+:loop   call    Read_Status     ; Get status byte and check its 0th bit.
+	jb      EEdata.0,:loop  ; The bit will stay high until write is done.
+
+; For the sake of this demo, we move the address into the high and low
+; address bytes (addrH and addrL), but it's not really necessary. They
+; weren't altered by Write_byte, so we could really skip this step.
+
+:read   mov     addrH,#01fh     ; Rewrite the EEPROM address.
+	mov     addrL,#0ffh
+	call    Read_byte       ; Read the byte.
+	mov     rc,EEdata       ; Show the recovered data on LEDs
+	jmp     $               ; Stop the program here.
+
+; Subroutine shifts the eight bits of the byte pointed to
+; by the fsr out to the SI pin of the X25640.
+
+Shout   mov     shifts,#8
+:loop   clrb    SCK
+	rl      indirect
+	movb    DATA,c
+	setb    SCK
+	djnz    shifts,:loop
+	rl      indirect
+	ret
+
+; Subroutine shifts one byte of serial data from the XDATA
+; pin into the byte pointed to by the fsr. The nop may be required
+; at PIC clock speeds above 4 MHz, especially if the resistor
+; from SI to SO is larger than 1k. If the EEPROM incorrectly
+; sets the msbs of bytes stored at odd-numbered addresses, you
+; need a smaller resistor, the nop, or both. (The explanation for
+; the odd symptom is that the lsb of the address output shows up
+; in the msb of the data input. XICOR says that the X25640 may
+; require up to 400 ns from a falling clock edge to valid data
+; at SO. Combine this with whatever time SO needs to go from
+; hi-Z to output, and you've got this telltale error.)
+
+Shin
+	mov     !ra,#DataIn
+	mov     shifts,#8
+:loop   clrb    SCK
+	nop                     ; Nop may be required at high speeds.
+	movb    c,DATA
+	rl      indirect
+	setb    SCK
+	djnz    shifts,:loop
+	mov     !ra,#DataOut
+	ret
+
+; Returns the contents of the EEPROM's status register in
+; EEdata. Uses EEdata to shift out the op code.
+
+Read_status
+	mov     fsr,#EEdata
+	mov     indirect,#RDSR
+	clrb    CS
+	call    Shout
+	call    Shin
+	setb    CS
+	ret
+
+; Reads the EEPROM data at the address specified by addrH and addrL
+; and writes it to the location EEdata.
+
+Read_byte
+	mov     fsr,#temp
+	mov     indirect,#READ
+	clrb    CS
+	call    Shout
+	mov     fsr,#addrH
+	call    Shout
+	mov     fsr,#addrL
+	call    Shout
+	mov     fsr,#EEdata
+	call    Shin
+	setb    CS
+	ret
+
+; Turns off the EEPROM's write protection. Must be called
+; after power up in order to write to the EEPROM.
+
+Write_enable
+	mov     fsr,#EEdata
+	mov     indirect,#WREN
+	clrb    CS
+	call    Shout
+	setb    CS
+	ret
+
+; Turns on the EEPROM's write protection feature to prevent accidental
+; overwriting of memory in the event that a program goes out of control.
+
+Write_disable
+	mov     indirect,#WRDI
+	clrb    CS
+	call    Shout
+	setb    CS
+	ret
+
+; Writes the byte in EEdata to the EEPROM address specified by addrH
+; and addrL. The contents of EEdata, addrH and addrL, are not
+; changed, although the bits may be a little dizzy from being rapdily
+; rotated by the trip through Shout.
+
+Write_byte
+	mov     fsr,#temp
+	mov     indirect,#WRITE
+	clrb    CS
+	call    Shout
+	mov     fsr,#addrH
+	call    Shout
+	mov     fsr,#addrL
+	call    Shout
+	mov     fsr,#EEdata
+	call    Shout
+	setb    CS
+	ret
+
+
+
+
+

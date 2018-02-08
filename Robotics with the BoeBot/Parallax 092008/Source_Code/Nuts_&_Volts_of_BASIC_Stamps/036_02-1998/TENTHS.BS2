@@ -1,0 +1,19 @@
+' Program Listing 36.2
+' Tenths.BS2
+' Jeff Martin, Parallax Technical Support Engineer
+' Stamp Applications: Nuts and Volts February 1998
+' First, set up our variables
+A	VAR	WORD
+B	VAR	WORD
+X	VAR	WORD
+
+'Initialize the values
+A = 1326
+B = 85
+
+'Now do our modified calculation 
+'(multiply the first number by 10) then divide
+X = A*10 / B
+
+'Now display it on the PC screen
+DEBUG DEC X/10, ".", DEC X DIG 0

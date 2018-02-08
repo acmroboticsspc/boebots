@@ -1,0 +1,99 @@
+' -----[ Title ]------------------------------------------------------
+'
+' File...... SERIALLCD1.BS2
+' Purpose... Stamp -> Serial LCD 
+' Author.... Claus Kuhnel 
+' Started... 01 Sept 2001
+' Updated... 
+
+' -----[ Program Description ]----------------------------------------
+'
+' This program demonstrates the various standard features of an LCD
+' display that uses the Hitatchi HD44780 controller.  
+' The LCD used to test this program was 20x4 Serial LCD from Seetron.
+'
+'
+' -----[ Revision History ]-------------------------------------------
+'
+' 09-01-01 : Version 1.0 
+'
+' -----[ Directives ]-------------------------------------------------
+'
+'{$STAMP BS2} 			'specifies a BS2
+'
+' -----[ Constants ]--------------------------------------------------
+'
+TxD		con	1      		' Serial Data to LCD
+N9600 	con 	$4054 		' Baudmode-9600 bps inverted
+N2400 	con 	$418c			' Baudmode-2400 bps inverted
+
+I 		con 	254 			' Instruction prefix value
+
+
+' LCD control characters
+'
+ClrLCD	con   $01               ' clear the LCD
+CrsrHm	con   $02               ' move cursor to home position
+CrsrLf	con   $10               ' move cursor left
+CrsrRt	con   $14               ' move cursor right
+DispLf	con   $18               ' shift displayed chars left
+DispRt	con	$1C               ' shift displayed chars right             
+
+Line1		con	$80			' addr line #1 ¦ 80H
+Line2		con  	$C0			' addr line #2 ¦ 80H
+Line3		con  	$94			' addr line #3 ¦ 80H
+Line4		con  	$D4			' addr line #4 ¦ 80H
+ 
+' -----[ Variables ]--------------------------------------------------
+'
+char    	var	byte              ' char sent to LCD
+index   	var	byte              ' loop counter
+
+
+' -----[ Initialization ]---------------------------------------------
+'
+data "THE BASIC STAMP!"     		' Preload EEPROM 
+data "A PIC16C57 knows"     		' Preload EEPROM
+data "P B A S I C from"     		' Preload EEPROM
+data "Parallax Inc."     		' Preload EEPROM
+	
+' Initialize the Serial LCD (HD44780 controller & Serial Backpack)
+'
+LCDini: 
+	' Now clear the screen in case there's text left from a previous
+	' run of the program. Note that there's a 1-second PAUSE prior to
+	' sending any data to the Backpack. This gives the Backpack plenty
+	' of time to initialize the LCD after power up.
+	low TxD				' Make the serial output low
+	pause 1000				' Let the LCD wake-up
+
+' -----[ Main Code ]--------------------------------------------------
+'
+start:serout TxD,n2400,[I,ClrLCD] 	' Clear the LCD screen
+	serout TxD,n2400,[I,Line1+2]
+	  	
+	for index = 0 TO 15		    
+	  read index, char          	' Get char from EEPROM
+	  serout TxD,n2400,[char] 	' and print it.
+	next
+		
+	serout TxD,n2400,[I,Line2+2] 	' Move to line 2 
+	for index = 16 TO 31
+	  read index, char            ' Get char from EEPROM
+	  serout TxD,n2400,[char] 	' and print it.
+	next 
+	
+	serout TxD,n2400,[I,Line3+2] 	' Move to line 3
+	for index = 32 TO 47
+	  read index, char            ' Get char from EEPROM
+	  serout TxD,n2400,[char] 	' and print it.
+	next 
+	
+	serout TxD,n2400,[I,Line4+3] 	' Move to line 4 
+	for index = 48 TO 60
+	  read index, char            ' Get char from EEPROM
+	  serout TxD,n2400,[char] 	' and print it.
+	next 
+	pause 2000                   	' Wait 2 seconds
+
+	goto Start                  	' Do it all over

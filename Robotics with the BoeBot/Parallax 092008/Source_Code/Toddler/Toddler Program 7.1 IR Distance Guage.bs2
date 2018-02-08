@@ -1,0 +1,48 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 7.1: IR Distance Gauge
+' Test of infrared sensors to show distance measurement
+' {$STAMP BS2}
+' {$PBASIC 2.5}  
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+LeftIRLED       CON     4
+RightIRLED      CON     15
+LeftDetector    VAR     IN11
+RightDetector   VAR     IN14
+  
+' -----[ Variables ]-------------------------------------------------------
+  
+Counter         VAR     Nib                     ' Counting variable
+L_values        VAR     Byte                    ' Vars for storing freq 
+R_values        VAR     Byte                    ' sweep IR detector outputs
+IR_freq         VAR     Word                    ' Frequency argument
+
+' -----[ Main Routine ]----------------------------------------------------
+
+DO
+  L_values = 0                                  ' Reset L_values and 
+  R_values = 0                                  ' R_values to 0
+
+    ' Load sensor outputs into L_values and R_values using a FOR..NEXT loop
+    ' and a lookup table, and bit addressing
+
+  FOR Counter = 0 TO 4
+  
+    LOOKUP counter,[37500,38250,39500,40500,41500], IR_freq
+  
+    FREQOUT LeftIRLED,1, IR_freq
+    L_values.lowbit(counter) = ~LeftDetector
+  
+    FREQOUT RightIRLED,1, IR_freq
+    R_values.lowbit(counter) = ~RightDetector
+
+  NEXT
+
+   ' Display l_values and r_values in binary and ncd format.
+
+  DEBUG HOME, CR, CR, "Left readings     Right Readings", cr
+  DEBUG "  ",BIN8 L_values, "          ", BIN8 R_values, cr
+  DEBUG "  ",DEC5 NCD(L_values), "             ", DEC5 NCD(R_values), CR
+
+LOOP

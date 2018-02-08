@@ -1,0 +1,33 @@
+' Listing 41.2
+Private Sub MSComm1_OnComm()
+  Dim temp As String
+  Dim i As Integer
+  
+  If MSComm1.CommEvent = comEvReceive Then
+    ' get a character from the buffer
+    temp = StrConv(MSComm1.Input, vbUnicode)
+    ' if CR, then process the data
+    If temp = Chr(13) Then
+      ' look for header
+      i = InStr(1, buffer, "55")
+      ' remove *trash* preceeding header
+      If i > 0 Then
+        buffer = Mid$(buffer, i)
+      End If
+      If Len(buffer) = 8 Then
+        ' go process the input
+        lblReceive.Caption = "RX: " & buffer
+        ProcessInput (lastMsg)
+      Else
+        lblReceive.Caption = "RX: Bad Packet"
+      End If
+      ' clear the  buffer
+      buffer = ""
+    Else
+      ' add character to buffer
+      buffer = buffer & temp
+    End If
+  Else
+    ' process other events here
+  End If
+End Sub

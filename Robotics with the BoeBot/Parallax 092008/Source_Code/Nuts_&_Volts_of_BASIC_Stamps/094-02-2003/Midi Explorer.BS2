@@ -1,0 +1,77 @@
+' =========================================================================
+'
+'   File...... Midi Explorer.BS2
+'   Purpose... Sends midi packets to instrument
+'   Author.... Jon Williams, Parallax
+'   E-mail.... jwilliams@parallax.com
+'   Started...
+'   Updated... 22 DEC 2002
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program allows the user to enter and send a midi packet through
+' the DEBUG terminal.  It is designed for exploring midi byte values and
+' their behavior.
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+MidiOut         PIN     15                      ' midi serial output
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+MidiBaud        CON     $8000 + 12              ' 31.25 kBaud -- open
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+nBytes          VAR     Nib                     ' number of bytes to send
+idx             VAR     Nib
+midi            VAR     Byte(3)
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    DEBUG CLS
+    PAUSE 500
+    DEBUG "MIDI Explorer", CR
+    DEBUG "-------------"
+
+    DEBUG CrsrXY, 0, 3, ClrDn                   ' clear old input
+    DEBUG "Bytes to send? : "                   ' prompt for nBytes
+    SERIN 16, 84, [DEC1 nBytes]                 ' get nBytes from user
+    IF (nBytes > 0) AND (nBytes <= 3) THEN      ' test nByte value
+      FOR idx = 1 TO nBytes
+        DEBUG CrsrXY, 0, (idx + 4)              ' move to input line
+        DEBUG "(", DEC1 idx, ") : "             ' prompt byte input
+        SERIN 16, 84, [HEX2 midi(idx - 1)]      ' get midi byte
+      NEXT
+      DEBUG CrsrXY, 0, (nBytes + 6)
+      DEBUG "Press [Enter] to execute. "
+      SERIN 16, 84, [WAIT (CR)]                 ' wait for [Enter]
+      SEROUT MidiOut, MidiBaud, [STR midi\nBytes]
+    ENDIF
+  LOOP
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------

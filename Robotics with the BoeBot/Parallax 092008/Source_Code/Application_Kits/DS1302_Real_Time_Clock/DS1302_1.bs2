@@ -1,0 +1,188 @@
+BASIC Stamp II (BS2-IC) Program Listing #1
+'***************************************************************************
+'*       Title: DS1302_1.BS2    Author: Jeff A Martin    Date: 5/18/98       	*
+'*                                                                         			*
+'* Description: This BASIC Stamp II program interfaces to the Dallas Semi. 	*
+'*              DS1302 Real Time Clock (RTC) chip.  The date and time is   	*
+'*              read and displayed in long and short formats on the debug  	*
+'*              screen.                                                    			*
+'*                                                                         			*
+'* Notes: This program can be modified to fit into a smaller code space.   	*
+'*        It is not written as compact as possible to make it more readable	*
+'*        and to demonstrate all the useful functions of the chip.         		*
+'*        The DS1302 features seconds, minutes, hours (AM/PM-12/24 modes), 	*
+'*        date of month, month, day of week and year time-keeping with     	*
+'*        leap year compensation valid up to 2100.  Scratchpad RAM memory  	*
+'*        (31 bytes), single-byte and multi-byte reads and writes, software	*
+'*        clock-halt, software write-protection, trickle charge and        		*
+'*        operation down to 2.0 volts @ 300 nA are other notable features. 	*
+'***************************************************************************
+
+'Define I/O pins and RTC variables
+Clk	CON	0
+Dta     CON     1
+RTCCS	CON	2
+RTCCmd  VAR 	BYTE
+Value	VAR	BYTE
+Seconds VAR	BYTE
+Minutes VAR	BYTE
+Hours	VAR	BYTE
+Date	VAR	BYTE
+Month	VAR	BYTE
+Day	VAR	BYTE
+Year	VAR	BYTE
+Idx	VAR	BYTE
+
+'Define RTC Command Constants
+SecReg	CON	%00000
+MinReg  CON	%00001
+HrsReg	CON	%00010
+DateReg	CON	%00011
+MonReg	CON	%00100
+DayReg	CON	%00101
+YrReg	CON	%00110
+CtrlReg CON	%00111
+TChgReg	CON	%01000
+BrstReg	CON	%11111
+
+'Define Days-Of-Week, Months and AM/PM text.
+'All text is stored in EEPROM with a binary 0 as the end-of-text character
+Sun	DATA "Sun",0
+Mon	DATA "Mon",0
+Tue	DATA "Tues",0
+Wed	DATA "Wednes",0
+Thu	DATA "Thurs",0
+Fri	DATA "Fri",0
+Sat	DATA "Satur",0
+
+Jan	DATA "January",0
+Feb	DATA "February",0
+Mar	DATA "March",0
+Apr	DATA "April",0
+May	DATA "May",0
+Jun	DATA "June",0
+Jul	DATA "July",0
+Aug	DATA "August",0
+Sep	DATA "September",0
+Oct	DATA "October",0
+Nov	DATA "November",0
+Dcm	DATA "December",0
+
+AM	DATA " AM",0
+PM	DATA " PM",0
+
+'Set I/O pin states and directions
+OUTS = %0000000000000000	'All logic low
+DIRS = %0000000000000111	'I/O 0,1 and 2 are output, rest are input
+
+Initialize:
+ 'Set Time and Date to 05/18/98 - 3:00 PM
+ 'NOTE: Date must be set only once for every power-up of DS1302 chip.
+  Day     = $02		'Monday
+  Month   = $05		'May
+  Date    = $18 	'18th
+  Year    = $98 	'1998
+  Hours   = $15		'3:00 PM (in 24-hour mode)
+  Minutes = $00
+  Seconds = $00
+  GOSUB SetTimeAndDate	
+
+Loop:
+  'Read out all date and time values and display them in two formats on 
+  'the debug screen.
+  GOSUB ReadRTCBurst
+  DEBUG HOME,"LONG FORMAT DATE AND TIME:",CR
+  GOSUB PrintLongDate
+  GOSUB Print12HourTime
+  DEBUG CR,CR,"SHORT FORMAT DATE AND TIME:",CR
+  GOSUB PrintShortDate
+  GOSUB Print24HourTime
+GOTO Loop
+
+'==================== DS1302 Real-Time Clock Subroutines ===================
+
+PrintLongDate:
+ 'Print long date format on debug screen
+  LOOKUP Day-1,[Sun,Mon,Tue,Wed,Thu,Fri,Sat],Idx
+  GOSUB PrintIt
+  DEBUG "day, "
+  LOOKUP Month-1,[Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dcm],Idx
+  GOSUB PrintIt
+ 'NOTE: The following line prints the proper 4-digit year for the years
+ '1990 through 2089
+  DEBUG " ",HEX2 Date,", ",DEC2 20-(Year/90),HEX2 Year, CR
+RETURN
+
+PrintShortDate:
+  'Print short date format on debug screen
+  DEBUG HEX2 Month,"/",HEX2 Date,"/",HEX2 Year, CR
+RETURN
+
+Print12HourTime:
+ 'Print 12-hour time format on debug screen
+ 'NOTE: The DS1302 has 12 and 24 hour time-keeping modes (bit 7 of HrsReg
+ 'sets 12/24 mode and bit 5 indicates AM/PM or 20+ hours).  For purposes
+ 'of this example, we're using 24 hour mode only, and converting it to 
+ '12-hour in the next two lines below.
+  DEBUG DEC2 12-(24-(Hours.HIGHNIB*10+Hours.LOWNIB)//12),":",HEX2 Minutes,":",HEX2 Seconds
+  LOOKUP Hours/$12,[AM,PM],Idx
+  GOSUB PrintIt
+RETURN
+
+Print24HourTime:
+ 'Print 24-hour time format on debug screen
+  DEBUG HEX2 Hours,":",HEX2 Minutes,":",HEX2 Seconds
+RETURN
+
+PrintIt:
+  'Prints zero (0) terminated text from EEPROM
+  READ Idx,Value		'Get next character
+  IF Value = 0 THEN Finished	'Make sure it's not a binary 0
+  DEBUG Value			'Display it on screen
+  Idx = Idx + 1
+  GOTO PrintIt
+Finished:
+RETURN
+
+WriteRTCRAM:
+ 'Write to DS1302 RAM Register
+  HIGH RTCCS
+  SHIFTOUT Dta, Clk, LSBFIRST, [%0\1,RTCCmd\5,%11\2,Value]
+  LOW RTCCS
+RETURN
+
+WriteRTC:
+ 'Write to DS1302
+  HIGH RTCCS
+  SHIFTOUT Dta, Clk, LSBFIRST, [%0\1,RTCCmd\5,%10\2,Value]
+  LOW RTCCS
+RETURN
+
+ReadRTCBurst:
+ 'Read all time-keeping registers in one burst
+  HIGH RTCCS
+  SHIFTOUT DTA, Clk, LSBFIRST, [%1\1,BrstReg\5,%10\2]
+  SHIFTIN DTA, Clk, LSBPRE, [Seconds,Minutes,Hours,Date,Month,Day,Year]
+  LOW RTCCS
+RETURN
+
+ReadRTCRAM:
+ 'Read DS1302 RAM Register
+  HIGH RTCCS
+  SHIFTOUT DTA, Clk, LSBFIRST, [%1\1,RTCCmd\5,%11\2]
+  SHIFTIN DTA, Clk, LSBPRE, [Value]
+  LOW RTCCS
+RETURN
+
+SetTimeAndDate:
+  'Write time values into all time-keeping registers, being sure to clear
+  'the write-protect bit in CtrlReg before the write, and set the
+  'write-protect bit after the write
+  FOR Idx = 0 TO 8
+    LOOKUP Idx,[0,Seconds,Minutes,Hours,Date,Month,Day,Year,128],Value
+    LOOKUP Idx,[CtrlReg, SecReg, MinReg, HrsReg, DateReg, MonReg, DayReg, YrReg, CtrlReg],RTCCmd
+    GOSUB WriteRTC
+  NEXT
+RETURN
+
+ 

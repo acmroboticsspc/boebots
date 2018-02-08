@@ -1,0 +1,31 @@
+'{$STAMP BS2}
+
+' Program: ADC0831.BS2
+' This program demonstrates the use of the BS2's new Shiftin instruction
+' for interfacing with the Microwire interface of the Nat'l Semiconductor
+' ADC0831 8-bit analog-to-digital converter. It uses the same connections
+' shown in the BS1 app note. 
+
+ADres	var	byte	' A-to-D result: one byte. 
+CS	con	0	' Chip select is pin 0. 
+AData	con	1	' ADC data output is pin 1. 
+CLK	con	2	' Clock is pin 2. 
+
+high CS			' Deselect ADC to start. 
+
+' In the loop below, just three lines of code are required to read
+' the ADC0831. The Shiftin instruction does most of the work. Shiftin
+' requires you to specify a data pin and clock pin (AData, CLK), a 
+' mode (msbpost), a variable (ADres), and a number of bits (9). The 
+' mode specifies msb or lsb-first and whether to sample data before
+' or after the clock. In this case, we chose msb-first, post-clock. 
+' The ADC0831 precedes its data output with a dummy bit, which we 
+' take care of by specifying 9 bits of data instead of 8. 
+
+again:
+  low CS		' Activate the ADC0831. 
+  shiftin AData,CLK,msbpost,[ADres\9]	' Shift in the data. 
+  high CS		' Deactivate '0831. 
+  debug ? ADres		' Show us the conversion result. 
+  pause 1000		' Wait a second. 
+goto again		' Do it again. 

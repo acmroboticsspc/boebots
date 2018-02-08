@@ -1,0 +1,60 @@
+; TUT019.SRC
+;
+; --------------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" 2nd Edition by Guenther Daubach
+; Copyright (c), by Parallax Inc. 2004
+; --------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET   Main
+
+TRIS     equ $0f
+PLP      equ $0e
+WKPND_W  equ $09
+
+org $08
+Counter1 ds 1
+Counter2 ds 1
+Counter3 ds 1
+Time     ds 1
+Button   ds 1
+
+org $000
+TimeEater
+  mode   WKPND_W
+  clr    w
+  mov    !rb, w
+  and    w, #%00001000
+  snz
+    jmp  :NoButton
+  xor    Time, #%00100000
+:NoButton
+  mov    Counter1, Time
+:Loop
+  decsz  Counter3
+    jmp  :Loop
+  decsz  Counter2
+    jmp  :Loop
+  decsz  Counter1
+    jmp  :Loop
+  
+  ret
+
+org $100
+Main
+  mov    Time, #$30
+  mode   TRIS
+  mov    !rb, #%11111110
+  mode   PLP
+  mov    !rb, #%11110111
+  mode   WKPND_W
+  clr    w
+  mov    Button, w
+  mov    !rb, w
+Loop
+  call   TimeEater
+  clrb   rb.0
+  call   TimeEater
+  setb   rb.0
+  jmp    Loop

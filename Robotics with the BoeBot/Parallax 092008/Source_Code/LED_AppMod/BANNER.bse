@@ -1,0 +1,52 @@
+'********************************************************************************************
+'{$STAMP BS2E}										BANNER.bse
+'												  05/23/00
+'	This program shows how to use the LED Terminal AppMod with the BS2E
+'	to behave as a scrolling marquee. The code has bee embellished such
+'	that more than 256 bytes of data can be scrolled.
+'********************************************************************************************
+N19K2	con	32+$8000
+i	var	byte			'Index within the scroll window (4 characters).
+j	var	byte			'Index denoting the start point of the scroll window.
+k	var	byte			'Index holding the message number to be displayed.
+Msg	var	word			'Variable holding the base address of the message.
+Char	var	byte			'Temporary variable for characters read from message.
+Buff	var	byte(4)		'Display Buffer (4 bytes wide) for window data.
+
+Msg1	data	@000,"   The quick brown fox jumped over the lazy dog   ",0
+Msg2	data	     "   Buy American    Buy Parallax   ",0
+Msg3	data	     "   How much wood would a woodchuck chuck if a woodchuck could chuck wood   ",0
+Msg4	data	     "   Four score and seven years ago our forefathers in order to create a better basic stamp   ",0
+Msg5	data	@256,"   How do you trap an elephant     ",0
+Msg6	data	     "   First dig a big hole and fill it with ashes then line the perimeter with peanuts     ",0
+Msg7	data	     "   and when the elephant bends down to pick up a peanut    you kick him in the ash hole       ",0
+total	con	7
+Ptrs	data	Msg1,Msg2,Msg3,Msg4,Msg5,Msg6,Msg7			'List of message base addresses.
+'********************************************************************************************
+Init:		i = 0					'Initialize all pointers
+		j = 0
+		Msg = Msg1
+		pause 1200				'Wait for LED AppMod to power up and initialize
+Start:	pause	175				'Set the rate at which scrolling occurs
+		for i = 0 to 3			'Get one window's worth of characters (4)
+		  gosub GetChar
+		  Buff(i) = Char		'Load the display buffer and send it via a serout
+		next					'instruction to the LED Terminal AppMod.
+		serout 6,N19K2,["!LT0ASC",Buff(0),Buff(1),Buff(2),Buff(3),$0,$0]
+		j = j + 1				'Move the window pointer to the next location.
+		goto Start
+'********************************************************************************************
+GetChar:	read Ptrs+k,Msg			'Get the base address of the message to be displayed.
+		if k < 4 then Continue	'If the message is on the next 'page' 
+		Msg = Msg|$100			'  add in the offset
+Continue:	read Msg+i+j,Char		'Get the character pointed at.
+		if Char = 0 then GCreset	'If its not the end of a message
+		return				'  return to main
+GCreset						'Else
+		i = 0					'  reset pointers and increment the base address
+		j = 0					'  If the base address is beyond the message table
+		k = k + 1				'     reset the base address pointer
+		if k < total then Getchar	'  Go to the top of this subroutine and try again.
+		k = 0
+		goto GetChar
+'********************************************************************************************

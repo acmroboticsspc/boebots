@@ -1,0 +1,275 @@
+' =========================================================================
+'
+'   File....... StampPLC.BS2
+'   Purpose.... Stamp PLC Core Routines and Framework for Apps
+'   Author..... Jon Williams, Applications Engineer
+'               (Copyright 2003 - All Rights Reserved)
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 05 NOV 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program provides a set of core routines that can be used for
+' creating operational programs for the Stamp PLC.  Conditional compilation
+' is used so that the code can run on any 24-pin BASIC Stamp 2 module.
+'
+' Notes on reading ADC channels:
+'
+' The inputs are protected and reduce the voltage felt on the MAX1270 input
+' pins.  This is accounts for code to get a full-scale count of 4095.
+'
+' The raw value (counts) from the ADC will be returned in "adcRaw" and
+' converted to millivolts and returned in "mVolts."  Be aware that in
+' bipolar modes the value of "mVolts" is signed.  A "1" in BIT15 of "mVolts"
+' indicates a negative value.  The BASIC Stamp does not support division or
+' mulitplication on negative values.
+
+
+' -----[ Revision History ]------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Clock           PIN     0                       ' shared clock
+Ld165           PIN     1                       ' 74HC165 load
+Di165           PIN     2                       ' 74HC165 data in (from)
+AdcCS           PIN     3                       ' ADC chip select
+AdcDo           PIN     4                       ' ADC data out (to)
+AdcDi           PIN     5                       ' ADC data in (from)
+
+Di9             PIN     6                       ' direct digital inputs
+Di10            PIN     7
+
+DOuts           VAR     OUTH                    ' direct digital outputs
+DOutsLo         VAR     OUTC                    ' -- Do1 - Do4
+DoutsHi         VAR     OUTD                    ' -- Do5 - Do8
+Do1             PIN     8
+Do2             PIN     9
+Do3             PIN     10
+Do4             PIN     11
+Do5             PIN     12
+Do6             PIN     13
+Do7             PIN     14
+Do8             PIN     15
+
+Sio             CON     16                      ' serial IO (prog port)
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+IsOn            CON     1                       ' for shadow regs
+IsOff           CON     0
+
+DirectOn        CON     0                       ' for direct IO pins only
+DirectOff       CON     1
+
+#SELECT $STAMP
+  #CASE BS2, BS2E, BS2PE
+    T1200       CON     813                     ' for programming port
+    T2400       CON     396
+    T9600       CON     84
+    T19200      CON     32
+  #CASE BS2SX, BS2P
+    T1200       CON     2063
+    T2400       CON     1021
+    T9600       CON     240
+    T19200      CON     110
+#ENDSELECT
+
+Baud            CON     T9600                   ' default (matches DEBUG)
+
+Ain1            CON     0                       ' analog channels
+Ain2            CON     1
+Ain3            CON     2
+Ain4            CON     3
+
+AdcUP5          CON     0                       ' unipolar, 0 - 5 v
+AdcBP5          CON     1                       ' bipolar, +/- 5 v
+AdcUP10         CON     2                       ' unipolar, 0 - 10 v
+AdcBP10         CON     3                       ' bipolar, +/- 10 v
+Adc420          CON     4                       ' 4-20 mA input
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+digIns          VAR     Word                    ' shadow digital inputs
+dinLo           VAR     digIns.LOWBYTE          ' Din1 - Din8
+dinHi           VAR     digIns.HIGHBYTE         ' Din9 - Din10
+din1            VAR     digIns.BIT0
+din2            VAR     digIns.BIT1
+din3            VAR     digIns.BIT2
+din4            VAR     digIns.BIT3
+din5            VAR     digIns.BIT4
+din6            VAR     digIns.BIT5
+din7            VAR     digIns.BIT6
+din8            VAR     digIns.BIT7
+din9            VAR     digIns.BIT8
+din10           VAR     digIns.BIT9
+
+digOuts         VAR     Byte                    ' shadow digital outputs
+dout1           VAR     digOuts.BIT0
+dout2           VAR     digOuts.BIT1
+dout3           VAR     digOuts.BIT2
+dout4           VAR     digOuts.BIT3
+dout5           VAR     digOuts.BIT4
+dout6           VAR     digOuts.BIT5
+dout7           VAR     digOuts.BIT6
+dout8           VAR     digOuts.BIT7
+
+chan            VAR     Nib                     ' ADC channel (0 - 3)
+mode            VAR     Nib                     ' ADC mode (0 - 4)
+config          VAR     Byte                    ' configuration byte
+adcRes          VAR     Nib                     ' ADC bits (1 - 12)
+adcRaw          VAR     Word                    ' ADC result (raw)
+mVolts          VAR     Word                    ' ADC in millivolts
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+Project         DATA    "Stamp PLC Template", 0
+
+AdcCfg          DATA    %11110000, %11100000, %11010000, %11000000 ' 0-5
+                DATA    %11110100, %11100100, %11010100, %11000100 ' +/-5
+                DATA    %11111000, %11101000, %11011000, %11001000 ' 0-10
+                DATA    %11111100, %11101100, %11011100, %11001100 ' +/-10
+                DATA    %11110000, %11100000, %11010000, %11000000 ' 4-20
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Setup:
+  LOW Clock                                     ' preset control lines
+  HIGH Ld165
+  HIGH AdcCS
+
+  DOuts = %11111111                             ' all outputs off
+  DIRH = %11111111                              ' enable output drivers
+
+  adcRes = 12                                   ' use all ADC bits
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+
+  ' demo - replace with your code
+  '
+  GOSUB Read_DigIns
+  DEBUG HOME, "Inputs = ", BIN10 digIns, CR, CR
+
+  ' copy inputs to outputs
+  ' -- Din9  --> Dout1
+  ' -- Din10 --> Dout2
+  '
+  digOuts = digIns
+  GOSUB Update_DigOuts
+  IF (din9 = IsOn) THEN Do1 = DirectOn
+  IF (din10 = IsOn) THEN Do2 = DirectOn
+
+  ' read single-ended analog inputs
+  ' -- display input as millivolts
+  '
+  mode = AdcUP5
+  FOR chan = Ain1 TO Ain4
+    GOSUB Read_ADC
+    DEBUG "Ain", ("1" + chan), ".... ",
+          DEC (mVolts / 1000), ".", DEC3 mVolts, CR
+  NEXT
+
+  GOTO Main
+  '
+  ' end of demo code
+
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+' Scans and saves digital inputs, DIn1 - DIn10
+' -- returns inputs in "digIns" (1 = input active)
+
+Read_DigIns:
+  PULSOUT Ld165, 15                             ' load inputs
+  SHIFTIN Di165, Clock, MSBPRE, [dinLo]         ' shift in
+  dinHi = 0                                     ' clear upper bits
+  dinHi.BIT0 = ~Di9                             ' grab DIN9
+  dinHi.BIT1 = ~Di10                            ' grab DIN10
+  RETURN
+
+
+' Refreshes digital outputs, DOut1 - DOut8
+' -- uses shadow value "digOuts" (1 = output on)
+
+Update_DigOuts:
+  DOuts = ~digOuts                              ' refresh outputs
+  RETURN
+
+
+' Reads analog input channel (0 - 5 vdc)
+' -- put channel (0 - 3) in "chan"
+' -- pass mode (0 - 4) in "mode")
+' -- raw value returned in "adcRaw"
+' -- "adcRaw" converted to signed "mVolts"
+
+Read_ADC:
+  READ AdcCfg + (mode * 4 + chan), config       ' get config
+  LOW AdcCS                                     ' select MAX1270
+  SHIFTOUT AdcDo, Clock, MSBFIRST, [config]     ' send config byte
+  HIGH AdcCS                                    ' deselect MAX1270
+  adcRaw = 0
+  LOW AdcCS
+  SHIFTIN AdcDi, Clock, MSBPRE, [adcRaw\12]     ' read channel value
+  HIGH AdcCS
+
+  ' adjust ADC count for input voltage divider
+  '
+  adcRaw = adcRaw + (adcRaw ** $D6C) MAX 4095   ' x ~1.05243
+
+
+  ' millivolts conversion
+  ' -- returns signed value in bipolar modes
+  ' -- uses raw (12-bit) value
+  '
+  SELECT mode
+    CASE AdcUP5
+      mVolts = adcRaw + (adcRaw ** $3880)       ' x 1.2207
+
+    CASE AdcBP5
+      IF (adcRaw < 2048) THEN
+        mVolts = 2 * adcRaw + (adcRaw ** $7100) ' x 2.4414
+      ELSE
+        adcRaw = 4095 - adcRaw
+        mVolts = -(2 * adcRaw + (adcRaw ** $7100))
+      ENDIF
+
+    CASE AdcUP10
+      mVolts = 2 * adcRaw + (adcRaw ** $7100)   ' x 2.4414
+
+    CASE AdcBP10
+      IF (adcRaw < 2048) THEN
+        mVolts = 4 * adcRaw + (adcRaw ** $E1FF)
+      ELSE
+        adcRaw = 4095 - adcRaw
+        mVolts = -(4 * adcRaw + (adcRaw ** $E1FF))
+      ENDIF
+
+    CASE Adc420                                 ' -- 4000 to 20000
+      mVolts = 5 * adcRaw + (adcRaw ** $1666)   ' x 5.0875
+
+  ENDSELECT
+
+  ' adjust adcRaw for selected resolution
+  '
+  IF (adcRes < 12) THEN
+    adcRaw = adcRaw >> (12 - adcRes)            ' reduce resolution
+  ENDIF
+
+  RETURN

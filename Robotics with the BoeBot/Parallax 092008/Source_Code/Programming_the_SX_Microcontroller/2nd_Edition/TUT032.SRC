@@ -1,0 +1,22 @@
+; TUT032.SRC
+;
+; --------------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" 2nd Edition by Guenther Daubach
+; Copyright (c), by Parallax Inc. 2004
+; --------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET    Main
+
+org     $000
+Main
+  jmp   Far
+
+org     $1fe
+Far
+  jmp   TooFar
+
+org     $200
+TooFar
+  jmp   Main

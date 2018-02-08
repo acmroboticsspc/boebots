@@ -1,0 +1,46 @@
+' Program Listing 36.4
+' COUNTS.BS2	
+' John Barrowman, Parallax Technical Support Engineer
+' Stamp Applications: Nuts and Volts February 1998
+' This program demonstrates a way to count pulses when the count function
+' is not appropriate. Pulse transistions are counted on pins 8 and 9 use-
+' ing calculations instead of logic statements. This minimizes code space
+' used and reduces the execution time. This program writes the results to
+' a 2*16 Scott Edwards LCD Display. This project was developed on the new
+' Basic Stamp Activity Board. On the BSAC board, inputs pins P8-P11 are
+' pulled high and grounded when the pushbuttons are pressed. Pressing the
+' button connected to P10 results in clearing the counter registers.
+ 
+Baud	con	$4054		' 9600, N,8,1 (Inverted Data)
+xctr	var	byte		' Holds the #transitions on P8.
+yctr	var	byte		' Holds the #transitions on P9.
+xprev	var	bit		' Holds the previous state of P8.
+yprev	var	bit		' Holds the previous state of P9.
+xcurr	var	bit		' Holds the current state of P8.
+ycurr	var	bit		' Holds the current state of P9.
+
+INIT
+	low 0			' Initialize the display I/O line.
+	xctr = 0		' Initialize all variables.
+	yctr = 0
+	xcurr = in8
+	xprev = xcurr
+	ycurr = in9
+	yprev = ycurr
+START
+	xcurr = in8		' Read input pins.
+	ycurr = in9
+	xctr = xctr + (xcurr ^ xprev & xprev)	' Calculate and add
+	yctr = yctr + (ycurr ^ yprev & ycurr)	' transitions only.
+	xprev = xcurr				' Update the 'prev'
+	yprev = ycurr				' registers.
+	serout 0,Baud,[254,  2,"X Counts: ",dec3 xctr] ' Write data to the
+	serout 0,Baud,[254,175,"Y Counts: ",dec3 yctr] ' display
+	if in10 = 1 then START			' If P10 is grounded
+	xctr = 0				' then clear the 
+	yctr = 0				' count regisers.
+	goto START				' Repeat forever.
+
+' Please note that the calculations for XCTR and YCTR are different. XCTR
+' is counting the negative transitions, and YCTR is counting the positive
+' transitions. This is deliberate to exemplify both techniques.

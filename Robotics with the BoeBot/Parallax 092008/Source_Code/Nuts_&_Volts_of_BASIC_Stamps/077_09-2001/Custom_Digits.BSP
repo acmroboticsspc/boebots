@@ -1,0 +1,135 @@
+' Listing 1
+' Nuts & Volts, September 2001
+
+' -----[ Title ]----------------------------------------------------------------
+'
+' File...... Custom_Digits.BSP
+' Purpose... Advanced LCD Demo - custom numeric font(s)
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 
+' Updated... 
+
+' ( $STAMP BS2p }
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program demonstrates character definition replacement in order to 
+' create a custom font for numbers.  This program uses three of the eight
+' custom (CGRAM) character slots to display the tens, ones and tenths value
+' of a counter.
+'
+' The program analyzes the counter and updates the screen by downloading
+' the appropriate character map for each digit.
+'
+' To run this program on the BS2p Demo Board, connect the LCD and 
+' install Jumper X3. Adjust contrast pot for best display.
+'
+' Refer to the Hitachi HD44780 documentation for details on LCD control.
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+LCDpin		CON	0			' connect LCD to OutL
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+NoCmd		CON	$00			' No command in LCDOUT
+ClrLCD  	CON	$01                     ' clear the LCD
+CrsrHm  	CON	$02                     ' move cursor to home position
+CrsrLf  	CON	$10                     ' move cursor left
+CrsrRt  	CON	$14                     ' move cursor right
+DispLf  	CON	$18                     ' shift displayed chars left
+DispRt  	CON	$1C                     ' shift displayed chars right
+DDRam   	CON 	$80                     ' Display Data RAM control
+CGRam		CON	$40			' Custom character RAM
+Line1		CON	$80			' DDRAM address of line 1
+Line2		CON	$C0			' DDRAM address of line 2
+
+CLines		CON	8			' lines per character
+Space		CON	10
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+char		VAR	Byte			' character sent to LCD
+addr		VAR	Byte			' EE starting address of map
+cNum		VAR	Nib			' character number
+idx		VAR	Nib			' loop counter
+
+counter		VAR	Word
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+' character definitions - digits 0 - 9 and space
+'
+Dig_0		DATA	$1F,$11,$11,$19,$19,$19,$1F,$00
+Dig_1		DATA	$04,$04,$04,$0C,$0C,$0C,$0C,$00
+Dig_2		DATA	$1F,$01,$01,$1F,$18,$18,$1F,$00
+Dig_3		DATA	$1E,$02,$02,$1F,$03,$03,$1F,$00
+Dig_4		DATA	$18,$18,$18,$19,$1F,$01,$01,$00
+Dig_5		DATA	$1F,$18,$18,$1F,$01,$01,$1F,$00
+Dig_6		DATA	$18,$10,$10,$1F,$19,$19,$1F,$00
+Dig_7		DATA	$1F,$11,$01,$03,$03,$03,$03,$00
+Dig_8		DATA	$0E,$0A,$0A,$1F,$13,$13,$1F,$00
+Dig_9		DATA	$1F,$11,$11,$1F,$03,$03,$03,$00
+Dig_Spc		DATA	$00,$00,$00,$00,$00,$00,$00,$00
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  PAUSE 500					' let the LCD settle
+  LCDCMD LCDpin,%00110000 : PAUSE 5		' 8-bit mode
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00110000 : PAUSE 0
+  LCDCMD LCDpin,%00100000 : PAUSE 0		' 4-bit mode
+  LCDCMD LCDpin,%00101000 : PAUSE 0		' 2-line mode
+  LCDCMD LCDpin,%00001100 : PAUSE 0		' no crsr, no blink
+  LCDCMD LCDpin,%00000110			' inc crsr, no disp shift
+
+  FOR cNum = 0 TO 2				' initialize cust chars
+    LOOKUP cNum,[Dig_0,Dig_0,Dig_Spc],addr
+    GOSUB Update_CC
+  NEXT
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  LCDOUT LCDpin,ClrLCD,["CUSTOM DIGITS"]	' setup display
+  LCDOUT LCDpin,Line2 + 12,[2,1,".",0]
+
+Show_Counter:
+  FOR counter = 0 TO 999			' count in tenths 0 - 99.9
+    FOR cNum = 0 TO 2
+      addr = counter DIG cNum			' get a digit
+      IF (cNum < 2) OR (addr > 0) THEN DigitOK
+      addr = Space				' leading space if < 10
+    DigitOK:
+      addr = addr * CLines			' calculate map for this digit
+      GOSUB Update_CC				' download to LCD
+    NEXT
+    PAUSE 100
+  NEXT
+
+  GOTO Main
+  END
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'
+Update_CC:					' update custom character
+  LCDCMD LCDpin,(CGRam + (cNum * CLines))	' point to start of character map
+  FOR idx = 0 TO (CLines - 1)
+    READ (addr + idx),char			' get data for character line
+    LCDOUT LCDpin,NoCmd,[char]			' write to LCD CGRAM
+  NEXT
+  RETURN

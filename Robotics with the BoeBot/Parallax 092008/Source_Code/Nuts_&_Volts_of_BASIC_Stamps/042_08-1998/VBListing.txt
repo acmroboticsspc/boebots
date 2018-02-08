@@ -1,0 +1,22 @@
+' Program Listing 42.2
+Public Sub ProcessInput()
+  Dim hiData As String
+  Dim loData As String
+  Dim tempC As Single
+  Dim rawNeg As Integer
+  
+  hiData = Mid$(buffer, 5, 2)
+  loData = Mid$(buffer, 7)
+  
+  If hiData = "00" Then ' positive temp
+    tempC = CSng(HexToDec(loData)) / 2
+  Else ' negative temp
+    ' two's compliment
+    rawNeg = (HexToDec(loData) Xor 255) + 1
+    tempC = CSng(rawNeg) / -2
+  End If
+  
+  ' display
+  lblTempC.Caption = Format(tempC, "##0.0°C")
+  lblTempF.Caption = Format(tempC * 9# / 5# + 32#, "##0.0°F")
+End Sub

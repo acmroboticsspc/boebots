@@ -1,0 +1,100 @@
+' -----[ Title ]----------------------------------------------------------------
+' Mini Sumo 4.2 : IR Scan
+' {$STAMP BS2}
+
+' -----[ I/O Definitions ]------------------------------------------------------
+
+LMotor          CON     13                      ' left servo motor
+RMotor          CON     12                      ' right servo motor
+
+LfIrOut         CON     4                       ' left IR LED output
+LfIrIn          VAR     In11                    ' left IR sensor input
+RtIrOut         CON     15                      ' right IR LED output
+RtIrIn          VAR     In14                    ' right IR sensor input
+
+' -----[ Constants ]------------------------------------------------------------
+
+LFwdFast        CON     1000                    ' left motor forward; fast
+LFwdSlow        CON      800                    ' left motor forward; slow
+LStop           CON      750                    ' left motor stop
+LRevSlow        CON      700                    ' left motor reverse; slow
+LRevFast        CON      500                    ' left motor reverse; fast
+
+RFwdFast        CON      500                    ' right motor forward; fast
+RFwdSlow        CON      700                    ' right motor forward; slow
+RStop           CON      750                    ' right motor stop
+RRevSlow        CON      800                    ' right motor reverse; slow
+RRevFast        CON     1000                    ' right motor reverse; fast
+
+ClrEOL          CON     11                      ' clear to end of line (DEBUG)
+
+' -----[ Variables ]------------------------------------------------------------
+
+irBits          VAR     Nib                     ' storage for IR target data
+irLeft          VAR     irBits.Bit1
+irRight         VAR     irBits.Bit0
+lastIr          VAR     Nib                     ' info from last reading
+
+pulses          VAR     Byte                    ' counter for motor control
+
+' -----[ Main Code ]------------------------------------------------------------
+
+Main:
+  GOSUB Read_IR_Sensors
+  BRANCH irBits, [Scan, Follow_Right, Follow_Left, Hold]
+
+Scan:
+  BRANCH lastIR, [Move_Fwd, Scan_Right, Scan_Left, Move_Fwd]
+
+Move_Fwd:
+  DEBUG Home, "Forward", ClrEOL
+  GOTO Main
+
+Scan_Right:                                     ' spin right, slow
+  DEBUG Home, "Scan Right", ClrEOL
+  PULSOUT LMotor, LFwdSlow
+  PULSOUT RMotor, RRevSlow
+  PAUSE 20
+  GOTO Main
+
+Scan_Left:                                      ' spin left, slow
+  DEBUG Home, "Scan Left", ClrEOL
+  PULSOUT LMotor, LRevSlow
+  PULSOUT RMotor, RFwdSlow
+  PAUSE 20
+  GOTO Main
+
+Follow_Right:                                   ' spin right, fast
+  DEBUG Home, "Follow Right", ClrEOL
+  PULSOUT LMotor, LFwdFast
+  PULSOUT RMotor, RRevFast
+  PAUSE 20
+  lastIr = irBits                               ' save last direction found
+  GOTO Main
+
+Follow_Left:                                    ' spin left, fast
+  DEBUG Home, "Follow Left", ClrEOL
+  PULSOUT LMotor, LRevFast
+  PULSOUT RMotor, RFwdFast
+  PAUSE 20
+  lastIr = irBits
+  GOTO Main
+
+Hold:                                           ' on target
+  DEBUG Home, "On Target", ClrEOL
+  FOR pulses = 1 TO 3
+    PULSOUT LMotor, LStop
+    PULSOUT RMotor, RStop
+    PAUSE 20
+  NEXT
+  lastIr = %00
+  GOTO Main
+
+' -----[ Subroutines ]----------------------------------------------------------
+
+Read_IR_Sensors:
+  FREQOUT LfIrOut, 1, 38500                     ' modulate left IR LED
+  irLeft = ~LfIrIn                              ' read input (1 = target)
+  FREQOUT RtIrOut, 1, 38500                     ' modulate right IR LED
+  irRight = ~RtIrIn                             ' read input (1 = target)
+  RETURN

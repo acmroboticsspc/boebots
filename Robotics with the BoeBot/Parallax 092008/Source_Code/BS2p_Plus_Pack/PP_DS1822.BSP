@@ -1,0 +1,154 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' BS2p Plus Pack
+'
+' File...... PP_DS1822.BSP
+' Purpose... Reads and displays information from a Dallas DS1822
+' Author.... Parallax
+' E-mail.... stamptech@parallaxinc.com
+' Started...
+' Updated... 26 SEP 2001
+
+' {$STAMP BS2p}
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program demonstrates using the DS1822 in its simplest form for direct
+' temperature measurement.  With only one sensor, we can use SkipROM and ignore
+' the device serial number.
+'
+' Program output is via DEBUG.
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+OWpin           CON     15 
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+' 1-Wire Support
+'
+OW_FERst        CON     %0001                   ' Front-End Reset
+OW_BERst        CON     %0010                   ' Back-End Reset
+OW_BitMode      CON     %0100
+OW_HighSpd      CON     %1000
+
+ReadROM         CON     $33                     ' read ID, serial num, CRC
+MatchROM        CON     $55                     ' look for specific device
+SkipROM         CON     $CC                     ' skip rom (one device)
+SearchROM       CON     $F0                     ' search
+
+' DS1822 control
+'
+CnvrtTemp       CON     $44                     ' do temperature conversion
+RdScratch       CON     $BE                     ' read scratchpad
+
+NoDevice        CON     %11                     ' no device present
+DS1822          CON     $22                     ' device code
+DegSym          CON     176
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+devCheck        VAR     Nib                     ' device check return ocde
+idx             VAR     Byte                    ' loop counter
+romData         VAR     Byte(8)                 ' ROM data from DS1820
+tempIn          VAR     Word                    ' raw temperature
+sign            VAR     tempIn.Bit11            ' 1 = negative temperature
+tLo             VAR     tempIn.LowByte
+tHi             VAR     tempIn.HighByte
+tSign           VAR     Bit
+tempC           VAR     Word                    ' Celsius
+tempF           VAR     Word                    ' Fahrenheit
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  DEBUG CLS
+  PAUSE 250                                     ' allow DEBUG screen to open
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  GOSUB Device_Check                            ' look for device
+  IF (devCheck <> NoDevice) THEN Get_ROM
+
+No_Device_Found:
+  DEBUG CLS,"No DS1822 present.", CR
+  DEBUG "-- Insert device and re-start."
+  END
+
+Get_ROM
+  OWOUT OWpin,OW_FERst,[ReadROM]                ' send Read ROM command
+  OWIN  OWpin,OW_BERst,[STR romData\8]          ' read serial number & CRC
+
+  IF (romData(0) = DS1822) THEN Show_Data
+  DEBUG "Installed device is not DS1822", CR
+  DEBUG "-- Code = ",HEX2 romData(0)
+  END
+
+Show_Data:
+  DEBUG Home, "DS1822 Data",CR,CR
+  DEBUG "Serial Number : "
+  FOR idx = 6 TO 1
+    DEBUG HEX2 romData(idx)
+  NEXT
+  DEBUG CR,"     Checksum : ",HEX2 romData(7),CR,CR
+
+Show_Raw:
+  GOSUB Get_Temp
+  DEBUG "    Raw Input : ",BIN16 tempIn,CR,CR
+
+Display_Temperatures:
+  DEBUG "       Temp C : ", SDEC tempC,DegSym,CR
+  DEBUG "       Temp F : ", SDEC tempF,DegSym,CR
+
+  PAUSE 1000
+  GOTO Main
+  END
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'
+' This subroutine checks to see if any 1-Wire devices are present on the
+' bus.  It does NOT search for ROM codes
+'
+Device_Check:
+  devCheck = 0
+  OWOUT OWpin,OW_FERst,[SearchROM]              ' reset and start search
+  OWIN  OWpin,OW_BitMode,[devCheck.Bit1,devCheck.Bit0]
+  RETURN
+
+
+Get_Temp:
+  OWOUT OWpin,OW_FERst,[SkipROM,CnvrtTemp]      ' send conversion command
+  PAUSE 500                                     ' give it some time
+  OWOUT OWpin,OW_FERst,[SkipROM,RdScratch]      ' go get the temperature
+  OWIN  OWpin,OW_BERst,[tLo,tHi]
+
+  tSign = sign                                  ' save sign bit
+  tempC = tempIn
+  tempC = tempC >> 4                            ' round to whole degrees
+  IF (tSign = 0) THEN NoNegC
+  tempC = tempC | $FF00                         ' extend sign bits for negs
+
+NoNegC:
+  tempF = tempC */ $01CD                        ' multiply by 1.8
+  IF tSign = 0 THEN NoNegF                      ' if neg, extend sign bits
+  tempF = tempF | $FF00
+
+NoNegF:
+  tempF = tempF + 32                            ' finish C -> F conversion
+  RETURN

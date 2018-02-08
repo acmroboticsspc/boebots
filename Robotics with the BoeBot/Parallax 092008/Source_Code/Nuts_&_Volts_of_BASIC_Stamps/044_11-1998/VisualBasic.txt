@@ -1,0 +1,63 @@
+' Listing 45.4
+' Nuts & Volts: Stamp Applications, November 1998
+
+Private Sub cmdDnload_Click()
+ Dim addr As Byte
+ Dim tries As Byte
+ Dim temp As String
+ Dim x As Byte
+ Dim response
+ 
+ Call EnableButtons(False)
+ mnuFile.Enabled = False
+ mnuPort.Enabled = False
+ Screen.MousePointer = vbHourglass
+ downloading = True
+ 
+ ' send download command
+ Call SendHeader(CmdDn)
+ Call Delay(200)
+ 
+ ' download the ee data
+ addr = 1
+ Do
+  lblByteCount.Caption = "Sending byte" & Str(addr) & " of 64"
+  tries = 0
+  Do
+   ' get a byte
+   temp = Mid$(txtDnload.Text, addr, 1)
+   ' if empty, program the location with 0
+   If (temp = "") Then temp = Chr$(0)
+   ' build the buffer (adjusted address + byte)
+   txBuf = Chr$(addr - 1) & temp
+   ' send Start byte and buffer
+   MSComm1.Output = Chr$(Start) & txBuf
+   
+   ' wait for two-byte response
+   Do
+    DoEvents
+    x = MSComm1.InBufferCount
+   Loop Until (x = 2)
+   rxBuf = MSComm1.Input
+      
+   ' increment tries counter
+   tries = tries + 1
+  Loop Until (tries = 5) Or (rxBuf = txBuf)
+  
+  ' exit if bad chip
+  If (tries = 5) And (rxBuf <> txBuf) Then
+   response = MsgBox("Error: Cell " & Str(addr), vbOKOnly)
+   addr = 65
+  End If
+ 
+  addr = addr + 1
+  Call Delay(150)
+ Loop While (addr <= 64)
+ 
+ lblByteCount.Caption = ""
+ Call EnableButtons(True)
+ mnuFile.Enabled = True
+ mnuPort.Enabled = True
+ Screen.MousePointer = vbDefault
+ downloading = False
+End Sub 

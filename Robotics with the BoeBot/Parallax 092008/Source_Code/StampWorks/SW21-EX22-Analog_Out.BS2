@@ -1,0 +1,82 @@
+' =========================================================================
+'
+'   File....... SW21-EX22-Analog_Out.BS2
+'   Purpose.... Analog Output using PWM and RC circuit
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates how the PWM command can be used with an opamp
+' buffer to create a variable voltage output.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+D2Aout          PIN     0                       ' analog out pin
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+#SELECT $STAMP
+  #CASE BS2, BS2E
+    CycAdj      CON     $100                    ' x 1.0, cycle adjust
+  #CASE BS2SX, BS2PX
+    CycAdj      CON     $280                    ' x 2.5
+  #CASE BS2P
+    CycAdj      CON     $18A                    ' x 1.54
+  #CASE BS2PE
+    CycAdj      CON     $09E                    ' x 0.62
+#ENDSELECT
+
+OnTime          CON     5                       ' 5 ms
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+level           VAR     Byte                    ' analog level
+mVolts          VAR     Word                    ' output in millivolts
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  DEBUG CLS,
+        "Analog Output   ", CR,
+        "--------------- ", CR,
+        "level....       ", CR,
+        "mVolts...       "
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    FOR level = 0 TO 255                        ' increase voltage to LED
+      PWM D2Aout, level, (OnTime */ CycAdj)
+      GOSUB Show_Level
+    NEXT
+    FOR level = 255 TO 0                        ' decrease voltage to LED
+      PWM D2Aout, level, (OnTime */ CycAdj)
+      GOSUB Show_Level
+    NEXT
+  LOOP                                          ' do it again
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Show_Level:
+  mVolts = level */ $139B                       ' level * 19.6 mV
+  DEBUG CRSRXY, 10, 2,
+        DEC level, CLREOL,
+        CRSRXY, 10, 3,
+        DEC1 (mVolts / 1000), ".", DEC3 mVolts
+  RETURN

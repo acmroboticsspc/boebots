@@ -1,0 +1,51 @@
+' -----[ Title ]-----------------------------------------------------------
+'
+' File...... SHOWFREQ.BS2
+' Purpose... Displays input frequency 
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+
+' {$STAMP BS2}					' or BS2e, BS2sx or BS2p
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program reads an incoming square wave with PULSIN and displays the
+' frequency in Hertz.  
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+'
+F_pin		CON	0				' frequency input pin
+
+
+' -----[ Constants ]-------------------------------------------------------
+'
+FreqCon	CON	$0200				' conversion for BS2/BS2e (2.00)
+'FreqCon	CON	$00CC				' conversion for BS2sx    (0.80)
+'FreqCon	CON	$00BF				' conversion for BS2p     (0.75)
+
+
+' -----[ Variables ]-------------------------------------------------------
+'
+pHigh		VAR	Word				' high pulse width
+pLow		VAR	Word				' low pulse width
+period	VAR	Word				' cycle time (high + low)
+freq		VAR	Word				' frequency 
+
+' -------------------------------------------------------------------------
+
+Main:
+  PULSIN F_pin,0,pHigh				' get high portion of input
+  PULSIN F_pin,1,pLow				' get low portion of input
+  period = (pHigh + pLow) */ FreqCon	' calculate cycle width
+  freq = 50000 / period * 20			' calculate frequency
+
+  ' display on DEBUG screen
+
+  DEBUG Home
+  DEBUG "Period...... ", DEC period, " uS    ", CR
+  DEBUG "Frequency... ", DEC freq, " Hz    "
+
+  GOTO Main						' do it again
+  END

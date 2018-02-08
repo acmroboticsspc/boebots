@@ -1,0 +1,88 @@
+; PROGRAM: LTC1298.SRC (Read LTC1298 analog-to-digital converter).
+; Program demonstrates the use of an external serial ADC (Linear Tech
+; LTC1298) with PIC16C5x-series controllers. Variable dc voltages
+; (0-5V) at pins 2 or 3 of the ADC control the 12-bit value of the
+; variable ADres.
+
+CS	=	ra.0	; Connect to CS pin of 1298. 
+CLK	=	ra.1	; Connect to CLK pin. 
+DATA	=	ra.2	; Connect to Din and Dout pins. 
+
+; Put variable storage above special-purpose registers.
+	org	8
+clocks	ds	1	; Clock-cycle counter.
+ADresH	ds	1	; High byte of 12-bit ADC result.
+ADresL	ds	1	; Low byte of 12-bit ADC result.
+cnfig	ds	1	; Holds configuration bits for ADC. 
+
+startb	=	cnfig.0 	; Start-bit for conversation with ADC (always 1).
+sglDif	=	cnfig.1 	; 1=single-ended, 2-ch; 0=differential, 1-ch
+oddSign	=	cnfig.2 	; Selects ch 0 or 1 for input or + polarity.
+msbf	=	cnfig.3 	; MSBF mode select (always 1).
+xmit	=	0	; TRIS setting to send data to LTC1298.
+recv	=	100b	; TRIS setting to receive data from LTC1298.
+fixBs	=	1001b	; Fixed bits for configuration setting.
+outClk	=	4	; Number of bits sent to LTC1298.
+inClk	=	13	; Number of bits received from LTC1298.
+
+; Remember to change device info when programming part.
+	device	pic16c55,xt_osc,wdt_off,protect_off
+	reset	start
+
+; Set starting point in program ROM to zero
+	org	0
+start	mov	!ra, #xmit	; Set TRIS ra to send configuration to ADC.
+	mov	!rb,#0	; Set TRIS rb and rc to output. 
+	mov	!rc,#0
+	setb	CS	; Deselect LTC1298 for now.
+
+; Set up the configuration bits. A 1 in sglDif requests a single-ended conversion; 0 requests a
+; differential conversion. For single-ended measurements, oddSign selects the channel: 
+; 0 = channel 0; 1 = channel 1. For differential conversions, oddSign selects polarity: 1
+;  = channel 1 +, 0 = channel 0 +. 
+
+	setb	sglDif	; Set for single-ended.
+	clrb	oddSign 	; Sample channel 0.
+
+; Call the ADC subroutine.
+	call	convert
+	mov	rb, ADresL	; Put the bits of ADC result on rb and rc. 
+	mov	rb, ADresH
+	jmp	$	; Stop program: results in registers 9 and A.
+
+; This is the subroutine that gets the conversion from the LTC1298. Upon
+; entry, the configuration bits must be set up in the cnfig register.
+; Upon exit, the 12-bit result will be in ADresH/L. The cnfig register
+; will have been restored to its original state.
+
+convert
+	mov	!rb,#xmit	; Ready to transmit configuration to ADC.
+	clrb	CLK	; Begin with clock low.
+	clrb	CS
+	OR	cnfig,#fixBs	; Write 1s to start and msbf bits
+	mov	clocks,#outClk	; Set up number of config bits to write.
+	clr	ADresL	; Clear results registers.
+	clr	ADresH
+:loop1	rr	cnfig	; Rotate bit 0 into carry.
+	movb	DATA,c	; Move carry bit to DATA pin. 
+	setb	CLK	; Pulse the clock line.
+	jmp	$+1
+	clrb	CLK
+	djnz	clocks,:loop1	; Repeat for all config bits.
+	rr	cnfig	; Rearrange config register to original state.
+	swap	cnfig
+	mov	!rb,#recv	; Change TRIS to input data.
+	mov	clocks,#inClk	; Set up number of data bits to receive.
+:loop2	rl	ADresL	; Rotate 16-bit ADres register left.
+	rl	ADresH
+	snb	DATA	; Copy data bit to lsb of ADres.
+	setb	ADresL.0
+	sb	DATA
+	clrb	ADresL.0
+	setb	CLK	; Pulse the clock line.
+	jmp	$+1
+	clrb	CLK
+	djnz	clocks,:loop2	; Repeat for all data bits.
+	setb	CS	; Deactivate the LTC1298.
+	ret
+

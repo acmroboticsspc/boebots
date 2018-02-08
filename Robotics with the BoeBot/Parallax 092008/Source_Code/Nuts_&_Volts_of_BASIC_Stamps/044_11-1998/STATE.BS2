@@ -1,0 +1,125 @@
+' Program Listing 45.1
+' Nuts & Volts: Stamp Applications, November 1998
+
+' ----[ Title ]-----------------------------------------------------------
+'
+' File...... STATE.BS2
+' Purpose... State machine framework 
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' WWW....... http://members.aol.com/jonwms
+' Started... 03 OCT 98
+' Updated... 04 OCT 98
+
+
+' ----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates the general operation of a state machine. Its
+' purpose is to monitor and debounce several inputs with near real-time
+' precision (emulating a software interrupt-based process).
+'
+' Run the program on a Parallax BSAC
+
+
+' ----[ Revision History ]------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------
+'
+SW0_	VAR	In8	       		' switch inputs
+SW1_	VAR	In9
+LED0_	VAR	Out10			' LED outputs
+LED1_	VAR	Out11
+
+
+' ----[ Constants ]-------------------------------------------------------
+'
+On	CON	0			' active low output
+Off	CON	1
+
+
+' ----[ Variables ]-------------------------------------------------------
+'
+state	VAR	Byte
+tics	VAR	Byte(2)
+alarm	VAR	Byte(2)
+swMax	VAR	Byte(2)
+x	VAR	Byte
+test	VAR	Byte
+
+
+' ----[ EEPROM Data ]-----------------------------------------------------
+'
+
+' ----[ Initialization ]--------------------------------------------------
+'
+Init:	DirC = %1100
+	state = 0
+
+	LED0_ = Off			' start with LEDs off
+	LED1_ = Off
+
+	tics(0) = 0			' clear the input counters
+	tics(1) = 0
+
+	alarm(0) = Off			' alarms clear
+	alarm(1) = Off
+
+	swMax(0) = 20			' alarm on 20 "tics" (2 sec)
+	swMax(1) = 50			' alarm on 50 "tics" (5 sec)
+
+
+' ----[ Main Code ]-------------------------------------------------------
+'
+Main:	' HIGH 0			' start of timing pulse
+	GOSUB ChkSw			' check the inputs
+
+	' process the current state
+	BRANCH state,[Proc0,Proc1,Proc2]
+	GOTO Main
+
+Proc0:	LED0_ = alarm(0)		' update the LEDs
+	LED1_ = alarm(1)
+	PAUSE 50			' pad to simulate other code
+	GOTO NxtSt
+
+Proc1:	test = alarm(0) + alarm(1)
+	IF test > 0 THEN P1x		' if both on, flash
+	  LED0_ = Off
+	  LED1_ = Off
+P1x:	PAUSE 50
+	GOTO NxtSt
+
+Proc2:	' do something else
+	PAUSE 51
+	GOTO NxtSt
+
+NxtSt:	PAUSE 38			' main loop timing trim
+	state = (state + 1) // 3	' update the state
+
+	' LOW 0				' end of timing pulse
+
+	GOTO Main
+
+
+' ----[ Subroutines ]-----------------------------------------------------
+'
+ChkSw:	' check the state of the input switches
+	FOR x = 0 TO 1			' loop through inputs
+	  BRANCH x,[CS0,CS1]
+CS0:	  IF Sw0_ = OFF THEN SwNo
+	    GOTO SwYes
+CS1:	  IF Sw1_ = OFF THEN SwNo
+	    GOTO SwYes
+SwYes:	  PAUSE 1  			' timing trim
+	  tics(x) = tics(x)+1		' update input counter
+	  IF tics(x) < swMax(x) THEN SwNext
+	    alarm(x) = On		' set alarm for input
+	    tics(x) = 0		' start new counter
+	    GOTO SwNext
+SwNo:	  PAUSE 2  			' timing trim
+	  alarm(x) = Off		' clear the alarm bit
+	  tics(x) = 0			' reset the input counter
+SwNext:	NEXT
+	RETURN

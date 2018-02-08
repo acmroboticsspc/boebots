@@ -1,0 +1,31 @@
+; TUT024.SRC
+;
+; --------------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" 2nd Edition by Guenther Daubach
+; Copyright (c), by Parallax Inc. 2004
+; --------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET   Main
+
+TRIS    equ        $0f
+PLP     equ        $0e
+
+org     $000
+;--------------------------------------
+; ISR
+;--------------------------------------
+  xor   rb,      #%00000001
+  mov   rtcc,    #251
+  reti
+
+org     $100
+Main
+  mov   !rb,     #%11111110
+  clrb  rb.0
+  mov   rtcc,    #251
+  mov   !option, #%10111000
+Loop
+  inc   8
+  jmp   Loop

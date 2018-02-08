@@ -1,0 +1,70 @@
+' =========================================================================
+'
+'   File....... PWMPAL_Version.BS2
+'   Purpose.... Returns PWMPAL Version -- prints to DEBUG
+'   Author..... Parallax
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 18 JUN 2003
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+
+' This program can be used to verify the presence of the PWMPAL, and with
+' a bit of extra code, validate the version number.
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+PpPin           PIN     0                       ' PWMPAL Serial I/O
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+T9600           CON     84
+T19200          CON     32
+T38400          CON     6
+PpBaud          CON     T38400
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+version         VAR     Byte                    ' three byte array
+verMajor        VAR     version                 '   version(0)
+verPoint        VAR     Byte                    '   version(1)
+verMinor        VAR     Byte                    '   version(2)
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Scan_PWMPAL:
+  verMajor = "X"
+  SEROUT PpPin, PpBaud, ["!ID"]
+  SERIN PpPin, PpBaud, 50, Check_PWMPAL, [STR version\3]
+
+Check_PWMPAL:
+  IF ((verMajor <> "1") OR (verMinor <> "0")) THEN
+    DEBUG CLS, "Incorrect or missing PWMPAL.", CR, CR
+    END
+  ENDIF
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DEBUG "PWMPAL Version: ", STR version\3
+  END
+
+
+' -----[ Subroutines ]-----------------------------------------------------

@@ -1,0 +1,131 @@
+' -----[ Title ]------------------------------------------------------
+'
+' File...... ID_check.bsp
+' Purpose... Check an 1-wire ident against stored IDs 
+' Author.... Claus Kuehnel  
+' Started... 2001-07-24 
+' Updated... 
+
+' -----[ Program Description ]----------------------------------------
+'
+' 
+
+' -----[ Revision History ]-------------------------------------------
+'
+
+' -----[ Directives ]-------------------------------------------------
+'
+'{$STAMP BS2p} 			'specifies a BS2p
+
+' -----[ constants ]--------------------------------------------------
+'
+OWpin		con 15	'1-wire device pin
+LED		con 12	'LED
+
+OW_FERst	con %0001	'Front-End Reset
+OW_BERst	con %0010	'Back-End reset
+OW_BitMode	con %0100	
+
+ReadROM	con $33	'Read ROM Command
+SearchROM	con $F0	'Search ROM Comand
+ 
+NoDevice	con %11	'No device present
+
+IDs		con 5		'Number of stored IDs
+     
+' -----[ Variables ]--------------------------------------------------
+'
+idx		var byte	'Index variable
+index		var byte
+ROMData	var byte(8)	'ROM Data from iButton
+ID		var byte	'Stored ID (0 to IDs-1)
+value		var byte
+devcheck	var nib	'Result of Device Check
+IDtrue	var bit	'Result of ID Compare
+    
+
+' -----[ Initialization ]---------------------------------------------
+'
+init:	pause 1000		'Open debug window
+	high LED 		'LED On
+
+' -----[ Main Code ]--------------------------------------------------
+'
+main:	IDtrue = 0
+	debug cls, "Connect your batch, please.", cr		
+	gosub devicecheck
+	if (devcheck <> NoDevice) then read_iButton
+
+NoDeviceFound:
+	debug "No batch present."
+	pause 1000
+	goto main
+
+read_iButton:
+	gosub toggleLED
+	debug "Reading...", cr
+	debug "Dallas 1-Wire ID: "
+	owout OWpin, OW_FERst, [ReadROM]
+	owin  OWpin, OW_BERst, [str ROMData\8]
+	gosub displayROMData
+	debug cr, "Search in Database... "
+	gosub searchID
+	if IDtrue then checkOK
+	pause 1000
+	goto main
+checkOK:
+	debug cr, "ID found."
+	for idx = 0 to 10
+		gosub toggleLED
+	next
+	pause 1000
+	goto main
+
+	end
+
+' -----[ Subroutines ]------------------------------------------------
+'
+devicecheck:
+	devcheck = 0
+	owout OWpin, OW_FERst, [SearchROM]
+	owin  OWpin, OW_BitMode, [devcheck.bit1, devcheck.bit0]
+	return
+
+displayROMData:
+	for idx = 0 to 7
+		debug hex2 ROMData(idx), " "
+	next
+	return
+
+searchID:
+	restore
+	ID = 0
+nxt:	for idx = 0 to 7
+		read ID+idx, value
+		if value <> ROMData(idx) then nextID
+	next
+	IDtrue = 1:return
+nextID:
+	ID = ID + 8		'Next stored ID
+	if ID <= IDs * 8 then repeat_check
+	IDtrue = 0
+	debug cr, "ID not found."
+	return
+repeat_check:
+	debug "*"
+	goto nxt
+	
+toggleLED:
+	toggle LED
+	pause 100
+	toggle LED
+	pause 20
+	return
+
+' -----[ Data ]-------------------------------------------------------
+'
+data $10, $37, $84, $11, $00, $00, $00, $F0
+data $04, $4B, $7F, $49, $00, $00, $00, $08
+data $10, $37, $84, $11, $00, $00, $00, $F2
+data $10, $37, $84, $11, $00, $00, $00, $F0
+data $10, $37, $84, $11, $00, $00, $00, $F0

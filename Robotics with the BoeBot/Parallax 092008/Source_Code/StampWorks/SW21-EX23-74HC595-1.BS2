@@ -1,0 +1,67 @@
+' =========================================================================
+'
+'   File....... SW21-EX23-74HC595-1.BS2
+'   Purpose.... Expanded outputs with 74HC595
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program demonstrates a simple method of turning three BASIC Stamp
+' I/O pins into eight digital outputs with a 74HC595 shift register.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Clock           PIN     0                       ' shift clock (74HC595.11)
+SerData         PIN     1                       ' serial data (74HC595.14)
+Latch           PIN     2                       ' output latch (74HC595.12)
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+DelayTime       CON     100
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+pattern         VAR     Byte                    ' zig-zag pattern
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  LOW Latch                                     ' make output and low
+  pattern = %00000001
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Out_595                               ' put pattern on 74x595
+    PAUSE DelayTime                             ' hold
+    pattern = pattern << 1                      ' shift pattern left
+  LOOP UNTIL (pattern = %10000000)
+  DO
+    GOSUB Out_595
+    PAUSE DelayTime
+    pattern = pattern >> 1                      ' shift pattern right
+  LOOP UNTIL (pattern = %00000001)
+  GOTO Main
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Out_595:
+  SHIFTOUT SerData, Clock, MSBFIRST, [pattern]  ' send pattern to '595
+  PULSOUT Latch, 5                              ' latch outputs
+  RETURN

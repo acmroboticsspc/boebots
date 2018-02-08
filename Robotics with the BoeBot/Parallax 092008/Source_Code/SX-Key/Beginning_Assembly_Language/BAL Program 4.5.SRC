@@ -1,0 +1,49 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 4.5
+;=======================================================================
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	start_point
+		freq	50000000	; 50 MHz
+
+
+		org	8		; data start
+value		ds	1
+result		ds	1
+result2		ds	1
+counter		ds	1
+		watch 	value,8,udec
+		watch	result,8,udec
+		watch	result2,8,udec
+val 		= 	21
+
+		org	0		; code start
+start_point				; multiply by 10 2 different ways
+		mov	value,#val
+; first a loop
+		mov	counter,#10
+		clr	result
+		mov	w,value
+mloop		add	result,w
+		djnz	counter,mloop
+; ok answer is in result
+		nop
+		mov	value,#val
+; now do shift add
+		clc
+		rl	value		; value = value *2
+		mov	result2,value
+		clc
+		rl	value
+		clc
+		rl	value   	; value = value *8
+		add	result2,value
+; same answer in result2
+
+		sleep	
+
+
+
+

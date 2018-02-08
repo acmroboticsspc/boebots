@@ -1,0 +1,95 @@
+' -----[ Title ]-----------------------------------------------------------
+' Toddler Program 4.1: Which Table
+' Demonstrates basic and advanced tables
+' {$STAMP BS2}
+' {$PBASIC 2.5}  
+
+' -----[ Constants ]-------------------------------------------------------
+
+' The following state tables are lists of movement state numbers.
+' A xx indicates the end of a list.
+' These are used with the Movement routine.
+
+TL              CON     0
+TC              CON     1
+TR              CON     2
+
+SL              CON     3
+SC              CON     4
+SR              CON     5
+
+xx              CON     255                     ' Movement table limit
+                                                ' entry may be increased.
+
+bFinish         CON     0
+bForward        CON     1
+bBackward       CON     2
+bLeftTurn       CON     3
+bRightTurn      CON     4
+bPivotLeft      CON     5
+bPivotRight     CON     6
+
+' -----[ Variables ]-------------------------------------------------------
+
+Mx              VAR     Word
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+'
+' ---- Advanced Movement Tables ----
+' Used for 
+
+LeftSemicircle  DATA    7, bLeftTurn,  bLeftTurn,  bForward, xx
+RightSemicircle DATA    7, bRightTurn, bRightTurn, bForward, xx
+
+WalkForward3    DATA    3, bForward, xx
+WalkForward8    DATA    8, bForward, xx
+
+' ---- Basic  Movement Tables ----
+' These tables can contain movement support codes used in the advanced
+' movement tables.
+
+BasicMovements  CON     Forward
+
+Forward         DATA    1, TR, SL, TL, SR, xx
+Backward        DATA    1, TR, SL, TL, SR, xx
+LeftTurn        DATA    1, TL, SR, TC, SL, TL, SR, TR, SL, xx
+RightTurn       DATA    1, TR, SL, TC, SR, TR, SL, TL, SR, xx
+
+PivotLeft       DATA    3, TL, SR, TC, SL, TR, SR, TC, SL, xx
+PivotRight      DATA    3, TR, SL, TC, SR, TL, SL, TC, SR, xx
+
+Finish          DATA    1, TR, SC, TC, xx
+
+
+' -----[ Main Code ]-------------------------------------------------------
+' Walking routine is defined by the Mx value. Mix the basic and advanced 
+' movement tables to develop the walking routines for your Toddler.
+
+Main_Program:   
+  Mx = LeftSemicircle
+  GOSUB Movement
+
+  Mx = WalkForward3
+  GOSUB Movement
+
+  Mx = PivotRight
+  GOSUB Movement
+
+  Mx = WalkForward8
+  GOSUB Movement
+
+  Mx = Finish
+  GOSUB Movement
+END
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Movement:
+  IF Mx >= BasicMovements THEN BasicMovementTable
+
+  DEBUG "EEPROM address ", dec Mx," is an ADVANCED movement table.",cr
+  RETURN
+
+BasicMovementTable:
+  DEBUG "EEPROM address ", dec Mx," is a BASIC movement table.",cr
+  RETURN

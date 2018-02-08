@@ -1,0 +1,173 @@
+; APP020.SRC - Scanning a Key Matrix, First Version
+;
+; ---------------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller", 2nd Edition by Guenther Daubach
+; Copyright (c) by Parallax Inc. 2004
+; ---------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET   Main
+
+TRIS    = $0f
+PLP     = $0e
+
+TickOn MACRO
+  setb Flags.0                  ; Macro to set the tick flag
+ENDM
+
+TickOff MACRO
+  clrb Flags.0                  ; Macro to clear the tick flag
+ENDM
+
+SkipIfTick MACRO
+  sb Flags.0
+ENDM
+
+org     $08
+Flags   ds 1                    ; Register for various flags
+
+org     $30
+Keys    equ $
+Column  ds 1                    ; Current scan column
+DebCnt  ds 1                    ; De-bounce counter
+KeyId   ds 1                    ; Id of pressed key
+
+org     $50
+Timers  equ $
+us5     ds 1                    ; Counter for 5 us
+Msec    ds 1                    ; Counter for 1 ms
+
+org     $000
+
+;** Timer-VP *********************************************************
+;
+Clock
+  Bank Timers
+  mov   w, #250                 ; 5us * 250 = 1,25 ms
+  dec   us5
+  snz
+    mov us5, w
+  mov w, #2
+  snz
+    dec Msec
+  snz
+    mov MSec, w
+  snz
+    TickOn                      ; Every 2,5 ms
+
+  mov   w, #-250                ; Call ISR every 5 us
+  retiw
+
+;** Subroutine reads the Column variable and returns the column mask
+;   in w.
+;
+Col2Mask
+  mov w, Column
+  jmp pc+w
+  retw %11101111
+  retw %11011111
+  retw %10111111
+  retw %01111111
+
+;** This subroutine would send the key code in "real live"
+;  
+SendKey
+  mov w, KeyId  ; This is just an anchor to set
+    ;  a breakpoint
+  ret
+  
+org     $100
+
+;** Mainline program *******************************************
+;
+Main
+
+include "Clr2x.inc"
+
+;** Initialize the data ports
+;
+  mode PLP
+  mov  !rc, #%11110000          ; Pull-up at rc.3...0
+  mode TRIS
+  mov  !rc, #$ff                ; All lines Hi-Z for now
+  clr  rc                       ; pre-initialize rc with all zeros
+  bank Keys
+  clr  Column
+  mov  !option, #%10011111      ; Enable the RTCC interrupt
+
+;** Main program loop
+;
+Loop
+  SkipIfTick                    ; Wait for the 2.5 ms tick
+    jmp Loop
+
+  TickOff                       ; Clear the tick flag
+  inc  Column                   ; Next column, but don't
+  clrb Column.2                 ;  allow values > 3
+  call Col2Mask                 ; Get the column mask,
+  mov  !rc, w                   ;  and set the Port C TRIS register
+  mov  w, /rc                   ; Complement the row data, and
+  and  w, #$0f                  ;  mask out the rows
+  sz                            ; 0, if no keys are pressed in that
+                                ;  column
+    jmp :Key                    ; Key(s) pressed in the column, 
+                                ;  go, and decode the key
+  jmp Loop                      ; Continue waiting for a tick and
+                                ;  a key
+
+;** Decode a key
+;
+:Key
+  mov KeyId, w                  ; Save column information
+  mov DebCnt, #4                ; De-bounce = 4 * 5 ms = 20 ms
+
+:Debounce
+  SkipIfTick                    ; Wait for the 2,5 ms tick
+    jmp :Debounce
+  TickOff                       ; Clear the tick flag
+  decsz DebCnt                  ; De-bounce counter - 1
+    jmp :Debounce
+
+  mov w, /rc                    ; Read, invert, and 
+  and w, #$0f                   ;  mask out the rows again
+  mov w, KeyId-w                ; Same as before de-bouncing ?
+  sz                            ; If yes, continue decoding,
+    jmp Loop                    ;  else, we had a bounce
+
+  ;** Convert row and column info into key id
+  ;
+  clc
+  rr  KeyId                     ; Convert 8, 4, 2, 1 to 4, 2, 1, 0
+  mov w, #3 
+  snb KeyId.2                   ; Convert 4 to 3 and end up in
+                                ;  3, 2, 1, 0
+    mov KeyId, w
+
+  clc
+  rl KeyId                      ; KeyId = KeyId * 4 + Column
+  rl KeyId
+  or KeyId, Column
+
+  call SendKey                  ; Send key Id
+  
+;** Wait for key release
+;
+:WaitRelease  
+  mov DebCnt, #4                ; De-bounce time = 20 ms
+
+:RelDebounce
+  SkipIfTick                    ; Wait for 2,5 ms tick
+    jmp :RelDebounce  
+  TickOff                       ; Clear the tick flag
+  
+  mov w, /rc                    ; Read inverted row data, and
+  and w, #$0f                   ;  mask out the rows
+  sz
+    jmp :WaitRelease            ; It's a bounce, de-bounce again
+  decsz DebCnt                  ; De-bouncing time (20 ms) ended?
+    jmp :RelDebounce            ; No, keep on de-bouncing
+        
+  jmp Loop                      ; Wait for next key down
+
+END

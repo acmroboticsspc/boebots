@@ -1,0 +1,60 @@
+' -----[ Title ]--------------------------------------------------------------
+' Applied Robotics with the SumoBot - TestResetButton.bs2
+
+' {$STAMP BS2}                               ' Target = BASIC Stamp 2
+' {$PBASIC 2.5}                              ' Language = PBASIC 2.5
+
+' -----[ I/O Definitions ]---------------------------------------------------
+
+LedSpeaker      PIN     5                    ' P5 controls LED & speaker
+
+' -----[ Variables ]----------------------------------------------------------
+
+temp            VAR     Word                 ' Temporary variable
+counter         VAR     Byte                 ' Loop counting variable.
+
+' -----[ EEPROM Data ]--------------------------------------------------------
+
+RunStatus       DATA    0                    ' Run status EEPROM byte
+
+' -----[ Initialization ]-----------------------------------------------------
+
+GOSUB Reset                                  ' Wait for Reset press/release
+GOSUB Start_Delay                            ' 5 Second delay
+
+' -----[ Main Routine ]-------------------------------------------------------
+
+ResetTest:
+
+  DEBUG CR, "Done!"                          ' Verify we made it to main.
+  END
+
+' -----[ Subroutine - Reset ]-------------------------------------------------
+
+Reset:
+
+  READ RunStatus, temp                       ' Byte @RunStatus -> temp
+  temp = temp + 1                            ' Increment temp
+  WRITE RunStatus, temp                      ' Store new value for next time
+
+  IF (temp.BIT0 = 1) THEN                    ' Examine temp.BIT0
+    DEBUG CLS, "Press/release Reset", CR,    ' 1 -> end, 0 -> keep going
+               "button..."
+    END
+  ELSE
+    DEBUG CR, "Program running..."
+  ENDIF
+
+  RETURN
+
+' -----[ Subroutine - Start_Delay ]-------------------------------------------
+
+Start_Delay:
+
+  FOR counter = 1 TO 5                       ' 5 beeps, 1/second
+    PAUSE 900
+    FREQOUT LedSpeaker, 100, 3000
+  NEXT
+
+  RETURN
+

@@ -1,0 +1,128 @@
+;=======================================================================
+;Beginning Assembly Language for the SX Microcontroller
+;Program 12.1
+;=======================================================================
+		device	sx28l,oschs3
+		device	turbo,stackx,optionx
+		IRC_CAL	IRC_SLOW
+		reset	start_point
+		freq	50000000 	; 50 Mhz
+
+BAUDRATE	EQU	9600 		; baud rate to stamp
+; Port Assignment: Bit variables
+;
+rx_pin		EQU	rb.2 		; PC input
+		org	8
+; Head/tail pointer 
+head		ds	1	
+tail		ds	1
+byte        	ds	1		;temporary UART byte
+rx_byte     	ds	1   		;buffer for incoming byte
+
+		org	10h                     
+serial          = 	$ 		;UART bank
+
+rx_count        ds	1 		;number of bits remaining
+rx_divide       ds	1		;receive timing counter
+
+IF BAUDRATE=9600
+baud            =	32            
+baud15          =	48            
+ENDIF
+
+int_period      =	163	
+bufmod		equ	$F
+
+
+; circular buffer is at $50
+		org	$50
+scan		ds	1		; buffer
+
+
+		org	0
+; Interrupt service routine
+isr		bank	serial		;switch to serial register bank
+
+:receive   
+		movb	c,/rx_pin        
+		test	rx_count	;waiting?                
+		jnz	:rxbit		;if not, 
+		mov	w,#9		;in case start, ready 9
+		sc			;if start, set rx_count
+		mov	rx_count,w           
+		mov	rx_divide,#baud15	;ready 1.5 bit periods
+:rxbit		djnz	rx_divide,rxdone	;8th time through?
+		mov	rx_divide,#baud
+		dec	rx_count		;last bit?
+		sz				;if not, save bit
+		rr	rx_byte              
+		snz				;if so, put in circbuff
+		call	bufferin
+rxdone
+
+;interrupt every 'int_period' clocks
+end_int		mov	w,#-int_period          
+		retiw				;exit interrupt
+
+
+; put character in circular buffer
+bufferin		
+		mov	fsr,#scan
+		add	fsr,head
+		mov	ind,rx_byte
+		inc	head
+		and	head,#bufmod
+		ret
+
+start_point
+		mov	ra,#%0011		;initialize port RA
+		mov	!ra,#%0000		;Set RA in/out directions
+		mov	rb,#%00001010
+		mov	!rb,#%11110101
+
+		CLR	FSR			;reset all ram starting at 08h
+:zero_ram	SB	FSR.4			;are we on low half of bank?
+		SETB	FSR.3			;If so, don't touch regs 0-7
+		CLR	IND			;clear using indirect addressing
+		IJNZ	FSR,:zero_ram		;repeat until done
+
+		mov	!option,#%10011111	;enable rtcc interrupt
+		clr	rb
+
+; Here is where the action is!
+mainloop
+		call	get_byte
+		cje	byte,#'A',Aon
+		cje	byte,#'a',Aoff
+		cje	byte,#'B',Bon
+		cje	byte,#'b',Boff
+		jmp	mainloop
+	
+	
+Aon
+		clrb	ra.0
+		jmp	mainloop
+Aoff
+		setb	ra.0
+		jmp	mainloop
+Bon
+		clrb	ra.1
+		jmp	mainloop
+Boff
+		setb	ra.1
+		jmp	mainloop
+
+
+
+; Subroutine - Get byte via serial port
+;
+get_byte  
+		mov	w,head			;wait till byte is received
+		mov	w,tail-w
+		jz	get_byte
+		mov	fsr,#scan
+		add	fsr,tail
+		mov	byte,ind        
+		inc	tail
+		and	tail,#$F
+		ret

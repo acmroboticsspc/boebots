@@ -1,0 +1,17 @@
+'{$STAMP BS2p}
+
+melody DATA WORD 500, WORD 700, WORD 900, WORD 500
+' frequency     1885 Hz,  2639 Hz,  3393 Hz,  1885 Hz
+
+tone 		VAR 	WORD
+tone_lo 	VAR 	tone.lowbyte
+tone_hi 	VAR 	tone.highbyte
+i		VAR 	nib
+	
+	FOR i=0 TO 3
+    		READ 2*i + melody,tone_lo
+    		READ 2*i + melody + 1, tone_hi
+    		tone = tone_hi * 256 + tone_lo
+    		DEBUG DEC? tone 
+    		FREQOUT 11, 500, tone
+	NEXT

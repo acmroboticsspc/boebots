@@ -1,0 +1,62 @@
+' =========================================================================
+'
+'   File....... SW21-EX08-7-Seg_Counter.BS2
+'   Purpose.... Single digit, 7-Segment LED counter
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' Displays decimal digits (0 - 9) on a 7-Segment display connected to
+' P0-P7.  This program will work, unmodified, on any BS2-family module.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Segs            VAR     OUTL                    ' Segments on P0 - P7
+SegsDirs        VAR     DIRL                    ' DIRS for segments
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+idx             VAR     Nib                     ' counter variable
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+'                        .GFEDCBA
+'                        --------
+Digit0          DATA    %00111111
+Digit1          DATA    %00000110
+Digit2          DATA    %01011011
+Digit3          DATA    %01001111
+Digit4          DATA    %01100110
+Digit5          DATA    %01101101
+Digit6          DATA    %01111101
+Digit7          DATA    %00000111
+Digit8          DATA    %01111111
+Digit9          DATA    %01100111
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  SegsDirs = %01111111                          ' make outputs for LEDs
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  FOR idx = 0 TO 9                              ' loop through digits
+    READ (Digit0 + idx), Segs                   ' move pattern to display
+    PAUSE 1000
+  NEXT
+  GOTO Main

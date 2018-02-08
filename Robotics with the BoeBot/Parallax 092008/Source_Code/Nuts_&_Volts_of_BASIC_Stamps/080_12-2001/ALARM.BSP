@@ -1,0 +1,412 @@
+' -----[ Title ]----------------------------------------------------------------
+'
+' File...... ALARM.BSP
+' Purpose... Simple Alarm System Using The BS2p-40
+' Author.... Jon Williams
+' E-mail.... jonwms@aol.com
+' Started... 28 OCT 2001
+' Updated... 06 NOV 2001
+
+' { $STAMP BS2p }
+
+
+' -----[ Program Description ]--------------------------------------------------
+'
+' This program uses a BS2p-40 to demonstrate polled pins and the use of the
+' BS2p-40's extended I/O pins.  It is also a good demonstration of an LCD-based
+' HMI (human machine interface) for Stamp projects.
+'
+' NOTE: THIS PROGRAM IS FOR EDUCATIONAL PURPOSES ONLY.
+'       USE TO PROTECT PROPERTY AT YOUR OWN RISK.
+'
+' General connections:
+' -- Main 0 - 8         User keys (keyboard, etc.)
+' -- Main 9 - 15        I2C bus, alarm LED, misc I/O (future)
+' -- Aux  0 - 8         LCD output
+' -- Aux  9 - 15        Alarm inputs (pulled up, NC to ground, 1 = alarm)
+
+
+' -----[ Revision History ]-----------------------------------------------------
+'
+
+
+' -----[ I/O Definitions ]------------------------------------------------------
+'
+AlarmIns        VAR     InH                     ' AUX  - high byte
+LCDpin          CON     16                      ' AUX  - low byte
+AlarmLED        CON     15                      ' MAIN - pin 15
+I2Cpin          CON     8                       ' MAIN - pins 8 & 9
+Buttons         VAR     InA                     ' MAIN - low nib
+
+
+' -----[ Constants ]------------------------------------------------------------
+'
+M_Status        CON     0                       ' mode values
+M_Clear         CON     1
+M_System        CON     2
+M_Clock         CON     3
+
+Modes           CON     4                       ' menu modes
+TimeOut         CON     150                     ' mode timer (loop iterations)
+
+NoCmd           CON     $00                     ' No command in LCDOUT
+ClrLCD          CON     $01                     ' clear the LCD
+CrsrHm          CON     $02                     ' move cursor to home position
+CrsrLf          CON     $10                     ' move cursor left
+CrsrRt          CON     $14                     ' move cursor right
+DispLf          CON     $18                     ' shift displayed chars left
+DispRt          CON     $1C                     ' shift displayed chars right
+DDRam           CON     $80                     ' Display Data RAM control
+CGRam           CON     $40                     ' Custom character RAM
+Line1           CON     $80                     ' DDRAM address of line 1
+Line2           CON     $C0                     ' DDRAM address of line 2
+
+UpAr            CON     0                       ' up arrow char number
+DnAr            CON     1
+
+Wr8583          CON     %10100000               ' write to RTC
+Rd8583          CON     %10100001               ' read from RTC
+
+
+' -----[ Variables ]------------------------------------------------------------
+'
+hours           VAR     Byte
+minutes         VAR     Byte
+day             VAR     Nib                     ' 0 = Sunday, 6 = Saturday
+
+rtcCtrl         VAR     Byte                    ' [0] control/status
+rtcHuns         VAR     Byte                    ' [1] hundredths (bcd)
+rtcSecs         VAR     Byte                    ' [2] seconds (bcd)
+rtcMins         VAR     Byte                    ' [3] minutes (bcd)
+rtcHrs          VAR     Byte                    ' [4] hours (bcd)
+rtcYrDate       VAR     Byte                    ' [5] year & date (bcd+)
+rtcMoDay        VAR     Byte                    ' [6] day & month (bcd+)
+
+mode            VAR     Nib                     ' main menu level
+modeTimer       VAR     Byte                    ' auto time-out to Status mode
+level           VAR     Nib                     ' sub menu level
+
+btns            VAR     Nib                     ' button input
+btnMode         VAR     btns.Bit3
+btnSelect       VAR     btns.Bit2
+btnUp           VAR     btns.Bit1
+btnDn           VAR     btns.Bit0
+
+alarmStatus     VAR     Bit                     ' 0 = Off, 1 = On
+blink           VAR     Bit                     ' cursor blink control
+
+temp1           VAR     Byte                    ' general purpose vars
+temp2           VAR     Byte
+
+
+' -----[ EEPROM Data ]----------------------------------------------------------
+'
+UpArrow         DATA    $00,$00,$04,$0E,$1F,$00,$00,$00
+DnArrow         DATA    $00,$00,$00,$1F,$0E,$04,$00,$00
+
+Su              DATA    "SUN",0                 ' day names
+Mo              DATA    "MON",0
+Tu              DATA    "TUE",0
+We              DATA    "WED",0
+Th              DATA    "THU",0
+Fr              DATA    "FRI",0
+Sa              DATA    "SAT",0
+
+
+' -----[ Initialization ]-------------------------------------------------------
+'
+Initialize:
+  ' setup alarm input pins
+  AUXIO                                         ' point to auxilliary i/o pins
+  POLLMODE 0                                    ' clear and disable polling
+  POLLIN  8, 1                                  ' inputs look for high
+  POLLIN  9, 1
+  POLLIN 10, 1
+  POLLIN 11, 1
+  POLLIN 12, 1
+  POLLIN 13, 1
+  POLLIN 14, 1
+  POLLIN 15, 1
+
+  ' setup LCD
+  PAUSE 500                                     ' let the LCD settle
+  IOTERM (LCDpin / 16)                          ' point to LCD I/O  bank
+  LCDCMD (LCDpin // 16), %00110000 : PAUSE 5    ' 8-bit mode
+  LCDCMD (LCDpin // 16), %00110000 : PAUSE 0
+  LCDCMD (LCDpin // 16), %00110000 : PAUSE 0
+  LCDCMD (LCDpin // 16), %00100000 : PAUSE 0    ' 4-bit mode
+  LCDCMD (LCDpin // 16), %00101000 : PAUSE 0    ' 2-line mode
+  LCDCMD (LCDpin // 16), %00001100 : PAUSE 0    ' no crsr, no blink
+  LCDCMD (LCDpin // 16), %00000110              ' inc crsr, no disp shift
+  LCDCMD (LCDpin // 16), ClrLCD
+
+  LCDCMD (LCDpin // 16), CGRam                  ' prepare to write CG data
+  FOR temp2 = UpArrow TO (DnArrow + 7)          ' build 2 custom chars
+    READ temp2, temp1                           ' get byte from EEPROM
+    LCDOUT (LCDpin // 16), NoCmd, [temp1]       ' put into LCD CGRAM
+  NEXT
+
+  ' setup alarm output pin
+  MAINIO                                        ' point to main i/o pins
+  POLLOUT AlarmLED, 1
+
+  ' setup keyboard
+  MAINIO                                        ' point to lower group
+  DirA = %0000                                  ' make pins input
+
+
+' -----[ Main Code ]------------------------------------------------------------
+'
+Main:
+  GOSUB Scan_Buttons                            ' get button inputs
+  mode = mode + btnMode // Modes                ' update current mode
+
+Check_Mode_Timer:
+  modeTimer = (modeTimer + 1) * (1 - btnMode)   ' inc if Mode button not pressed
+  IF (modeTimer < TimeOut) THEN Run_Mode        ' if not expried, run mode
+  mode = M_Status                               ' - otherwise, set to Status
+  modeTimer = 0
+
+Run_Mode:
+  BRANCH mode, [Show_Status, Clear_Alarms, Set_System, Clock_Set]
+
+Loop_Pad:                                       ' pad loop for button presses
+  PAUSE 150
+  GOTO Main
+  END
+
+
+' -----[ Main Menu Fuctions ]---------------------------------------------------
+'
+' -- called with BRANCH
+' -- should end with GOTO Loop_Pad
+
+' *************
+' System Status
+' *************
+
+Show_Status:
+  level = 0                                     ' reset sub-menu level
+  GOSUB Get_Clock                               ' get and display current clock
+  IOTERM (LCDpin / 16)
+  LCDCMD (LCDpin // 16),%00001100               ' no crsr, no blink
+  LCDOUT (LCDpin // 16), Line1, [HEX2 rtcHrs,":",HEX2 rtcMins,":",HEX2 rtcSecs]
+  LCDOUT (LCDpin // 16), NoCmd, ["     "]
+
+  LOOKUP day, [Su,Mo,Tu,We,Th,Fr,Sa], temp2     ' point to day name
+  GOSUB Print_Str                               ' print it on LCD
+  BRANCH alarmStatus, [Is_Off,Is_On]            ' show system status
+
+Is_Off:
+  LCDOUT (LCDpin // 16), Line2, [" * SYSTEM OFF * "]
+  GOTO Show_Status_Done
+
+Is_On:
+  GET 131, temp2                                ' grab alarm bits
+  IF (temp2 > 0) THEN Show_Alarm_Bits
+  LCDOUT (LCDpin // 16), Line2, ["   All Clear    "]
+  GOTO Show_Status_Done
+
+Show_Alarm_Bits:
+  ' alternate between latched event and current inputs every other second
+  BRANCH rtcSecs.Bit0, [Show_Latched,Show_Current]
+
+Show_Latched:
+  LCDOUT (LCDpin // 16), Line2, ["Alarms  ",BIN8 temp2]
+  GOTO Show_Status_Done
+
+Show_Current:
+  AUXIO
+  LCDOUT (LCDpin // 16), Line2, ["Now     ",BIN8 AlarmIns]
+
+Show_Status_Done:
+  PAUSE (200 * btnMode)                         ' extra delay if first entry
+  GOTO Loop_Pad
+
+
+' ***************************
+' Clear Alarm
+' -- will clear if Up pressed
+' ***************************
+
+Clear_Alarms:
+  GET 131, temp2                                ' read latched alarm bits
+  IF (temp2 > 0) THEN Check_Clear               ' alarms enabled and active?
+  mode = M_System                               ' skip to system set if no alarms
+  GOTO Set_System
+
+Check_Clear:
+  IOTERM (LCDpin / 16)
+  LCDOUT (LCDpin // 16), Line1, ["Clear Alarms?   "]
+  LCDOUT (LCDpin // 16), Line2, ["  ",UpAr, " Yes   ",DnAr, " No  "]
+
+No_Clear:
+  IF (btnDn = 0) THEN Yes_Clear                 ' is Dn pressed?
+  mode = M_Status                               ' - return to Status mode
+  GOTO Clear_Alarm_Done
+
+Yes_Clear:
+  IF (btnUp = 0) THEN Clear_Alarm_Done          ' is Up pressed?
+  LCDOUT (LCDpin // 16), Line1, ["Clearing Alarms "]
+  LCDOUT (LCDpin // 16), Line2, [REP " "\16]
+
+  POLLMODE 9                                    ' clear polling, save setup
+  PAUSE 1000                                    ' pause to show message
+  POLLMODE (alarmStatus + 9)                    ' reset if alarms = On
+  mode = M_Status                               ' return to Status mode
+
+Clear_Alarm_Done:
+  PAUSE (200 * btnMode)                         ' extra delay if first entry
+  GOTO Loop_Pad
+
+
+' ***************************************
+' Set System (enable alarms)
+' -- Up = System On
+' -- Dn = System Off
+' -- will reset alarm if Up or Dn pressed
+' ***************************************
+
+Set_System:
+  IOTERM (LCDpin / 16)
+  LCDOUT (LCDpin // 16), Line2, ["  ",UpAr," On   ",DnAr," Off "]
+  LCDOUT (LCDpin // 16), Line1, ["Set System "]
+  BRANCH alarmStatus, [System_Off,System_On]
+
+System_Off:
+  LCDOUT (LCDpin // 16), NoCmd, ["(OFF)"]
+  GOTO Check_System_Set
+
+System_On:
+  LCDOUT (LCDpin // 16), NoCmd, [" (ON)"]
+
+Check_System_Set:
+  IF ((btns & %11) = 0) THEN Set_System_Done    ' skip if not Up or Dn
+  alarmStatus = btnUp                           ' set new status
+  POLLMODE (alarmStatus + 9)                    ' set latching POLLMODE
+  mode = M_Status                               ' back to Status mode
+
+Set_System_Done:
+  PAUSE (100 * btnMode)                         ' extra delay if first entry
+  GOTO Loop_Pad
+
+
+' *********
+' Set Clock
+' *********
+
+Clock_Set:
+  IOTERM (LCDpin / 16)
+  LCDCMD (LCDpin // 16), %00001100              ' no cursor
+  LCDOUT (LCDpin // 16), Line1, ["Set Clock       "]
+  LCDOUT (LCDpin // 16), Line2, ["   ", DEC2 hours,":",DEC2 minutes,"  "]
+
+  LOOKUP day, [Su,Mo,Tu,We,Th,Fr,Sa], temp2
+  GOSUB Print_Str
+  LCDOUT (LCDpin // 16), NoCmd, ["   "]
+
+  IF ((btns & %0111) = 0) THEN Check_Level      ' check for press
+  modeTimer = 0                                 ' clear mode timer if press
+
+Check_Level:
+  level = level + btnSelect // 3                ' update level selection
+  BRANCH level, [Hrs_Set,Mins_Set,Day_Set]      ' branch to sub-menu code
+  GOTO Clock_Set_Done
+
+Hrs_Set:
+  LCDCMD (LCDpin // 16), Line2 + 4              ' move to hours position
+  GOSUB Blink_Cursor
+  BRANCH btnUp, [Check_Hrs_Down]
+  hours = hours + 1 // 24
+  GOSUB Put_Clock                               ' update RTC
+  GOTO Clock_Set_Done
+
+Check_Hrs_Down:
+  BRANCH btnDn, [Clock_Set_Done]
+  hours = hours + 23 // 24
+  GOSUB Put_Clock
+  GOTO Clock_Set_Done
+
+Mins_Set:
+  LCDCMD (LCDpin // 16), Line2 + 7              ' move to minutes position
+  GOSUB Blink_Cursor
+  BRANCH btnUp, [Check_Mins_Down]
+  minutes = minutes + 1 // 60
+  GOSUB Put_Clock
+  GOTO Clock_Set_Done
+
+Check_Mins_Down:
+  BRANCH btnDn, [Clock_Set_Done]
+  minutes = minutes + 59 // 60
+  GOSUB Put_Clock
+  GOTO Clock_Set_Done
+
+Day_Set:
+  LCDCMD (LCDpin // 16), Line2 + 12             ' move to day position
+  GOSUB Blink_Cursor
+  BRANCH btnUp, [Check_Day_Down]
+  day = day + 1 // 7
+  GOSUB Put_Clock
+  GOTO Clock_Set_Done
+
+Check_Day_Down:
+  BRANCH btnDn, [Clock_Set_Done]
+  day = day + 6 // 7
+  GOSUB Put_Clock
+
+Clock_Set_Done:
+  PAUSE (200 * btnMode)                         ' extra delay if first entry
+  GOTO Loop_Pad
+
+
+' -----[ Subroutines ]----------------------------------------------------------
+'
+Scan_Buttons:                                   ' debounce four buttons
+  MAINIO                                        ' keys are connected to main I/O
+  btns = %1111                                  ' assume pressed
+  FOR temp2 = 1 TO 5                            ' scan 5 times
+    btns = btns & ~Buttons                      ' check for press
+    PAUSE 10                                    ' debounce delay
+  NEXT
+  RETURN
+
+
+Put_Clock:                                      ' send data to RTC
+  rtcSecs = 0
+  rtcMins.HighNib = minutes / 10                ' convert regs to BCD
+  rtcMins.LowNib = minutes // 10
+  rtcHrs.HighNib = hours / 10
+  rtcHrs.LowNib = hours // 10
+  rtcMoDay = 1 | (day << 5)                     ' pack weekday in
+  IOTERM (I2Cpin / 16)                          ' point to I2C bus I/O bank
+  I2COUT (I2Cpin // 16), Wr8583, 2, [STR rtcSecs\5]
+  RETURN
+
+
+Get_Clock:                                      ' read data from RTC
+  IOTERM (I2Cpin / 16)
+  I2CIN (I2Cpin // 16), Rd8583, 0, [STR rtcCtrl\7]
+  minutes = (rtcMins.HighNib * 10) + rtcMins.LowNib
+  hours = (rtcHrs.HighNib * 10) + rtcHrs.LowNib
+  day = rtcMoDay >> 5
+  RETURN
+
+
+Print_Str:                                      ' print zero-terminated string
+  READ temp2, temp1                             ' read a character
+  IF (temp1 = 0) THEN Print_Done                ' done?
+  IOTERM (LCDpin / 16)
+  LCDOUT LCDpin, NoCmd, [temp1]                 ' print the character
+  temp2 = temp2 + 1                             ' point to next
+  GOTO Print_Str:                               ' go get it
+Print_Done:
+  RETURN
+
+
+Blink_Cursor:                                   ' blink every other loop
+  temp2 = %00001100                             ' no cursor
+  temp2.Bit1 = blink
+  IOTERM (LCDpin / 16)
+  LCDCMD (LCDpin // 16), temp2
+  blink = ~blink                                ' invert blink control
+  RETURN

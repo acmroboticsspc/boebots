@@ -1,0 +1,71 @@
+' =========================================================================
+'
+'   File....... SW21-EX28-ADC0831-Simple-Vref.BS2
+'   Purpose.... Servo control and positioning with a potentiomenter
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program deomstrates reading a variable voltage with an ADC0831
+' analog-to-digital convertor chip. This program uses a Vref input of
+' 2.55 volts (Vdd) for a bit resolution of 10 millivolts.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+CS              PIN     0                       ' chip select (ADC0831.1)
+Clock           PIN     1                       ' clock (ADC0831.7)
+DataIn          PIN     2                       ' data (ADC0831.6)
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+Cnts2Mv         CON     $0A00                   ' x 10 (to millivolts)
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+result          VAR     Byte                    ' result of conversion
+mVolts          VAR     Word                    ' millivolts
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  DEBUG CLS,                                    ' create report screen
+        "ADC....  ", CR,
+        "volts... "
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Read_0831                             ' read the ADC
+    mVolts = result */ Cnts2Mv                  ' convert to millivolts
+
+    DEBUG HOME,                                 ' report
+          CRSRXY, 9, 0, DEC result, CLREOL,
+          CRSRXY, 9, 1, DEC mVolts DIG 3,
+                        ".", DEC3 mVolts
+
+    PAUSE 100
+ LOOP
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Read_0831:
+  LOW CS                                        ' enable ADC
+  SHIFTIN DataIn, Clock, MSBPOST, [result\9]    ' read ADC
+  HIGH CS                                       ' disable ADC
+  RETURN

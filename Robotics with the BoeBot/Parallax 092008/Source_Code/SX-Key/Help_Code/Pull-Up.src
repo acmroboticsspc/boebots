@@ -1,0 +1,62 @@
+;=======================================================================
+;TITLE:         Pull-Up.src
+;
+;PURPOSE:       This SX28 code demonstrates setup of I/O pin pull-up
+;               resistors.
+;
+;AUTHOR:        Parallax, Inc.
+;
+;REVISIONS:
+;  08/12/99 -   Initial release.
+;  09/17/04 -   Updated to support SASM.
+;
+;CONNECTIONS:
+;  None.
+;
+;DETAILS:
+;  This code demonstrates configuring the internal I/O pin Pull-Up
+;  resisters.  To test, it may be debugged (break on the JMP and use the
+;  Poll button) by temporarily driving one or more of the input pins to
+;  ground and monitoring the corresponding bits in the register map.
+;  
+;=======================================================================
+
+
+;-------------------------- DEVICE DIRECTIVES --------------------------
+
+		DEVICE		SX28,OSC4MHZ,TURBO
+
+IFDEF	__SASM  ;SASM Directives
+		DEVICE		STACKX,OPTIONX
+		IRC_CAL		IRC_SLOW
+		
+ELSE		;Parallax Assember Directives
+		DEVICE		STACKX_OPTIONX
+ENDIF
+
+		RESET		Initialize
+
+;---------------------------- DEBUG SETTINGS ---------------------------
+
+		FREQ	4_000_000
+	
+;------------------------ INITIALIZATION ROUTINE -----------------------
+
+Initialize
+		;Pull-Up Resistor Configuration
+		mov	W,#$1E			;Allow Pull-Up Resistor configuration
+		mov	M,W				
+		mov	!ra,#%0000		;Set entire 4-bit port A to have pull-up resistors
+		mov	!rb,#%11110000		;Set port B bits 4-7 to normal, bits 0-3 to have pull-up resistors
+		mov	!rc,#%00001111		;Set port C bits 4-7 to have pull-up resistors, bits 0-3 normal
+
+		mov	W,#$1F			;Allow Direction configuration
+		mov	M,W				
+		mov	!ra,#%1111		;Set port A bits 0-3 to input direction
+		mov	!rb,#%00001111		;Set port B bits 4-7 to output, 0-3 to input direction
+		mov	!rc,#%11110000		;Set port C bits 4-7 to input, 0-3 to output direction
+
+;---------------------------- MAIN PROGRAM -----------------------------
+
+Main		
+		jmp	Main

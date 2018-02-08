@@ -1,0 +1,93 @@
+; APP028.SRC - Basic Routines for the Parallax Boe Bot
+;
+; ---------------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller", 2nd Edition by Guenther Daubach
+; Copyright (c) by Parallax Inc. 2004
+; ---------------------------------------------------------------------
+
+device  SX28L, oscxt2, turbo, stackx
+freq    4_000_000
+IRC_CAL IRC_FAST
+
+
+reset   Main
+
+LServo       = RC.7            ; Output to servo  - Left.
+RServo       = RB.3            ; Output to servo  - Right.
+
+LStop        = 115             ; Adjust values so that the servos don't move
+RStop        = 115             ;  when Speed = 0 and Turn = 0
+           
+             org 8
+Timer20L     ds 1              ; Counters for
+Timer20H     ds 1              ;  20 ms timer
+Ltimer       ds 1              ; Counter for left servo timer
+Rtimer       ds 1              ; Counter for right servo timer
+LSpeed       ds 1              ; Left servo speed
+RSpeed       ds 1              ; Right servo speed
+Speed        ds 1              ; The "Bot's" speed
+Turn         ds 1              ; The "Bot's" turn factor
+
+        org    0
+ISR          
+        sb     LServo          ; Is left servo still on?
+         jmp   :Right          ;  no - handle right servo
+        dec    LTimer          ;  yes - count down
+        sz                     ; Left timeout?
+         jmp   :Right          ;  no - handle right servo
+        clrb   LServo          ;  yes - left servo off
+        mov    LTimer, LSpeed  ; Init left timer for next pulse
+:Right
+        sb     RServo          ; Is right servo still on?
+        jmp    :Timer20        ;  no - handle 20 ms timer
+        dec    Rtimer          ;  yes - count down
+        sz                     ; Right timeout?
+         jmp   :Timer20        ;  no - handle 20 ms timer
+        clrb   RServo          ;  yes - right servo off
+        mov    RTimer, Rspeed  ; Init right timer for next pulse
+:Timer20                       ; Handle the 20 ms timer
+        dec    Timer20L        ; Count down low order byte
+        sz                     ; Is it zero?
+         jmp   :ExitISR        ;  no - exit
+        mov    Timer20L, #171  ;  yes, initialize and
+        dec    Timer20H        ;  count down high order byte
+        sz                     ; Is it zero?
+         jmp   :ExitISR        ;  no - exit
+        mov    Timer20H, #9    ;  yes, initialize and
+        setb   LServo          ;  turn the servos
+        setb   RServo          ;  on again
+:ExitISR
+        mov    w, #-52         ; ISR is invoked every 13 µs at
+        retiw                  ;  4 MHz system clock
+
+; Subroutine calculates the required values for LSpeed and RSpeed based upon
+; the calibration factors, and the Speed and Turn parameters.
+;
+; Note: The routine does not check if the resulting values for LSpeed and
+;       RSpeed are out of limits (100...130).
+;
+CalcValues
+        mov    LSpeed, #LStop  ; Initialize left speed to stop
+        mov    RSpeed, #RStop  ; Initialize right speed to stop
+
+        add    LSpeed, Speed   ; Add the Speed value
+        sub    RSpeed, Speed   ; Subtract the Speed value
+
+        add    LSpeed, Turn    ; Add the turn value
+        add    RSpeed, Turn    ;  to both speeds
+        ret
+
+Main
+        clrb   LServo          ; Clear servo outputs
+        clrb   RServo          ;
+        mov    !rb, #%11110111 ; RB.3 is output for left servo
+        mov    !rc, #%01111111 ; RC.7 is output for right servo
+
+        mov    !option, #%00001000 ; Enable interrupts
+
+        mov    Speed, #0
+        mov    Turn, #0
+        call   CalcValues
+
+        jmp    $               ; Main program loops forever

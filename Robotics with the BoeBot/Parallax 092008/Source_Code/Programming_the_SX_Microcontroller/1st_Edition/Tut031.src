@@ -1,0 +1,45 @@
+; TUT031.SRC
+; ----------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+CMP     equ $08
+WKPEN   equ $0b
+WKPPD_W equ $09
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE   TURBO
+
+RESET    Start
+
+org     $000
+ISR
+  mode WKPPD_W
+  clr  w
+  mov  !rb, w           ; clear the "pending" bit
+  mode CMP
+  mov  !rb, w           ; re-init the comparator and
+                        ;  get the output state to w.0
+  mov $08, w            ; <-- set a breakpoint here
+  reti
+
+org     $100 
+Start
+  mode CMP
+  clr  w
+  mov  !rb, w           ; Enable comparator inputs and output
+  mode WKPPD_W
+  mov  !rb, w           ; Clear any "pending" bits
+  mode WKPEN
+  mov  !rb, #%11111110  ; Enable rb.0 interrupts        
+
+:Loop
+  jmp :Loop             ; Loop forever...

@@ -1,0 +1,35 @@
+'example of STAMPMEM data storage I/O
+ 
+x	var	byte(18)	'data string
+d1	var	byte		'data I/O, 1 or 0
+d2	var	byte		'high byte location, 0 to 255
+d3	var	byte		'low byte location, 0 to 255
+d4	var	byte		'number of data bytes
+				'd4=0 writes available bytes inside quotes
+				'd4<=64 writes specified bytes inside quotes
+				'and places FF hex in excess beyond quotes
+				'd4>64 writes only the first six bits of d4
+				'd4=0 reads 64 bytes
+				'd4<=64 reads specified bytes
+				'd4>64 reads only the first six bits of d4				
+
+d1=0:d2=0:d3=0:d4=64		'indicate data parameters to output
+serout 0,84,[d1,d2,d3,d4]	'transmit data parameters
+serout 0,84,["Parallax is located in Rocklin, Calif. They make BASIC Stamps th"]
+pause 30
+d4=29:d3=64
+serout 0,84,[d1,d2,d3,d4]	'transmit data parameters
+serout 0,84,["ere and other stamp products."]
+d1=1:d2=0:d3=0:d4=64		'indicate data parameters to input
+pause 30
+bb:				'allow time to write data and read data
+serout 0,84,[d1,d2,d3,d4]	'transmit data parameters
+serin 0,84,[str x\16]		'receive data
+pause 50
+debug str x			'read data on screen
+d3=d3+16
+if d3>128 then cc
+goto bb
+cc:
+debug " ",cr
+

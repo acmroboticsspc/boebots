@@ -1,0 +1,137 @@
+' ==============================================================================
+'
+'   File...... MEMSIC2125.BS2
+'   Purpose... Memsic 2125 Accelerometer Demo
+'   Author.... Jon Williams
+'   E-mail.... jwilliams@parallaxinc.com
+'   Started... 07 OCT 2002
+'   Updated... 08 OCT 2002
+'
+'   {$STAMP BS2}
+'
+' ==============================================================================
+
+
+' ------------------------------------------------------------------------------
+' Program Description
+' ------------------------------------------------------------------------------
+'
+' Read the pulse output from a Memsic 2125 accelerometer and converts to G-
+' force and tilt angle.
+'
+' Note that the [original] current Memsic 2125 data sheet has an error in the
+' G force calcuation.  The correct formula is:
+'
+' G = ((t1 / 10 ms) - 0.5) / 12.5%
+
+
+' ------------------------------------------------------------------------------
+' Revision History
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' I/O Definitions
+' ------------------------------------------------------------------------------
+
+Xin             CON     9                       ' X input from Memsic 2125
+
+
+' ------------------------------------------------------------------------------
+' Constants
+' ------------------------------------------------------------------------------
+
+HiPulse         CON     1                       ' measure high-going pulse
+LoPulse         CON     0
+
+MoveTo          CON     2                       ' move to x/y in DEBUG window
+ClrRt           CON     11                      ' clear DEBUG line to right
+DegSym          CON     176                     ' degrees symbol
+
+
+' ------------------------------------------------------------------------------
+' Variables
+' ------------------------------------------------------------------------------
+
+xRaw            VAR     Word                    ' pulse width from Memsic 2125
+xGForce         VAR     Word                    ' x axis g force (1000ths)
+xTilt           VAR     Word                    ' x axis tilt (100ths)
+
+idx             VAR     Nib                     ' table index
+mult            VAR     Word                    ' multiplier - whole part
+frac            VAR     Word                    ' multiplier - fractional part
+
+
+' ------------------------------------------------------------------------------
+' EEPROM Data
+' ------------------------------------------------------------------------------
+
+
+' ------------------------------------------------------------------------------
+' Initialization
+' ------------------------------------------------------------------------------
+
+Setup:
+  PAUSE 250                                     ' let DEBUG window open
+  DEBUG "Memsic 2125 Accelerometer", CR
+  DEBUG "-------------------------"
+
+
+' ------------------------------------------------------------------------------
+' Program Code
+' ------------------------------------------------------------------------------
+
+Main:
+  GOSUB Read_X_Tilt                             ' reads G-force and Tilt
+
+Display:
+  DEBUG MoveTo, 0, 3
+  DEBUG "Raw Input...  ", DEC (xRaw / 1000), ".", DEC3 xRaw, " ms", ClrRt, CR
+
+  DEBUG "G Force..... ", (xGForce.Bit15 * 13 + " ")
+  DEBUG DEC (ABS xGForce / 1000), ".", DEC3 (ABS xGForce), " g", ClrRt, CR
+
+  DEBUG "X Tilt...... ", (xGForce.Bit15 * 13 + " ")
+  DEBUG DEC (ABS xTilt / 100), ".", DEC2 (ABS xTilt), DegSym, ClrRt
+
+  PAUSE 200
+  GOTO Main
+ 
+
+' ------------------------------------------------------------------------------
+' Subroutines
+' ------------------------------------------------------------------------------
+
+Read_X_Force:
+  PULSIN Xin, HiPulse, xRaw                     ' read pulse output
+  xRaw = xRaw * 2                               ' convert to microseconds
+
+  ' g = ((t1 / 0.01) - 0.5) / 12.5%             ' correction from data sheet
+  '
+  xGForce = ((xRaw / 10) - 500) * 8             ' convert to 1/1000 g
+  RETURN
+
+
+Read_X_Tilt:
+  GOSUB Read_X_Force
+
+  ' tilt = g x k
+  '
+  ' Select tilt conversion factor based on static
+  ' G force.  Table data derived from Memsic specs.
+
+  LOOKDOWN ABS xGForce, <=[174, 344, 508, 661, 2000], idx
+  LOOKUP idx, [57, 58, 59, 60, 62], mult
+  LOOKUP idx, [32768, 10486, 3277, 30802, 22938], frac
+
+  ' G Force is divided by 10 to prevent roll-over errors at end
+  ' of range.  Tilt is returned in 100ths degrees.
+
+  xTilt = mult * (ABS xGForce / 10) + (frac ** (ABS xGForce / 10))
+  
+Check_SignX:
+  IF (xGForce.Bit15 = 0) THEN XT_Exit           ' if positive, skip 
+  xTilt = -xTilt                                ' correct for g force sign
+
+XT_Exit:
+  RETURN

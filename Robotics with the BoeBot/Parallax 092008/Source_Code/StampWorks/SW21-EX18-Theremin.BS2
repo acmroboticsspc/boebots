@@ -1,0 +1,68 @@
+' =========================================================================
+'
+'   File....... SW21-EX18-Theremin.BS2
+'   Purpose.... Simple Digital Theremin
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program uses RCTIME with a photocell to create a light-controlled
+' Theremin.
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Speaker         CON     0                       ' speaker output
+PitchCtrl       CON     1                       ' pitch control input
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+#SELECT $STAMP
+  #CASE BS2, BS2E
+    TAdj        CON     $100                    ' x 1.0 (time adjust)
+    FAdj        CON     $100                    ' x 1.0 (freq adjust)
+  #CASE BS2SX
+    TAdj        CON     $280                    ' x 2.5
+    FAdj        CON     $066                    ' x 0.4
+  #CASE BS2P
+    TAdj        CON     $3C5                    ' x 3.77
+    FAdj        CON     $044                    ' x 0.265
+  #CASE BS2PE
+    TAdj        CON     $100                    ' x 1.0
+    FAdj        CON     $0A9                    ' x 0.66
+  #CASE BS2PX
+    TAdj        CON     $607                    ' x 6.02
+    FAdj        CON     $02A                    ' x 0.166
+#ENDSELECT
+
+Threshold       CON     200                     ' cutoff frequency to play
+NoteTm          CON     40                      ' note timing
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+tone            VAR     Word                    ' frequency output
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    HIGH PitchCtrl                              ' discharge cap
+    PAUSE 1                                     ' for 1 ms
+    RCTIME PitchCtrl, 1, tone                   ' read the light sensor
+    tone = tone */ FAdj                         ' scale input
+    IF (tone > Threshold) THEN                  ' play?
+      FREQOUT Speaker, NoteTm */ TAdj, tone
+    ENDIF
+  LOOP

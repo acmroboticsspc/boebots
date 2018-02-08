@@ -1,0 +1,177 @@
+' =========================================================================
+'
+'   File....... SW21-EX31-MC14489.BS2
+'   Purpose.... Advanced 7-Segment displays with a multiplexer
+'   Author..... (C) 2000 - 2005, Parallax, Inc.
+'   E-mail..... support@parallax.com
+'   Started....
+'   Updated.... 01 SEP 2005
+'
+'   {$STAMP BS2}
+'   {$PBASIC 2.5}
+'
+' =========================================================================
+
+
+' -----[ Program Description ]---------------------------------------------
+'
+' This program is a coin counter -- it will count nickels, dimes, quarters,
+' and dollars using pushbutton inputs.  The "bank" is displayed on four
+' 7-segment LED displays that are controlled with a MC14489.
+
+
+' -----[ Revision History ]------------------------------------------------
+
+
+' -----[ I/O Definitions ]-------------------------------------------------
+
+Clock           PIN     0                       ' shift clock (MC14489.11)
+SerData         PIN     1                       ' serial data (MC14489.12)
+Enable          PIN     2                       ' enable (MC14489.10)
+Coins           VAR     INB                     ' coin inputs (P4 - P7)
+
+
+' -----[ Constants ]-------------------------------------------------------
+
+FullValue       CON     500                     ' bank full = $5.00
+
+' Hex values for Letters
+
+Ltr_F           CON     $F
+
+' Special Decode characters
+
+Blank           CON     $0
+Ltr_H           CON     $2
+Ltr_L           CON     $5
+Ltr_U           CON     $A
+
+
+' -----[ Variables ]-------------------------------------------------------
+
+money           VAR     Word                    ' current money count
+idx             VAR     Nib                     ' loop counter
+deposit         VAR     Nib                     ' coins deposited
+nickel          VAR     deposit.BIT0            ' bit values of deposit
+dime            VAR     deposit.BIT1
+quarter         VAR     deposit.BIT2
+dollar          VAR     deposit.BIT3
+
+config          VAR     Byte                    ' decode configuration
+dpCtrl          VAR     Nib                     ' decimal point control
+segs5           VAR     Nib                     ' segs - digit 5
+segs4           VAR     Nib
+segs3           VAR     Nib
+segs2           VAR     Nib
+segs1           VAR     Nib                     ' segs - digit 1
+
+
+' -----[ EEPROM Data ]-----------------------------------------------------
+
+
+' -----[ Initialization ]--------------------------------------------------
+
+Reset:
+  HIGH Enable                                   ' disable MC14489
+
+Say_Hello:
+    config = Blank
+    GOSUB Update_Cfg
+    config = %11101101                          ' setup for "HELLO"
+    dpCtrl = %1000                              ' display bright, no DPs
+    segs5 = Ltr_H                               ' H (Special Decode)
+    segs4 = $E                                  ' E (Hex Decode)
+    segs3 = Ltr_L                               ' L (Special Decode)
+    segs2 = Ltr_L                               ' L (Special Decode)
+    segs1 = $0                                  ' 0 (Hex Decode)
+    GOSUB Update_Segs                           ' show message
+    GOSUB Update_Cfg                            ' display on
+    PAUSE 1000
+    config = Blank
+    GOSUB Update_Cfg
+
+Set_Bank:
+  GOSUB Show_The_Money                          ' show money digits
+  config = %00110001                            ' use 3 digits, hex mode
+  GOSUB Update_Cfg
+
+
+
+' -----[ Program Code ]----------------------------------------------------
+
+Main:
+  DO
+    GOSUB Get_Coins                             ' wait for coins
+  LOOP UNTIL (deposit > 0)
+
+  money = money + (nickel * 5)                  ' add coins
+  money = money + (dime * 10)
+  money = money + (quarter * 25)
+  money = money + (dollar * 100)
+  GOSUB Show_The_Money                          ' update the display
+  PAUSE 250
+  IF (money < FullValue) THEN Main              ' scan until full
+
+  DO
+    PAUSE 500
+    config.BIT0 = ~config.BIT0                  ' toggle display
+    GOSUB Update_Cfg
+  LOOP
+
+
+' -----[ Subroutines ]-----------------------------------------------------
+
+Get_Coins:
+  deposit = %1111                               ' enable all coin inputs
+  FOR idx = 1 TO 10
+    deposit = deposit & ~Coins                  ' test inputs
+    PAUSE 5                                     ' delay between tests
+  NEXT
+  RETURN
+
+
+' Display money value until that value meets or
+' exceeds the bank limit.
+
+Show_The_Money:
+  IF (money < FullValue) THEN                   ' show money count
+    dpCtrl = %1011                              ' display bright, show DP
+    segs5 = Blank
+    segs4 = Blank
+    segs3 = money DIG 2                         ' dollar digit
+    segs2 = money DIG 1                         ' tens digit
+    segs1 = money DIG 0                         ' ones digit
+    GOSUB Update_Segs
+  ELSE                                          ' show "FULL"
+    config = Blank
+    GOSUB Update_Cfg
+    config = %11101111                          ' setup for "FULL"
+    dpCtrl = %1000                              ' display bright, no DPs
+    segs5 = Blank
+    segs4 = Ltr_F                               ' F
+    segs3 = Ltr_U                               ' U (Special Decode)
+    segs2 = Ltr_L                               ' L (Special Decode)
+    segs1 = Ltr_L                               ' L (Special Decode)
+    GOSUB Update_Segs                           ' show message
+    GOSUB Update_Cfg                            ' display on
+  ENDIF
+  RETURN
+
+
+' Update MC14489 configuration register
+
+Update_Cfg:
+  LOW Enable                                    ' enable MC14489
+  SHIFTOUT SerData, Clock, MSBFIRST, [config]   ' send config register
+  HIGH Enable                                   ' disable MC14489
+  RETURN
+
+
+' Update MC14489 decimal point control and segments registers
+
+Update_Segs:
+  LOW Enable
+  SHIFTOUT SerData, Clock, MSBFIRST, [dpCtrl\4,
+             segs5\4, segs4\4, segs3\4, segs2\4, segs1\4]
+  HIGH Enable
+  RETURN

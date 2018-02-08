@@ -1,0 +1,146 @@
+; APP009.SRC - ADC for Reading Several Potentiometer Settings
+;
+; ---------------------------------------------------------------------
+; Code for application example published in
+; "Programming the SX Microcontroller", 2nd Edition by Guenther Daubach
+; Copyright (c) by Parallax Inc. 2004
+; ---------------------------------------------------------------------
+
+include "Setup28.inc"
+RESET   Main
+
+IsrPer  equ 200                 ; The number of clock cycles
+                                ;  defines how often the ISR will
+                                ;  be called. Adjust this value
+                                ;  if necessary.
+TRIS    equ  $0f
+LVL     equ  $0d
+org     $08
+Std     equ $
+ADCVal  ds 1                    ; ADC Result                 
+ADCStat ds 1                    ; Status bits for ADC control
+Timer   ds 1                    ; Time counter for the ADC   
+raMask  ds 1                    ; Current data for TRIS_A    
+pMask   ds 1                    ; Mask selects pot to read
+PotId   ds 1                    ; Number of pots to read
+
+Charge  equ ADCStat.0           ; Mode Flag for ADC (0 = discharge,
+                                ;                    1 = charge)   
+Trigger equ ADCStat.1           ; Flag gets set during charge      
+                                ;  when threshold is reached        
+ADCGo   equ ADCStat.3           ; ADC enabled when this bit is set
+ADCPin  equ ra.0                ; Port pin for ADC
+
+org     $30
+Pots    ds 8                    ; Storage for 8 pot readings
+
+org     $000
+
+ 
+;** VP to read a potentiometer setting *************************
+;
+ADC
+
+sb    ADCGo                     ; Don't convert if ADCGo is    
+  jmp :ADCExit                  ;  clear
+snb   Charge                    ; Branch to the current
+  jmp :Charge                   ;  ADC mode
+
+:DisCharge                      ; Discharge C during 256 ISR calls
+  incsz Timer                   ; Still discharging, so  
+    jmp :ADCExit                ;  continue      
+                                                                 
+  setb Charge                   ; Change mode, and set
+  xor raMask, #%00000001        ;  Port pin to  
+  mov !ra, raMask               ;  input                
+  clrb ADCGo                    ; Stop the ADC
+                                                                 
+:Charge                         ; Conversion - charge C
+  sb ADCPin                     ; When the voltage across C is
+                                ;  less than the threshold,
+    jmp :Continue               ;  keep charging
+
+  snb Trigger                   ; If threshold flag already set,
+                                ;  continue
+    jmp :Continue
+  setb Trigger                  ; Set the threshold flag, and
+                                ;  save the contents of counter
+  mov ADCVal, Timer             ;  as result
+
+:Continue
+  incsz Timer                   ; Increment the counter and
+    jmp :ADCExit                ;  continue if no overflow
+  mov w, #$ff                   ; Initialize w to $FF
+  sb Trigger                    ; If threshold flag was set during
+                                ;  conversion, we have a good value
+                                ;  otherwise, we set the result 
+    mov ADCVal, w               ;  to the maximum
+
+  clr ADCStat                   ; Set mode to discharge, and clear
+                                ;  the threshold flag
+  mov !rc, #$ff                 ; Turn off potentiometer
+  xor raMask, #%00000001        ; Set RA.0 as output
+  mov ra, raMask                ;  with low level to discharge
+  mov !ra, raMask               ;  C
+
+:ADCExit
+
+  mov   w, #-IsrPer
+  retiw
+
+ 
+;** Insert the subroutine to send a changed pot reading here
+;
+SendValue
+  ret
+
+org     $100
+
+;** Mainline program *******************************************
+;
+Main
+
+  ; Clear the data memory
+  ;
+  clr fsr
+
+include "Clr2x.inc"
+
+  mode LVL  ; Set RA.0 to
+  mov  !ra, #%11111110          ;  CMOS
+  
+  mode TRIS
+  mov  !rc, #%11111111          ; RC7...0 are inputs first
+  mov  raMask, #%11111110       ; Initialize Port A mask and
+  mov  !ra, raMask              ; set RA.0 to low to 
+  clrb ra.0                     ;   discharge C
+  clr  PotId                    ; Pot Id = 0
+  mov  pMask, #%11111110        ; Mask for pot 0
+  mov  !option,#%10011111       ; Enable RTCC interrupt
+
+:Loop
+  mov  !rc, pMask               ; Configure one Port C pin as output
+  mov w, /pMask
+  mov rc, w
+  setb ADCGo                    ; Enable the ADC
+
+:Wait                           ; Wait until ADC is ready
+  snb  ADCGo
+    jmp :Wait
+  
+  mov  w, #Pots                 ; Indirectly address the storage
+  add  w, PotId                 ;  for the last pot reading
+  mov  fsr, w
+  cje  ind, ADCVal, :SameValue  ; If the reading has changed, 
+  mov  ind, ADCVal              ;  save new reading, and
+  call SendValue                ;  send the new reading (Value is  
+                                ;  in w and in ADCVal)
+:SameValue
+  inc  PotId                    ; Select next potentiometer
+  clrb PotId.3                  ; Allow 0...7 only
+  stc                           ; Rotate the pot mask
+  rl   pMask                    ;   to the left
+  sc                            ; If the 0 has "arrived" in C,
+    clrb pMask.0                ;  clear bit 0
+
+  jmp  :Loop                    ; Next reading

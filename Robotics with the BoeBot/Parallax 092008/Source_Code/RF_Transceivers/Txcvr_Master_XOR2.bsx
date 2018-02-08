@@ -1,0 +1,165 @@
+'{$STAMP BS2SX}
+'*********************************************************************************************************
+'* Program:  Txcvr_Master_XOR2.BSX        Author:   Jeff A. Martin, Parallax, Inc.                       *
+'* Date:     1/25/00                      Revision: 1.0 NON-VERBOSE                                      *
+'*                                                                                                       *
+'* Description:                                                                                          *
+'* This BS2SX-IC code is the MASTER side of the Parallax RF Transceiver Packet Transmission example.     *
+'* This is the Non-Verbose version that consumes approx. 34% of program space of which 24% is the data to*
+'* transmit). Use the code named Txcvr_Master_XOR if you want to see real-time packet transmission status*
+'* on the Debug Terminal.                                                                                *
+'*                                                                                                       *
+'* This code must be run on a BASIC Stamp 2sx, interfaced to an RF Transceiver Part#27988. This code will*
+'* NOT work with the RF Transmitter Part#27986 or RF Receiver Part#27987!  See "Notes" below for Debug   *
+'* Terminal Tips when running this code.  This code is meant to interface with a second Stamp 2sx running*
+'* Txcvr_Slave_XOR2.BSX.                                                                                 *
+'*                                                                                                       *
+'* This code demonstrates the transmission and reception of variable-length data (from 1 to 16 bytes) in *
+'* the form of data packets.  This data packet method is used to help overcome the error-prone nature of *
+'* RF reception in various environments.  The data packets consist of a Packet Number, a count of the    *
+'* number of data bytes, the actual data bytes and finally a checksum value.  The format is as follows:  *
+'*                                                                                                       *
+'* Packet data format:                                                                                   *
+'* |---------------------||---------------------|       |---------------------||---------------------|   *
+'* | Packet# | Data Count||    Data Value 1     | . . . |    Data Value n     ||      Checksum       |   *
+'* |---------------------||---------------------|       |---------------------||---------------------|   *
+'*         BYTE 1                 BYTE 2                        BYTE n+1              BYTE n+2           *
+'*                                                                                                       *
+'* Byte 1 consists of two pieces of data, the Packet# and the Data Count.  The Packet Number is a        *
+'*        value from 1 to 15 (0 is an illegal value). It indicates the number of the packet relative     *
+'*        to the previously transmitted packet and is used to verify that no duplicate packets are       *
+'*        mistaken for new data.  The Data Count is a value from 0 to 15 representing the number of      *
+'*        Data Values in this packet.  Packets can contain from 1 to 16 bytes of data values             *
+'*        (at least 1 Data Value is required), thus the number of Data Values is actually Data Count + 1.*
+'* Byte 2 through Byte n+1 are the actual Data Values where n = Data Count+1.                            *
+'* Byte n+2 is the last byte in the packet and consists of a Checksum value calculated by simply XORing  *
+'*        the bytes 1 through n+1 together.                                                              *
+'*                                                                                                       *
+'* The protocol for sending and receiving is as follows (shown is a simplified form):                    *
+'* 1) The MASTER device generates the next packet number (in sequence, from 1 to 15.  0 is not allowed)  *
+'* 2) The MASTER device constructs the entire packet, as shown above and calculates a checksum.		   *
+'* 3) The MASTER device transmits the packet.                                                            *
+'* 4) The SLAVE device receives the packet, calculates a checksum and compares the calcuated checksum    *
+'*    with the checksum received inside the packet.                                                      *
+'* 5) If checksums match:  SLAVE transmits a positive acknowledgement (the checksum value).              *
+'*    If checksums don't match:  SLAVE transmits a negative acknowledgment (the negative of checksum).   *
+'* 6) The SLAVE then verifies that the packet number is not the same as the previous packet.  If so, this*
+'*    is a duplicate packet and SLAVE treats it as if we received nothing.  If not, this is a good packet*
+'*    and all is well enough to process that data.                                                       *
+'* 7) If MASTER receives positive acknowledgement, it moves on.  If it receives a negative or no         *
+'*    acknowledgement, it retransmits the packet as in step 3.                                           *
+'*                                                                                                       *
+'* Wiring:  Refer to the "Set Up Constants" section below for pin wiring indications.  Make sure to      *
+'* connect the transceiver's MODE pin to +5 volts (Vdd) to place the transceiver into serial mode.       * 
+'*********************************************************************************************************
+
+'---Set up Variables---
+Value 	VAR BYTE(16)						'Holds data value being transceived
+Idx		VAR WORD							'Index into data
+Packet	VAR NIB							'Packet Number
+DCount	VAR NIB							'Data count
+ErrNoAck	VAR BYTE							'Number of No Acknowledgement Errors
+Checksum	VAR BYTE							'Calculated Checksum value
+RChecksum	VAR BYTE							'Received Checksum value
+
+'---Set up Constants---
+Tx	 	CON 15							'Transmit I/O pin number
+TxFlow	CON 14							'Transmit flow control I/O pin number
+Rx		CON 13							'Receive I/O pin number
+N9600		CON $40F0							'Baud mode value for 9600 baud, 8,N,1
+
+
+'-----Define data------
+'The following data is to be sent to the slave device.  Data is sent, in order, exactly
+'as shown below with the following exceptions: 002 causes our SendMessage routine to
+'simply pause for apx. 2 seconds.  255 indicates the end of data and our SendMessage
+'routine simply returns without sending anything.
+Message1	DATA	254,001,254,128,"This is an"      ,254,192,"example of data" ,002
+Message2	DATA  254,001,254,128,"transmitted with",254,192,"RF Transceivers" ,002
+Message3	DATA	254,001,254,129,"from Parallax"   ,254,193,"Incorporated."   ,002
+Message4	DATA  254,001,254,129,"This text is"    ,254,193,"being sent and"  ,002
+Message5	DATA	254,001,254,130,"received in"     ,254,194,"packet form"     ,002
+Message6	DATA	254,001,254,131,"to ensure"       ,254,194,"robustness."     ,002
+Message7	DATA	254,001,254,128,"Packets consist" ,254,193,"of a packet #,"  ,002
+Message8	DATA	254,001,254,129,"a total number"  ,254,193,"of data values"  ,002
+Message9	DATA	254,001,254,128,"the actual data" ,254,192,"(up to 16 bytes)",002
+Message10	DATA	254,001,254,128,"then a checksum" ,254,197,"byte."           ,002
+Message11	DATA	254,001,254,130,"The receiver"    ,254,192,"verifies packets",002
+Message12	DATA	254,001,254,128,"and acknowleges" ,254,192,"receipt of good" ,002
+Message13	DATA	254,001,254,129,"or bad packets"  ,254,193,"and the sender"  ,002
+Message14	DATA	254,001,254,128,"re-sends packets",254,193,"until they are"  ,002
+Message15	DATA	254,001,254,132,"received"        ,254,195,"properly."       ,002,255
+
+Initialize:
+  LOW Tx							'Initialize transceiver interface
+    
+
+'---------------------------------------- Main Routine -------------------------------------------
+
+'Transmit data
+SenderMain:
+  Idx = Message1								'Set index to first message
+Sender:
+  GOSUB SendMessage							'Send current message
+  IF Value(DCount) < 255 THEN Sender				'If not end of text, send next message
+GOTO SenderMain								'Otherwise, start over at first message
+
+'----------------------------------------- Subroutines -------------------------------------------
+
+'--------------Send Message-------------
+SendMessage:
+  'This routine reads the messages in the data table, constructs the packets and calls the transmit routine
+  DCount = -1								'Initialize Data Count
+  Packet = Packet + 1							'Increment packet number (1-15)
+  Packet = Packet MIN 1					
+  Checksum = Packet							'Initialize checksum
+GetNext:
+  DCount = DCount + 1
+  READ Idx,Value(DCount)
+  Idx = Idx + 1
+  IF Value(DCount) = 255 THEN EndOfText				'Check for end of text
+  IF Value(DCount) = 2 THEN MessageDone				'If pause command send message now
+  Checksum = Checksum ^ Value(DCount)				'Calculate current checksum
+  IF DCount = 15 THEN MessageDone					'If max data size, send message now
+  IF Value(DCount) = 1 THEN ClearLCD				'If 1 (ClearLCD command) process differently
+  GOTO GetNext								'Get next data value
+EndOfText:
+RETURN
+
+ClearLCD:									'If ClearLCD, we'll send the message, then
+  GOSUB Transmit								'we'll wait long enough for the LCD to clear
+  PAUSE 20
+GOTO SendMessage								'Now we'll generate a new packet
+
+MessageDone:
+  IF DCount = 0 THEN NoMessage					'If message empty, just return
+  IF Value(DCount) <> 2 THEN TxNormal				'If last value isn't 2, we'll transmit all
+  DCount = DCount - 1
+  GOSUB Transmit
+NoMessage:	
+  PAUSE 2200								'Pause 2 seconds for delay
+  RETURN
+
+TxNormal:
+  GOSUB Transmit								'otherwise, send message and then return
+  RETURN
+  
+'--------------------------------------- Transmit Routine ----------------------------------------
+    
+Transmit:	
+  'This routine transmits the complete packet, verifies that the receiver received it properly and 
+  'resends the packet if necessary.  This routine will not return until the receiver gets a good packet.								
+  SEROUT Tx\TxFlow,N9600,[Packet<<4+DCount,STR Value\DCount+1,Checksum]
+  SERIN Rx,N9600,1500,NoAck,[RChecksum]				'Wait up to 600 ms for an acknowlegement
+  IF RChecksum <> Checksum THEN AckError				'If bad acknowlegement, error! 
+RETURN
+
+NoAck:									'No acknowlegement received
+  ErrNoAck = ErrNoAck + 1
+  RChecksum = ErrNoAck							'Pause for small random amount (0-255ms)
+  RANDOM RChecksum							'to eliminate lockup possibility
+  PAUSE RChecksum
+GOTO Transmit
+
+AckError:									'Bad acknowlegement received
+GOTO Transmit

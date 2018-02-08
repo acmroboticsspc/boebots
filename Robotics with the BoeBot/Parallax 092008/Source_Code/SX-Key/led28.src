@@ -1,0 +1,70 @@
+;=======================================================================
+;TITLE:         led28.src
+;
+;PURPOSE:       Simple Blink-an-LED example.
+;
+;AUTHOR:        Parallax, Inc.
+;
+;REVISIONS:
+;  09/17/04 -   Updated to support SASM.
+;
+;CONNECTIONS:
+;  RC.7 to LED anode.
+;  LED cathode to 470 ohm resister, other leg of resistor to ground.
+;
+;DETAILS:
+;  RC.7 is toggled high and low with a simple delay loop in-between.
+;  NOTE: To simplify code, the entire RC port output latch is inverted
+;  by this routine.
+;=======================================================================
+
+
+;-------------------------- DEVICE DIRECTIVES --------------------------
+
+		DEVICE		SX28,OSC1MHZ,TURBO
+
+IFDEF	__SASM  ;SASM Directives
+		DEVICE		STACKX,OPTIONX
+		IRC_CAL		IRC_SLOW
+		
+ELSE		;Parallax Assember Directives
+		DEVICE		STACKX_OPTIONX
+ENDIF
+
+		RESET		Initialize
+
+;------------------------------ VARIABLES ------------------------------
+			
+		Count1	EQU	$08
+		Count2	EQU	$09
+
+;---------------------------- DEBUG SETTINGS ---------------------------
+
+		FREQ 	1_000_000
+	
+		WATCH	Count1,16,UDEC
+
+;------------------------ INITIALIZATION ROUTINE -----------------------
+
+Initialize
+		;Configure port settings
+		mov	rc, #%00000000		;Port C output zero
+		mov	!rc,#%01111111		;Port C.bit7 output dir.
+
+;---------------------------- MAIN PROGRAM -----------------------------
+
+Main
+;Toggle RC.7 with a delay of 64k counts in-between.
+
+		call	delay			;delay	
+		mov	W,/RC			;toggle all of RC port
+		mov	RC,W				
+		jmp	Main			;goto main				
+
+
+Delay		clr	Count1  		;Initialize Count1, Count2	
+		clr	Count2								
+
+Loop		djnz	Count1,loop		;Decrement until all are zero		
+		djnz	Count2,loop							
+		ret				;then return				

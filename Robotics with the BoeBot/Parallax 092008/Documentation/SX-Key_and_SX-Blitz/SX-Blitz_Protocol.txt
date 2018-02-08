@@ -1,0 +1,170 @@
+Parallax SX-Blitz
+Communication Protocol v1.0
+
+Overview
+--------
+
+Communication with the SX-Blitz requires only Tx, Rx, and Gnd
+connections from the host.  All data is transceived at 57600
+baud, 8 data bits, no parity bit, 1 stop bit.  On the SX-Blitz,
+Rx and Tx are connected via a resistor, so every byte the host
+transmits on Tx is immediately echoed back on Rx; the host must
+ignore these echoed bytes.
+
+Whenever the SX-Blitz is waiting to receive a byte, the host
+has 2 seconds in which to send the byte.  If the SX-Blitz does
+not receive the byte within two seconds, it aborts the current
+mode and waits for a new connection.
+
+The host should always allow 100ms to receive a byte back from
+the SX-Blitz.  The exception to this rule is when the host is
+waiting for a response byte from either the 'erase' or
+'program' command.  In the case of erase, allow erase-time +
+100ms.  In the case of program, allow program-time *
+word-count + 100ms.  If a byte is not received from the
+SX-Blitz within the allowed time, an error condition exists and
+the host may abort the connection.
+
+To connect to the SX-Blitz, the host must transmit the byte
+sequence:
+
+$00 $53 $58 $2D $4B $65 $79          (0,'SX-Key')
+
+The SX-Blitz will respond with the sequence:
+
+$53 $58 $2D $4B $65 $79 $37 $95 $FD  ('SX-Key',$37,$95,version)
+
+At this point, the connection is established and the SX-Blitz
+is ready to receive a command byte.  From this point onward,
+all bytes received from the SX-Blitz must be two's-complemented
+(not'd and inc'd) within the host before they may be used.
+
+All 'words' are transceived low-byte first, then high-byte.
+
+The commands are as follows:
+
+$00 - end
+$01 - erase
+$02 - program
+$03 - read
+$04 - reset
+
+Below is a list of possible error codes that may be sent by
+the SX-Blitz in response to commands:
+
+$00 = Operation successful
+$01 = Vpp generation failed, waiting for new connection
+$02 = Chip connection failed, waiting for new connection
+$03 = Programming failed, waiting for new connection
+
+Command Details
+---------------
+
+            $00 - end
+
+Send this command to end your session with the SX-Blitz.  The
+SX-Blitz will wait for a new connection, and not interpret the
+next byte received as a command.
+
+            $01 - erase
+
+This command erases the entire SX device.  After sending the
+erase command ($01), send a byte to specify the erase-time in
+milliseconds (1 to 255).  The SX-Blitz will respond with an
+error code.  If the operation is successful, the SX-Blitz will
+be waiting for a new command byte.
+
+            $02 - program
+
+This command programs the SX device from beginning to end.
+The order in which the device's words will be programmed is:
+
+FUSEX (1 word)
+FUSE (1 word)
+CODE ($200/$400/$800 words)
+ID (16 words)
+
+After receiving the program command ($02), the SX-Blitz will
+respond with an error code.  Assuming no error condition,
+programming may proceed.
+
+The host must then send a byte specifying the word-count
+(number of sequential words to program).  This value may range
+from 1 to 32.  This must be followed by another byte
+specifying the programming time in milliseconds (1-255).
+Then, the words to be programmed must be sent in sequence. In
+order to save time, the SX-Blitz will not program $FFF values,
+though they will be verified.
+
+Upon completion of programming, the SX-Blitz will respond with
+an error code.  Assuming the operation was successful, another
+word-count may be sent, followed by the commensurate data and
+response.
+
+The host may end programming by sending $00 for the word-
+count.  When ending programming mode, the SX-Blitz will send
+a word which indicates the speed of the SX' internal RC
+oscillator.  Divide the constant 1,266,035,968 by the received
+word to determine the actual internal RC frequency of the SX.
+This frequency may be altered by programming special bits in
+the FUSEX word.  After this timing word is sent, the SX-Blitz
+will send a $00 byte to signify completion of the programming
+command.  It will then wait for a new command byte.
+
+            $03 - read
+
+This command reads the SX device from beginning to end.  The
+order in which the device's words will be read is:
+
+DEVICE (1 word)
+FUSEX (1 word)
+CODE ($200/$400/$800 words)
+ID (16 words)
+
+After receiving the read command ($03), the SX-Blitz will
+respond with an error code.  Assuming no error condition,
+reading may proceed.
+
+The host must then send a byte specifying the word-count
+(number of sequential words to read).  This value may range
+from 1 to 128.  The SX-Blitz will respond by sending
+the words read, followed by an error code.  Assuming no
+error occurred, another word-count may be sent, followed by
+the commensurate response.
+
+The host may end reading by sending $00 for the word-count.
+Upon ending reading, the SX-Blitz will respond with a timing
+word and a $00 byte.  See the program command's explanation
+for detail.  The SX-Blitz will then wait for a new command
+byte.
+
+            $04 - reset
+
+This command resets the SX device by pulsing OSC1 with Vpp.
+
+After receiving the reset command ($04), the SX-Blitz will
+respond with an error code.  Assuming no error condition,
+the SX-Blitz will be waiting for a new command byte.
+
+-----------------------------------------------------------
+
+            SX Programming Procedure
+
+1) Connect to the SX-Blitz
+2) Do an erase command
+3) Do a program command (repeat word-counts until done)
+4) Do a reset command (restarts the SX with its new program)
+5) Do an end command (releases the SX-Key from command mode)
+
+            SX Reading Procedure
+
+1) Connect to the SX-Blitz
+2) Do a read command (repeat word-counts until done)
+3) Do a reset command (restarts the SX)
+4) Do an end command (releases the SX-Key from command mode)
+
+            SX Reset Procedure
+
+1) Connect to the SX-Blitz
+2) Do a reset command (restarts the SX)
+3) Do an end command (releases the SX-Key from command mode)

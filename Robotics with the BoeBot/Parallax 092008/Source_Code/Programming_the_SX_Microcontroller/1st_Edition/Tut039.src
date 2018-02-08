@@ -1,0 +1,44 @@
+; TUT039.SRC
+; ----------------------------------------------------------------
+; Sample tutorial code published in
+; "Programming the SX Microcontroller" by Guenther Daubach
+; Copyright Parallax Inc. 2002
+; ----------------------------------------------------------------
+
+ifdef __SASM
+  DEVICE  SX28L, STACKX, OPTIONX
+  IRC_CAL IRC_FAST
+  FREQ    50_000_000
+else  
+  DEVICE  SX28AC, OSCHS, OPTIONX
+endif
+DEVICE  TURBO
+RESET   Start
+ 
+org     $08
+Ix      ds 1
+Data    ds 2
+
+Start
+  mov   Ix, #Table
+
+Loop
+  mov   m, #Table >> 8
+
+  mov   w, Ix
+  iread
+  mov   Data, w
+  mov   Data+1, m
+  inc   Ix
+  test  Data
+  sz
+    jmp Loop
+  test  Data+1
+  sz
+    jmp Loop
+  jmp   Start
+
+org     $400
+Table
+        dw    'PARALLAX'
+        dw    12, 123, 1234, 0
