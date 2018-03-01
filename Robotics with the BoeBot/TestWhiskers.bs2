@@ -10,7 +10,7 @@ DEBUG "WHISKER STATE", CR,
       "------  ------"
 
 DO
-  DEBUG CRXRXY, 0, 3,
+  DEBUG CRSRXY, 0, 3,
       "P5 = ", BIN1 IN5,
       "   P7 = ", BIN1 IN7
   PAUSE 50
