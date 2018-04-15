@@ -34,7 +34,7 @@ computerusername@Computername:~/folderthatIwantcodestuffsin$ ls
 boebots
 ```
 
-See, when I git cloned my fork onto my computer in folderthatIwantcodestuffsin, it created a folder called boebots, a special folder that works with git. I want in that folder, but I'm a lazy typer, so because there is only one folder, I can type ```cd s``` and then press the tab key, and since boebots is the only folder that starts with an s, it will autocomplete. Nifty right?
+See, when I git cloned my fork onto my computer in folderthatIwantcodestuffsin, it created a folder called boebots, a special folder that works with git. I want in that folder, but I'm a lazy typer, so because there is only one folder, I can type ```cd b``` and then press the tab key, and since boebots is the only folder that starts with an b, it will autocomplete. Nifty right?
 
 ```
 computerusername@Computername:~/folderthatIwantcodestuffsin$ cd boebots/
