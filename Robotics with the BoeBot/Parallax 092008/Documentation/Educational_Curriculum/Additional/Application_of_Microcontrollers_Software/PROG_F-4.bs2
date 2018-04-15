@@ -1,0 +1,43 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_F-4
+'Saves 2 set songs in EEPROM memory, displays them and plays them
+'By setting up the base memory location, we can play multiple tunes.
+'Use Red and Green buttons to play.
+
+ChargeName 	DATA 	"CHARGE!"  		'Store name and notes at set locations
+ChargeNotes DATA 	@$10, 50, 112, 50, 148, 50, 186, 100, 220, 3,26 ,67,186, 200,220
+BeepName 	DATA	@$30,"BEEPS!!"	'Store name and notes at set locations
+BeepNotes 	DATA 	@$40, 100, 150, 90, 180, 80, 200, 70, 220, 60, 240
+x 	var byte		'General Counting variable
+Pointer var byte		'Holds base location for memory
+Freq 	var byte		'Declare for frequency of note
+duration var byte		'Declare for Duration of note
+char 	var byte		'Declare to hold name character
+
+
+INPUT 11: INPUT 10	'Set inputs on buttons
+LOOP:
+Pointer = ChargeName 	'Set base memory location to CHARGE ($0) name
+IF IN11 = 0 THEN PLAY	'Is Red pressed? Play song.
+Pointer = BeepName	'Set base memory location to BEEPs ($30) name
+IF IN10 = 0 THEN PLAY	'Is Green pressed? Play song.
+GOTO LOOP:
+
+Play:				'Display song name
+debug CR
+FOR x = 0 to 6	
+READ Pointer + x, char	'Read a character
+DEBUG char			'Display it
+NEXT
+
+Pointer = Pointer + $10		'Increment base to notes location
+FOR x = 0 to 15 Step 2		'Play the song
+READ Pointer + x,Duration	'Get duration from memory
+READ Pointer + x + 1,  Freq	'Get Freq from memory
+FREQOUT 11, Duration * 3, Freq * 10		'Multiply out and play
+NEXT
+GOTO Loop

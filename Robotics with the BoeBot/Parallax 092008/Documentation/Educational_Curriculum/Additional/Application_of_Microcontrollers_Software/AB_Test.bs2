@@ -1,0 +1,144 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'Program to test the activity board I/O.
+
+DEBUG CLS,"TESTING THE ACTIVITY BOARD!",CR
+
+DEBUG CR,CR,"PLAYING CHARGE!", CR
+'Plays the CHARGE! theme.
+'Hit the Reset button on the activity board to replay it.
+
+OUTPUT 11	'Set up direction for speaker
+
+FREQOUT 11, 150, 1120	'Play notes
+FREQOUT 11, 150, 1476
+FREQOUT 11, 150, 1856
+FREQOUT 11, 300,2204
+FREQOUT 11, 9, 255
+FREQOUT 11, 200,1856
+FREQOUT 11, 600, 2204
+DEBUG "Did the tune play??", CR
+Gosub INCHECK
+
+DEBUG CR,CR, "FLASHING LEDS, please watch them",CR
+PAUSE 2000
+X var Byte
+DIRC = %1111
+OUTC = %1110
+Pause 250
+OUTC = %1101
+Pause 250
+OUTC = %1011
+Pause 250
+OUTC = %0111
+Pause 250
+OUTC = %1011
+Pause 250
+OUTC = %1101
+Pause 250
+OUTC = %1110
+Pause 250
+OUTC = %1111
+DEBUG "Did all LEDs Flash?",CR
+Gosub INCHECK
+
+PotTest:
+DEBUG CR,CR, "TESTING POTENTIOMETER!", CR
+DEBUG "Rotate the POT full Counter ClockWise", CR
+Gosub Bluewait
+
+POTin var word
+HIGH 7: Pause 10
+RCTIME 7,1,POTin
+Debug ? PotIn
+If POTin < 10 then PotLowOK
+DEBUG "The pot in fully counter clockwise did NOT read correctly.",CR
+Goto PotHighTest
+
+PotLowOK:
+DEBUG "Worked fine!", CR
+
+PotHighTest
+DEBUG cr,"Rotate the POT full ClockWise", CR
+Pause 1000
+Gosub Bluewait
+
+HIGH 7: Pause 10
+RCTIME 7,1,POTin
+Debug ? PotIn
+If POTin > 4500 then PotHighOK
+DEBUG "The pot in fully clockwise did NOT read correctly.",CR
+Goto ADCTest
+
+PotHighOK:
+Debug "Worked fine!",CR
+
+ADCTest:
+DEBUG CR,CR,"TESTING Analog to Digital Converter.",CR
+DEBUG "Place a jumper from the analog input to I/O Pin 9 (Consult lab manual)", CR
+Gosub bluewait
+LOW 9
+pause 500
+ADCin:
+ADres	var byte		' A/D result (8 bits)
+ADcs	con	12		' A/D enable (low true)
+ADdat	con	14		' A/D data line
+ADclk	con	15		' A/D clock  
+
+
+Debug DEC Adres * 50 / 26, "mVolts",CR
+IF ADres <20 then ADC2
+GOTO ADCBad
+ADC2
+HIGH 9
+pause 500
+	low ADcs				' Enable ADC
+	shiftin ADdat,ADclk,msbpost,[ADres\9]	' Shift in the data
+	high ADcs				' Disable ADC
+Debug DEC Adres * 50 / 26, "mVolts",CR
+IF ADres > 245 then ADCOK
+ADCBad
+Debug "The ADC did not operate correctly!",CR
+Goto Endcheck
+
+ADCOK:
+DEBUG "The ADC worked fine!",CR
+
+EndCheck:
+DEBUG CR,CR, "If there were problems with the board, please consult documentation or your instructor.",CR
+DEBUG "THANKS! Press RESET on the activity board to re-perform this test!",CR
+	
+END
+
+
+INCHECK:
+Pause 500
+DEBUG "PLEASE PRESS THE GREEN BUTTON IF YES, RED IF NO!!",CR
+DIR10 = 0
+DIR11 = 0
+Loop:
+IF IN10 = 0 THEN INOK
+IF IN11 = 0 THEN INBAD
+Goto LOOP
+
+INOK:
+DEBUG "GREAT!",CR
+Return
+
+INBAD:
+DEBUG "Please check your setup.", CR
+DEBUG "If the feature does not work,contact your instructor.",CR
+Return
+
+BlueWait:
+DEBUG "Please press the Blue Button to continue.",CR
+DIR8 = 0
+LoopBlue
+If IN8 = 1 then LoopBlue
+Return
+
+
+

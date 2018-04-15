@@ -1,0 +1,29 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_D-3
+'This program will pulse the 0831 Clk, acquire each bit and reassemble
+'the byte representing temperure.
+
+CS con 12	'define constants & variables
+Clk con 15
+Datain var Byte	'holds incoming number
+Bitcnt var Byte	'For-next variable
+
+Loop:
+Datain = 0	'clear variable for new conversion. 
+LOW Clk	'Ready the clock line. 
+LOW CS	'Select the chip.
+FOR bitcnt = 1 TO 8	'Start loop (Start bit is
+		'automatically shifted out)
+	PULSOUT Clk, 5	'pulse the clk pin
+	Datain= Datain + IN14	'Collect the bit
+	Datain = Datain << 1	'Shift it over
+NEXT
+HIGH CS	'Done, deselect the ADC
+DEBUG ? Datain	'Display it on PC
+DEBUG ? Datain/5	'Convert to Volt (x10) 
+Pause 1000	'pause for a second
+GOTO Loop	'repeat

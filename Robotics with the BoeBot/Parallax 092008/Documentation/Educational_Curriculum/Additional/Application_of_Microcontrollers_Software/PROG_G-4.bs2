@@ -1,0 +1,21 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_G-4
+'Scale the POT for approx. -2500 to +2500 and display results
+
+POTIn var word				'Declare to hold Pot Results (0 to ~ 5300)
+POTScaled var word			'Declare to hold scaled down (-250 to ~ +250)
+
+POTpin con 7				'Constant for Pin number of Pot
+
+Loop:
+HIGH POTpin:Pause 10			'Charge RC Pot
+RCTIME POTpin, 1, PotIn			'Measure Pot
+POTScaled = PotIn / 10 - 250		'Scale input then display
+DEBUG "2's compliment = ", IBIN PotScaled," Binary Signed = ",SBIN PotScaled
+DEBUG " Decimal Signed = ", SDEC PotScaled, CR
+PAUSE 250
+GOTO Loop

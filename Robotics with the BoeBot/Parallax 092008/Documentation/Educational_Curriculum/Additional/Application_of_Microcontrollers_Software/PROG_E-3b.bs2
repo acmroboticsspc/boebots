@@ -1,0 +1,49 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_E-3b
+'Proportional Control of Incubator, 100F = Fully OFF, 110F = Fully ON
+'The Aout PWM output will change between 0 to around 4V for 0 to 100% drive.
+'Pot adjusts temperature sensed by program. Red's LED indicates alarm (>115). 
+'Press Red to reset alarm.
+
+Error var byte				'Stores the temperature error
+Drive var word				'Stores %Drive, 0-100% 
+TimeOn var word				'Time On based on drive over 1 second.
+RCin var word				'Varibale to hold RC time
+Temp var byte				'RC time is spanded to ~80-130 and stored here
+AlarmFlag var Bit				'One bit to indicate alarm condition. 0 = no alarm
+Pot con 7					'Define Pot I/O pin
+
+AlarmFlag = 0				'Clear Alarm flag
+
+Loop: 
+HIGH pot: Pause 10				'Charge cap for 10 mSec
+RCTIME Pot, 1, RCin: Temp = RCin/106 + 80	'Measure and convert
+Debug CR, "Temperature is: ",DEC Temp	'Display
+
+IF Temp < 105 then BelowSetpoint		'To avoid neg numbers, used 2 calc's.
+Error = Temp - 105 MAX 5			'Calculate Error if below setpoint
+Drive = -Error * 10 + 50:  GOTO Control	'Caclulate %Drive based on Error
+
+BelowSetpoint:
+Error = 105 - Temp MAX 5			'Calculate Error if Above setpoint
+Drive = Error * 10 + 50 			'Calculate %Drive Based on Error
+
+Control:
+DEBUG ": Error = ",DEC Error			'Display Error
+DEBUG ": %Drive = ", DEC Drive		'Display Drive
+PWM 12, 255/100 * Drive,100			'PWM = %drive of full (255) for 100mSec
+
+Input 11						'Check for alarm reset
+If IN11 = 1 then AlarmOn			'If not pressed, leave it on
+AlarmFlag = 0					'else clear it if
+
+AlarmOn: If Temp < 115 then AlarmSound	'Less than alarm temp? don't set
+AlarmFlag = 1					'else set it
+
+AlarmSound: If AlarmFlag = 0 then Loop	'Alarm not set? Don't sound, repeat loop
+Freqout 11, 50, 2000: Debug " **** ALARM ****"  'else sound & display.
+Goto Loop

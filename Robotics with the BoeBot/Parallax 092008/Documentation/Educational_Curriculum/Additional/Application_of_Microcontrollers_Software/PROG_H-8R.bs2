@@ -1,0 +1,21 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'Prog_H-8R
+'Word receiver using pulse width as data on P0.  Sounds tone based on it
+
+WordIn var Word		'Incoming Word
+
+Loop:
+DEBUG CR, "Waiting for Pulse",CR	'Display waiting message
+
+Again:
+PULSIN 0, 1, WordIn			'Read pulse			
+If WordIn = 0 then Again		'If no pulse, read again
+
+DEBUG "Word in is ", DEC WordIn,CR
+FREQOUT 11, 200, WordIn			'Sound Tone	
+GOTO Loop
+

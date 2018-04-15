@@ -1,0 +1,16 @@
+' Scribbler PBASIC Programming Guide - FullSpeed.bs2
+' Turn both wheels forward at full speed.
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program running!"
+
+LOW 12            ' Initalize motor I/O pins to
+LOW 13            '  output low
+PAUSE 100         ' Let the motor ciruits wake up
+
+PULSOUT 12, 3000  ' right motor forward full speed
+PULSOUT 13, 3000  ' left motor forward full speed
+
+
+

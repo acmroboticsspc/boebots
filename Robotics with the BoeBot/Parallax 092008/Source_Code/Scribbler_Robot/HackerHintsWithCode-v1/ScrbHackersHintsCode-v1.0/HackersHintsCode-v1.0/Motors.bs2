@@ -1,0 +1,49 @@
+' Scribbler Robot Demonstration Code
+' Motors.bs2
+' Drives forward for 2 seconds, turns right for 1 second
+' using a duration command, and then pauses for an extra second,
+' in a continuous loop
+' (C) Parallax Inc. 2005
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+' I/O Declarations
+
+MotorRight    PIN 12
+MotorLeft     PIN 13
+
+
+' I/O Initialization
+
+LOW MotorRight
+LOW MotorLeft
+
+
+DO
+
+  ' Drive forward at half speed
+  PULSOUT MotorRight, 2500
+  PULSOUT MotorLeft, 2500
+
+  ' Wait 2 seconds
+  PAUSE 2000
+
+  ' Turn right for 1 second
+  PULSOUT MotorRight, 1500
+  PAUSE 1
+  PULSOUT MotorRight, 1400
+
+  PULSOUT MotorLeft, 2500
+  PAUSE 1
+  PULSOUT MotorLeft, 1400
+
+  ' Pause for the 1 second turn and an extra second
+  PAUSE 2000
+
+LOOP
+
+
+
+
+

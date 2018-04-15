@@ -1,0 +1,41 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_E-2
+'Differential Gap control of incubator.  ON at 102 decreasing, OFF at 108 increasing.
+'Pot adjust temperature sensed by program.
+'Blue's LED is indicates heat on, Red's indicates alarm (>115). Press Red to reset.
+
+RCin var word			'Varibale to hold RC time
+Temp var byte			'RC time is spanded to ~80-130 and stored here
+AlarmFlag var Bit			'One bit to indicate alarm condition. 0 = no alarm
+Pot con 7				'Define Pot I/O pin
+
+AlarmFlag = 0			'Clear Alarm flag
+
+Loop: 
+HIGH pot: Pause 10				'Charge cap for 10 mSec
+RCTIME Pot, 1, RCin: Temp = RCin/106 + 80	'Measure and convert
+Debug CR, "Temperature is: ",DEC Temp	'Display
+If Temp < 107 then Heaton 			'<107 ? Skip turning heat off
+HIGH 8						'or else turn heat off
+
+Heaton: IF Temp > 102 then Indicate		'>102? Skip turning heat on
+LOW 8							'else turn it on
+
+Indicate: If IN8 = 1 then AlarmOff		'If heat is Off, skip display 
+DEBUG ":  Heater is ON "			'else display it
+
+AlarmOff:Input 11:Pause 10			'Check for alarm reset
+If IN11 = 1 then AlarmOn			'If not pressed, leave it on
+AlarmFlag = 0					'else clear it if
+
+AlarmOn: If Temp < 115 then AlarmSound	'Less than alarm temp? don't set
+AlarmFlag = 1					'else set it
+
+AlarmSound: If AlarmFlag = 0 then Loop	'Alarm not set? Don't sound, repeat loop
+Freqout 11, 50, 2000: Debug " **** ALARM ****"  'else sound & display.
+Goto Loop
+

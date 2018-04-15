@@ -1,0 +1,73 @@
+' Scribbler Robot Demonstration Code
+' ObjectDetect.bs2
+' Detect objects with IR , green user LEDs indicate if object is
+' seen to the Scribbler's right or left.
+' (C) Parallax Inc. 2005
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+' I/O Declarations
+
+ObsRx         PIN 6   ' obstacle sensor IR detector
+
+LedRight      PIN 8   ' right green LED
+LedLeft       PIN 10  ' left green LED
+
+ObsTxRight    PIN 14  ' right obstacle sensor IR emitter
+ObsTxLeft     PIN 15  ' left obstacle sensor IR emitter
+
+
+' I/O Initialization
+
+LOW LedRight
+LOW LedLeft
+
+LOW ObsTxRight
+LOW ObsTxLeft
+
+' Variables
+
+object_right VAR Bit
+object_left VAR Bit
+
+
+DO
+
+  ' Output IR light modulated at the right frequency
+  FREQOUT ObsTxRight, 1, 38500
+
+  ' Check if reflected light was detected
+  object_right = ObsRx
+
+  IF object_right = 0 THEN    ' object detected
+    HIGH LedRight             ' turn on right green user LED
+  ELSE                        ' object not detected
+    LOW LedRight              ' turn off right green user LED
+  ENDIF
+
+  ' Turn off the right-side IR LED
+  LOW ObsTxRight
+
+  ' Do the same thing for the left-hand side
+  FREQOUT ObsTxLeft, 1, 38500
+
+  ' Check if reflected light was detected
+  object_left = ObsRx
+
+  IF object_left = 0 THEN    ' object detected
+    HIGH LedLeft             ' turn on left green user LED
+  ELSE                       ' object not detected
+    LOW LedLeft              ' turn off left green user LED
+  ENDIF
+
+  ' Turn off the left-side IR LED
+  LOW ObsTxLeft
+
+LOOP
+
+
+
+
+
+

@@ -1,0 +1,34 @@
+<!-- Generated code: DO NOT EDIT! Any changes will void this file. -->
+<!-- F37F0EE939B9DD7D5DA7DE1997213AA8 -->
+<opt autoreadsensors="2" class="Scribbler_Worksheet" version="1.0">
+  <_children active="1" activecalls="0" activeout="1" class="Scribbler_Subroutine" color="green" counters="0" subclass="">
+    <_children active="1" activeout="0" class="Scribbler_SubroutineTile" subclass="sub_begin">
+      <action icon="gear_green" />
+    </_children>
+    <_children active="1" activeout="0" class="Scribbler_LedTile" subclass="">
+      <action>
+        <_states>on</_states>
+        <_states>on</_states>
+        <_states>on</_states>
+      </action>
+    </_children>
+    <_children active="1" activeout="0" class="Scribbler_PauseTile" subclass="">
+      <action call="" icon="pause" text="1.0s" />
+    </_children>
+    <_children active="1" activeout="0" class="Scribbler_LedTile" subclass="">
+      <action>
+        <_states>on</_states>
+        <_states>off</_states>
+        <_states>na</_states>
+      </action>
+    </_children>
+    <_children active="1" activeout="0" class="Scribbler_PauseTile" subclass="">
+      <action call="" icon="pause" text="1.0s" />
+    </_children>
+    <_children active="1" activeout="0" class="Scribbler_SubroutineTile" subclass="sub_end">
+      <action icon="gear_green" />
+    </_children>
+    <action></action>
+    <callsto></callsto>
+  </_children>
+</opt>

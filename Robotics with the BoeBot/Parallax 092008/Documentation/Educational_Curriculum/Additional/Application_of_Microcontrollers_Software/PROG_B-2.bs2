@@ -1,0 +1,13 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_B-2
+'Set  P9 output to equal P11 input
+'Depress Red Button while running
+DIR11 = 0  	'Sets P11 for  input
+DIR9 = 1    	'Sets P9 for output
+LOOP:
+OUT9 = IN11 	'Set P9 = P11 state
+GOTO LOOP

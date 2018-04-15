@@ -1,0 +1,16 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_B-3
+'Alternates P8 and P9 states
+HIGH 8  	'set P8 to 5V
+LOW 9  	'set P9 to 0V
+
+LOOP:
+TOGGLE 8  	'change state P8
+TOGGLE 9  	'change state P9
+DEBUG ? OUT8, ? OUT9  	'show values
+PAUSE 1000 	'pause for 1 second
+GOTO LOOP   'repeat

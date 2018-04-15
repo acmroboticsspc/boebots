@@ -1,0 +1,11 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_C-1
+'Count 0 - 15 and display in decimal & binary
+DataCnt  var nib
+FOR DataCnt = 0 to 15			'show data and add a carriage return
+	Debug DEC DataCnt, " Decimal = ",  IBin4 DataCnt," Binary", CR 
+Next

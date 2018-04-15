@@ -1,0 +1,16 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_H-1R
+'Parallel nibble transfer receiver
+'Reads nibble A (P0-P3) and sets LEDs equal to it
+
+DIRA = %0000	'Set up P0-P3 as inputs
+DIRC = %1111	'Set up button LEDs as outputs
+
+Loop
+DEBUG "Data in = ",IBIN4 INA, CR  'Display data
+OUTC = INA		'Set LEDs to nibble A (Receives and displays)
+GOTO LOOP

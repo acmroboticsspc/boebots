@@ -1,0 +1,241 @@
+'{$STAMP BS2}
+'{$PBASIC 2.5}
+
+'------------------------------------------------------------------------------
+' Boe-dar.BS2: Program To roam about using IR sensors for obstacle avoidance.
+' Wheel encoders keep track of position and orientation. These data are sent
+' periodically to a host PC via an RF transmitter.
+'------------------------------------------------------------------------------
+'
+'Written by Philip C. Pilgrim      29 April 2004
+'
+'---------[Calibration Constants]----------------------------------------------
+
+SDIRINC   CON 33101     'Sin(delta) factor by which to modify the angle vectors for each
+                        'encoder pulse. Increase this number if Boe-Bot turns
+                        'more than odometer says it does. Decrease, if less.
+                        'Sin(delta) = SDIRINC / 262144.)
+
+SPOSINC   CON 264       'Sin(delta) factor to compute distance for each encoder pulse.
+                        '256 corresponds to 0.5" travel per two-wheel pulse.
+                        'For centimeters, start with 650 to get 1.27cm of travel per
+                        'two-wheel pulse. (SPOSINC = W * SDIRINC / 512, where W
+                        'is the effective distance between wheels in the desired units.)
+
+'---------[Initialization Constants]-------------------------------------------
+
+XINIT     CON 128       'Initial X position (byte) in whole units.
+YINIT     CON 128       'Initial Y position (byte) in whole units.
+                        'Initial direction is always assumed to be towards +Y (north).
+
+POSINT    CON 16        'Position transmit interval.
+IDINT     CON 128       'ID transmit interval.
+
+ID        CON "1"       'Transmitted ID.
+
+BAUD      CON $4006     'BS2 baudrate constant for 38400 baud, inverted polarity.
+RSTBTN    CON 64        'EEPROM location used on startup to count reset button pushes.
+
+'---------[Other Constants]----------------------------------------------------
+
+RIGHT     CON 0         'Constants used as subscripts into bit arrays.
+LEFT      CON 1
+FWD       CON 0
+BAK       CON 1
+
+VMIN      CON 0         'Minimum adder/subtractor to null velocity.
+VMAX      CON 50        'Maximum adder/subtractor to null velocity.
+VINC      CON 2         'Velocity ramp rate.
+
+RFXmt     PIN 0         'To RX pin on RF transmitter.
+IRInpR    PIN 6         'Right IR sensor.
+IRInpL    PIN 7         'Left IR sensor. (MUST be IRInpR + 1.)
+IROutR    PIN 8         'Right IRLED.
+IROutL    PIN 9         'Left IRLED. (MUST be IROutR + 1.)
+
+SenseR    PIN 10        'Righthand encoder input.
+SenseL    PIN 11        'Lefthand encoder input. (MUST be SenseR + 1.)
+
+MotorR    PIN 12        'Righthand motor output.
+MotorL    PIN 13        'Lefthand motor output. (MUST be MotorR + 1.)
+
+IRInp     CON IRInpR    'Base address for IR sensors.
+IROut     CON IROutR    'Base address for IRLEDs.
+Sense     CON SenseR    'Base address for encoders.
+Motor     CON MotorR    'Base address for motors.
+
+'---------[Variables]----------------------------------------------------------
+
+Prev      VAR Bit(2)    'Previous readings from encoders.
+Dir       VAR Bit(2)    'Wheel directions (FWD or BAK).
+LastSide  VAR Bit       'Last side to get a pulse (LEFT or RIGHT).
+NewSeq    VAR Bit       'Set if last movement started a new LR or RL sequence.
+Side      VAR Bit       'Side index (LEFT or RIGHT).
+Moved     VAR Bit       'Indicates motion since last checking.
+
+NewDir    VAR Bit(2)
+Event     VAR Byte
+
+Xpos      VAR Word      'X location of the Boe-Bot's center.
+X         VAR Xpos.HIGHBYTE 'Integer portion of Xpos. Low byte is fraction.
+Ypos      VAR Word      'Y location of the Boe-Bot's center.
+Y         VAR Ypos.HIGHBYTE 'Integer portion of Ypos. Low byte is fraction.
+Xdir      VAR Word      'X component of the Boe-Bot's direction.
+Xd        VAR Xdir.HIGHBYTE
+Ydir      VAR Word      'Y component of the Boe-Bot's direction.
+Yd        VAR Ydir.HIGHBYTE
+PosCtr    VAR Byte      'Countdown for position interval.
+IDCtr     VAR Byte      'Countdown for ID interval.
+
+Veloc     VAR Byte
+i         VAR Byte      'Scratch variables...
+n         VAR Byte
+
+          DATA          @RSTBTN, 0
+
+'---------[Program begins here.]-----------------------------------------------
+
+READ RSTBTN, i            'Determine how may times reset button was pressed.
+WRITE RSTBTN, i + 1
+PAUSE 1000
+WRITE RSTBTN, 0
+SELECT i
+
+  CASE 0:                 'One press: Just send out ID string.
+    GOSUB Initialize
+    Event = ID
+    DO
+      GOSUB Transmit
+      PAUSE 500           'Do it every half second.
+    LOOP
+
+  CASE 1:                 'Two presses: Start roaming...
+    GOTO MainProg
+
+  CASE ELSE:              'Otherwise, just die.
+    END
+
+ENDSELECT
+
+'---------[Main routine begin here.]-------------------------------------------
+
+MainProg:                                             'Begin roaming...
+
+  GOSUB Initialize                                    'Do encoder initialization.
+
+  DO
+    FOR Side = RIGHT TO LEFT                          'Read IR obstacle sensors.
+      FREQOUT IROut + (Side ^ 1), 1, 38500            'When obstacle detected,
+      NewDir(Side) = ~ INS.LOWBIT(IRInp + (Side ^ 1)) 'opposite wheel goes backward.
+    NEXT
+    NewDir(LEFT) = NewDir(LEFT) & (NewDir(RIGHT) ^ 1) 'Still need to turn if both sides detect.
+    IF (NewDir(LEFT) | NewDir(RIGHT)) THEN            'If obstacle...
+      GOSUB WaitEnc                                   'Wait for motion to cease.
+      IF NewDir(LEFT) THEN Event = "G" ELSE Event = "R" 'Event is red for port obstacle, green for stbd.
+      GOSUB Transmit                                  'Transmit event.
+      Veloc = VMIN                                    'Throttle down.
+      Dir(RIGHT) = BAK
+      Dir(LEFT) = BAK
+      n = 25
+      GOSUB Move                                      'Back up 25 motor pulses..
+      GOSUB WaitEnc                                   'Wait for motion to cease.
+      Veloc = VMIN
+      Dir(RIGHT) = NewDir(RIGHT)                      'Now turn in place.
+      Dir(LEFT) = NewDir(LEFT)
+      n = 5 * Dir(RIGHT) + 25                         'Different amounts for L & R, so don't get stuck in
+      GOSUB Move                                      '  corners.
+      GOSUB WaitEnc
+      Veloc = VMIN
+    ELSE                                              'If no obstacles...
+      Dir(LEFT) = FWD
+      Dir(RIGHT) = FWD
+      n = 1
+      GOSUB Move                                      'Move forward one motor pulse.
+    ENDIF
+  LOOP                                                'Ad infinitum...
+
+  END
+
+Move:
+
+  FOR i = 1 TO n                                      'n motor pulses.
+    PULSOUT MotorR, 750 + ((Dir(RIGHT) << 1 - 1) * Veloc)
+    PULSOUT MotorL, 750 - ((Dir(LEFT) << 1 - 1) * Veloc)
+    GOSUB ChkEnc                                      'Always check the encoders.
+    PAUSE 10
+    Veloc = Veloc + VINC MAX VMAX                     'Ramp up the velocity.
+  NEXT
+  RETURN
+
+'---------[Subroutines]--------------------------------------------------------
+
+Initialize:                        'Do encoder initialization.
+
+  Xdir = 0                         'Set direction to +Y.
+  Ydir = $4000
+  Xpos = XINIT << 8                'Set positions from constants.
+  Ypos = YINIT << 8
+  FOR Side = RIGHT TO LEFT         'Read initial encoder values.
+    Prev(Side) = INS.LOWBIT(Sense + Side)
+  NEXT
+  Event = "!"
+  GOTO Transmit
+
+'------------------------------------------------------------------------------
+
+WaitEnc:                           'Track encoders until motion ceases.
+
+  FOR i = 1 TO 30                  'Need 30 motionless intervals to be sure.
+    GOSUB ChkEnc                   'Check the encoder.
+    IF (Moved) THEN i = 0          'If the bot moved, reset counter and start over.
+  NEXT
+  RETURN                           'No motion for 30 steps. It's stopped.
+
+'------------------------------------------------------------------------------
+
+ChkEnc:                            'Update and record position from encoders.
+                                   'Just call it often enough to catch all the
+                                   'changes.
+  Moved = 0                        'Initialize to no detected movement.
+  FOR Side = RIGHT TO LEFT               'For both encoders...
+    IF (INS.LOWBIT(Sense + Side) ^ Prev(Side)) THEN  'Encoder different from prior value?
+
+        Prev(Side) = ~ Prev(Side)        '  Yes: Update with new value.
+        Moved = 1                        '       Indicate that we've moved.
+        NewSeq = ~ (Side ^ Dir(Side) ^ LastSide & NewSeq)   'Start a new LR or RL sequence unless
+                                         '       different side moved last and that was
+                                         '       the start of a new sequence.
+        LastSide = Side ^ Dir(Side)                '       Update last side to move.
+        IF (NewSeq) THEN DoPos           '       New sequence starts with position.
+                                         '       2nd half of same sequence undoes angle first.
+
+      DoAng:                             '       Angle change.
+
+        Ydir = Ydir - ((Dir(Side) ^ Side ^ Xdir.BIT15 << 1 - 1) * (ABS(Xdir) ** SDIRINC >> 3))
+        Xdir = Xdir + ((Dir(Side) ^ Side ^ Ydir.BIT15 << 1 - 1) * (ABS(Ydir) ** SDIRINC >> 2))
+        Ydir = Ydir - ((Dir(Side) ^ Side ^ Xdir.BIT15 << 1 - 1) * (ABS(Xdir) ** SDIRINC >> 3))
+        IF (NewSeq) THEN DoNext
+
+      DoPos:                             '       Position change.
+
+        Xpos = Xpos - ((Dir(Side) ^ Xdir.BIT15 << 1 - 1) * (ABS(Xdir) ** SPOSINC))
+        Ypos = Ypos - ((Dir(Side) ^ Ydir.BIT15 << 1 - 1) * (ABS(Ydir) ** SPOSINC))
+        IF (NewSeq) THEN DoAng
+
+      DoNext:
+
+    ENDIF
+  NEXT
+  IF (IDCtr) THEN IDCtr = IDCtr - 1      'ID counter decrements whether moved or not.
+  IF (Moved AND PosCtr) THEN PosCtr = PosCtr - 1  'Position counter decrements only if moved.
+  IF (PosCtr AND IDCtr) THEN RETURN      'Return if neither has reached zero.
+  Event = ID                             'Default event is ID. Fall thru to Transmit.
+
+'------------------------------------------------------------------------------
+
+Transmit:
+  PosCtr = POSINT                        'Reset both counters.
+  IDCtr = IDInt
+  SEROUT RFXmt, BAUD, [HEX2 X, HEX2 Y, HEX2 Xd, HEX2 Yd, Event, CR]     'Transmit data.
+  Event = ID                             'Reset event to default.
+  RETURN                                 'Over and out.

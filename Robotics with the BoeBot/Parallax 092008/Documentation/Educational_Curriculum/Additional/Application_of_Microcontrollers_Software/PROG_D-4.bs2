@@ -1,0 +1,21 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/imsasa/elm                 7/1/99 Martin Hebel *
+'* Modified from Activity Board adc0831.bs2 program                  *
+'*********************************************************************
+'PROG_D-4
+'Use SHIFTIN command to read the ADC0831 serial ADC
+
+ADres	var	byte		' A/D result (8 bits)
+ADcs	con	12		' A/D enable (low true)
+ADdat	con	14		' A/D data line
+ADclk	con	15		' A/D clock  
+
+START:	
+LOW ADcs					' Enable ADC
+	SHIFTIN ADdat,ADclk,msbpost,[ADres\9]	 ' Shift in the data
+	HIGH ADcs						 ' Disable ADC
+	DEBUG "Byte =", DEC ADres 			 ' Display the result
+	DEBUG "  Tenths of Volt = ", DEC ADres * 50/26 ,CR ' Diplay in tenths of volts
+	PAUSE 100						 ' Wait a 0.1 Seconds 
+GOTO START							 ' Repeat forever

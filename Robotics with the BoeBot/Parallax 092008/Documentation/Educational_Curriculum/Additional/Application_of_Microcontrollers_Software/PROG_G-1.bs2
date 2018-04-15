@@ -1,0 +1,24 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_G-1
+'This program will logically evaluate the BLUE and BLACK pushbuttons,
+'and produce a tone if the expression is true.  To make buttons pressed = true,
+'the XOR function will be used to invert the input since pressed = 0.
+
+INPUT 8	'Set up Blue PB for input
+INPUT 9	'Set up Black PB for input
+A var bit	'Decare bit variables
+B var bit	
+
+Loop:
+A = IN8 ^ 1			'Read Blue and compliment
+B = IN9 ^ 1			'Read Black and compliment
+IF A & B THEN IsTrue	'Evaluate and sound tone if true
+Goto Loop			'Repeat
+
+IsTrue			'Sound tone
+Freqout 11, 100, 2500
+GOTO Loop

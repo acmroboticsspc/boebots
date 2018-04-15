@@ -1,0 +1,10 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_B-7
+'Plays a dual tone (chord) of 2500 and 3000 Hz.
+'Hit the board reset to replay it.
+OUTPUT 11     
+FREQOUT 11, 2000, 2500, 3000

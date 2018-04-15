@@ -1,0 +1,27 @@
+' Scribbler PBASIC Programming Guide - YourTurnLeds.bs2
+' Blink LEDS in a pattern, in a loop.
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program Running!"
+
+DO
+
+  HIGH  8
+  PAUSE 100
+  HIGH  9
+  PAUSE 100
+  HIGH  10
+  PAUSE 100
+
+  LOW 10
+  PAUSE 100
+  LOW 9
+  PAUSE 100
+  LOW 8
+  PAUSE 100
+
+LOOP
+
+

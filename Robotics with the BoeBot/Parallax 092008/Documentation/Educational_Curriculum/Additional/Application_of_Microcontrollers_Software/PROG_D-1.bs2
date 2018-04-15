@@ -1,0 +1,22 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_D-1
+'This program will alternately dim and brighten the P8 LED
+
+LED con 8		'Set LED to constant 8
+Duty var byte		'Define a byte variable for duty
+OUTPUT LED		'set LED to be an output
+
+Loop:
+FOR Duty = 0 TO 255             	'Cycle through the 255 levels
+	PWM LED, Duty, 20   	'Apply PWM to LED for 50mSec each duty 
+NEXT				'Slowly dims LED (high = off!!)
+
+FOR Duty = 255 TO 0		'Cycle through backwards
+	PWM LED, Duty, 20
+NEXT
+
+GOTO Loop			'Repeat

@@ -1,0 +1,18 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_B-13
+'Running down the Highway!
+'Run program, turn off lights, carefully wave board.
+LOW 10
+LOW 8
+HIGH 9
+
+Loop:
+PAUSE 2
+TOGGLE 9
+PAUSE 5 
+TOGGLE 9
+GOTO loop

@@ -1,0 +1,23 @@
+The left mouse button toggles the selected pixel.  The right mouse button always turns a pixel off.
+
+You can actually use eight lines with the 5x7 font.  If you use the eighth line, however, the underline cursor (if enabled) may not be visible.  The same is true for using the eleventh line of the 5x10 font.
+
+You can start with a predefined character by selecting Edit > Load Standard Character.
+
+You can "nudge" your custom character with the following key combinations:%s%s  - [Alt] + [Up Arrow]%s  - [Alt] + [Down Arrow]%s  - [Alt] + [Left Arrow]%s  - [Alt] + [Right Arrow]%s%s Nudge commands affect only the visible pixels.
+
+Edit > Clear, Edit > Fill and Edit > Invert commands affect all pixels.
+
+Edit > Mirror and Edit > Flip affect only the visible pixels.
+
+When downloading custom 5x10 characters, the first line of the character must fall at these 16-byte boundry addresses in the CGRAM:%s%s  - 0, 16, 32, 48 %s%sOnly four custom characters are available when using the 5x10 font.
+
+You can save a "spare" copy of your character by using %sFile > Save As....
+
+If you have a live Internet connection, clicking Help > Parallax Online... will connect you to the Parallax web site.  %s%sWhile visiting, check for LCD Character Creator updates.
+
+You can send an e-mail to Parallax by clicking Help > E-mail Support....  %s%sOr you can call if you prefer.  Our telephone number is 916-624-8333.
+
+
+
+

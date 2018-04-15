@@ -1,0 +1,40 @@
+' Scribbler Robot Demonstration Code
+' Infrared emitter and receiver pairs
+' detect white or black surface beneath the Scribbler
+' and display the result in the Debug Terminal.
+' (C) Parallax Inc. 2005
+
+'  {$STAMP BS2}
+'  {$PBASIC 2.5}
+
+
+' I/O Declarations
+
+LineEnable    PIN 3   ' power to line follower IR emitters
+LineRight     PIN 4   ' right line follower IR detector
+LineLeft      PIN 5   ' left line follower IR detector
+
+'Turn on the Line Sensor IR LEDs
+  HIGH LineEnable
+
+DO
+
+  DEBUG HOME
+
+  IF (LineRight = 1) THEN
+   DEBUG "Right= Black"
+  ELSE
+   DEBUG "Right= White"
+  ENDIF
+
+  DEBUG CR
+
+  IF (LineLeft = 1) THEN
+   DEBUG "Left= Black"
+  ELSE
+   DEBUG "Left= White"
+  ENDIF
+
+  PAUSE 100
+
+LOOP

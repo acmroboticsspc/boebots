@@ -1,0 +1,16 @@
+' Scribbler PBASIC Programming Guide - Twinkle.bs2
+' Play the first 7 notes of Twinkle Twinkle Little Star
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program Running!"
+
+FREQOUT 11, 500, 523       ' C
+FREQOUT 11, 500, 523       ' C
+FREQOUT 11, 500, 784       ' G
+FREQOUT 11, 500, 784       ' G
+FREQOUT 11, 500, 880       ' A
+FREQOUT 11, 500, 880       ' A
+FREQOUT 11, 500, 784       ' G
+
+

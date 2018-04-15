@@ -1,0 +1,9 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_B-1   (File name of program)
+'Places a LOW on P8 as an output
+DIR8 = 1 	'Sets P8 for output
+OUT8 = 0  	'Sets P8 to LOW

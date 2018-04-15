@@ -1,0 +1,38 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_G-3
+'Span Pot for 0 -15, and display on Activity Board LEDs, use a mask to compliment.
+'Mask so Black's LED is always ON.
+
+Potword var word			'Holds Pot result word
+Pot16 var nib			'Holds Pot spanned 0-15
+NibOut var nib			'Holds final result
+MaskResult var Nib		'Hold black masked result
+
+Pot con 7				'Constant for POT pin
+CompMask  con %1111		'Mask to compliment results for low active LEDs
+BlkMask con %0010			'Mask to keep black LED on
+
+DIRC = %1111			'Set each bit in nibble C to outputs (8-11)
+
+Loop:
+HIGH POT: Pause 10				'Charge Cap
+RCTIME Pot, 1, Potword				'Measure RC time for pot
+Pot16 = potword / 10 * 16 /500 MAX 15	'Scale it down for 0-15 span
+MaskResult = Pot16 | BlkMask			'Mask to keep black bit on
+NibOut = MaskResult ^ CompMask		'Mask to compliment output
+DEBUG 0, CR						'Display math, 0 clears display
+DEBUG IBIN4 POT16,"   POT",CR
+DEBUG IBIN4 BlkMask, "   BLACK BUTTON MASK (OR)", CR
+DEBUG "_____", CR
+DEBUG IBIN4 MaskResult,"   RESULT TO KEEP BLACK ON", CR
+DEBUG IBIN4 CompMask,"   COMPLIMENT MASK (XOR)", CR
+DEBUG "_____", CR
+DEBUG IBIN4 NibOut, "   RESULT COMPLIMENTED FOR LEDs",CR
+PAUSE 500
+
+OUTC = NibOut					'Set the LEDs
+GOTO Loop

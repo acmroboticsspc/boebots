@@ -1,0 +1,40 @@
+' Scribbler PBASIC Programming Guide - EyeTest.bs2
+' Test infrared object detectors, report via green LEDs
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program Running!"
+
+' I/O Pin Definitions
+ObsRx         PIN 6            ' infrared detector
+LedRight      PIN 8            ' right green LED
+LedLeft       PIN 10           ' left green LED
+ObsTxRight    PIN 14           ' right IR emitter
+ObsTxLeft     PIN 15           ' left IR emitter
+
+' Variable Declarations
+eyeRight VAR Bit               ' To remember sensor status
+eyeLeft  VAR Bit               '  after each IR LED is used
+
+' Main Program
+DO
+  FREQOUT ObsTxRight, 1, 38500 ' Emit IR from right IR LED
+  eyeRight = ObsRx             ' put sensor status in eyeRight
+
+  FREQOUT ObsTxLeft, 1, 38500  ' Repeat test with left IR LED
+  eyeLeft = ObsRx              ' put sensor status in eyeLeft
+
+  IF (eyeRight = 0) THEN       ' if object is detected at right
+    HIGH LedRight              '  turn on right green LED
+  ELSE                         ' else, no object is detected
+    LOW LedRight               '  turn off right green LED
+  ENDIF
+
+  IF (eyeLeft = 0) THEN        ' if object is detected at left
+    HIGH LedLeft               '  turn on left green LED
+  ELSE                         ' else, no object is detected
+    LOW LedLeft                '  turn off left green led
+  ENDIF
+LOOP                           ' repeat test
+
+

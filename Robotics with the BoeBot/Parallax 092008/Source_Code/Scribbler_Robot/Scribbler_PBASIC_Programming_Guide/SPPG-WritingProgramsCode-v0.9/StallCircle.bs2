@@ -1,0 +1,37 @@
+' Scribbler PBASIC Programming Guide - StallCircle.bs2
+' Drive in circle, stop if stall sensor activates
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program running!"
+
+' I/O PIN Definitions
+Stall      PIN 7
+Speaker    PIN 11
+MotorRight PIN 12
+MotorLeft  PIN 13
+
+' Motor Initalization
+LOW MotorRight
+LOW MotorLeft
+PAUSE 100
+
+' Variable Declaration
+stuck VAR Bit
+
+DO
+  stuck = Stall
+
+  IF stuck = 0 THEN
+    PULSOUT MotorRight, 3000
+    PULSOUT MotorLeft, 2500
+  ELSE
+    PULSOUT MotorRight, 2000
+    PULSOUT MotorLeft,  2000
+    FREQOUT Speaker, 500, 440
+    FREQOUT Speaker, 500, 880
+    FREQOUT Speaker, 500, 440
+    FREQOUT Speaker, 500, 880
+  ENDIF
+LOOP
+

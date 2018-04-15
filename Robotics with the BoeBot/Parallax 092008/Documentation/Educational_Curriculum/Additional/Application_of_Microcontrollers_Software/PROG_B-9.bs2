@@ -1,0 +1,17 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_B-9
+'Places a * in debug window whenever Blue is pressed.
+'No debouncing or checking
+
+INPUT 8
+Loop:
+If IN8 = 0 THEN Action  'If button pressed, take action.
+GOTO Loop
+
+Action:
+DEBUG "* "
+GOTO Loop

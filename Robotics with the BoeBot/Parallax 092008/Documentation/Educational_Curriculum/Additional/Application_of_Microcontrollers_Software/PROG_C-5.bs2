@@ -1,0 +1,41 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_C-5
+'The user will press the Black button to start the data acquisition.  
+'Blue's LED will flash 4 times for about 1 second each.
+'The user will enter their bit by pressing the Red button while the Blue LED is on.
+'The program will invert the button so 1 = pressed, 0 = not pressed.
+'And re-assemble the 'nibble' MSB first.
+
+NibData   var nib	'holds the incoming nibble
+BitCount  var nib	'Used to count the 4 bits
+BitIn   var bit		'Holds incoming bit
+Timer var word		'Used to wait for input for 1 second
+
+Loop:		
+IF IN9 = 1 THEN  Loop			'Wait for Blk button
+
+PAUSE 1000				'Wait one second
+NibData = 0				'Reset Nibble variable
+
+FOR BitCount = 1 TO 4		'Loop to get 4 bits
+	NibData = NibData << 1	'Shift bits in nibble over 1	
+	Bitin = 0			'Set incoming bit to 0
+	LOW 8				'Light Blue's LED
+	FOR timer = 1 TO 800		'Loop for about one second
+		IF IN11 = 1 THEN Not1	'   If at anytime red is pressed (0),
+		Bitin = 1		'   set the bit equal to 1
+		Not1:
+	NEXT			
+	HIGH 8				'Turn off Blue's LED
+	NibData = Nibdata + Bitin	'Add new bit to nibble
+	DEBUG IBIN4 ? NibData	'Display new nibble in binary
+	PAUSE 1000			'Wait a second
+NEXT					'Go back for next bit
+
+DEBUG ? NibData			'Display the nibble in Decimal
+
+GOTO Loop			'Start all over

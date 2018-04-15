@@ -1,0 +1,35 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_H-6R
+'Receives a nibble Asynchronously on P0
+BitTime var Word		'Holds expected length of bit in mSec
+NibIn var nib		'Incoming Nibble
+Bitin var bit		'Incoming bit
+
+Input 0			'Set up P0 for input
+DIRC = %1111		'Set button Leds as outputs
+BitTime = 50		'Set Length of bits in mSec
+
+Loop:
+Debug CR,"Waiting for Start bit",CR
+Waiting:
+IF IN0 = 0 THEN Waiting	'Wait for Start bit
+
+PAUSE BitTime * 3 /2	'Wait until middle of MSB bit
+
+Gosub GetBit: NibIn.Bit3 = BitIn	'Go get the bit, Put in Nibble
+Gosub GetBit: NibIn.Bit2 = BitIn
+Gosub GetBit: NibIn.Bit1 = BitIn
+Gosub GetBit: NibIn.Bit0 = BitIn
+Debug "Nibble in = ", IBIN4 NibIn,CR,CR
+OUTC = NibIN		'Place nibble on LEDs
+GOTO Loop
+
+GetBit:
+BitIn = IN0			'Read Bit
+DEBUG ? BitIn		'Display incoming bit
+PAUSE BitTime		'Wait until middle of next bit
+RETURN

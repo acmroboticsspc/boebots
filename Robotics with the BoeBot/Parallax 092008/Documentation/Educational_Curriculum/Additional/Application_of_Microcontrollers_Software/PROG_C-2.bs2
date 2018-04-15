@@ -1,0 +1,11 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_C-2
+'Count 64-65 defined by binary value, show results in binary & decimal
+DataCnt  var byte
+FOR DataCnt = %01000000 to %01010101	'(64 to 85 in binary)
+	Debug IBIN8 DataCnt, " Binary = ",  DEC DataCnt, " Decimal", CR 
+Next

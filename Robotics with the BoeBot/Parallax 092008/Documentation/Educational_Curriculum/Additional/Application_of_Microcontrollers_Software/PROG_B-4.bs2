@@ -1,0 +1,23 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_B-4
+'Detects if RED PB is pushed and Cycles 3 LEDS
+INPUT 11	'set up I/O directions
+OUTPUT 8
+OUTPUT 9
+OUTPUT 10
+
+LOOP:
+IF IN11 = 1 then LOOP   'not pushed? Goto Loop.
+
+TOGGLE 8        'Toggle each output with 100 mSec pauses
+PAUSE 100
+TOGGLE 9
+PAUSE 100
+TOGGLE 10
+PAUSE 100
+
+GOTO LOOP    'Repeat

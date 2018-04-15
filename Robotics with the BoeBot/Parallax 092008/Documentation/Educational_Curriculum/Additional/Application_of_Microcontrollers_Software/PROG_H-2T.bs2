@@ -1,0 +1,31 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_H-2T
+'Parallel nibble transfer transmitter
+'Transfers the buttons nibble to nibble A (P0-P3) continously
+
+x var byte		'For-next variable
+Clock con 6		'Constant for transmit data clock
+
+
+DIRA = %1111	'Set P0-P3 as outputs
+
+LOW Clock		'Set clock low
+
+loop:
+FOR x = 1 TO 10	'diplay non-transmitted data (for visual effects)
+	Pause 200
+	DEBUG "Data = ",IBIN4 INC,CR    'Display the nibble from the button
+NEXT
+
+DIRC = %0000	'Set buttons as inputs
+OUTA =inc		'Sets nibble A = nibble C (ready Data)
+HIGH Clock		'Set data clock HIGH for transmit
+FREQOUT 11, 100, 2500			'Sound Tone
+DEBUG "Data = ",IBIN4 INC, " (XMIT)",CR    'Display the nibble from the button
+LOW Clock		'End of data clock
+
+GOTO loop

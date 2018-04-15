@@ -1,0 +1,213 @@
+'{$STAMP BS2}
+'{$PBASIC 2.5}
+
+'------------------------------------------------------------------------------
+'  Sample program to keep track of position and direction using wheel encoders.
+'------------------------------------------------------------------------------
+
+'Written by Philip C. Pilgrim      30 March 2004
+
+'Modified 12 April 2004:
+'  Changed calibration constants based on results from Calibrate_All.exe.
+'Modified 13 April 2004:
+'  Changed from -128 to 127 coordinate system centered at (0,0) to a 0 to 255
+'  system centered at (128, 128).
+'  Changed startup to depend on number of reset button presses instead of a
+'  debug port input.
+
+'---------[Calibration Constants]----------------------------------------------
+
+SDIRINC   CON $7F92     'Sin(delta) factor by which to modify the angle vectors for each
+                        'encoder pulse. Increase this number if Boe-Bot turns
+                        'more than odometer says it does. Decrease, if less.
+                        'Sin(delta) = SDIRINC / 262144.)
+
+SPOSINC   CON 650       'Sin(delta) factor to compute distance for each encoder pulse.
+                        '256 corresponds to 0.5" travel per two-wheel pulse.
+                        'For centimeters, start with 650 to get 1.27cm of travel per
+                        'two-wheel pulse. (SPOSINC = W * SDIRINC / 512, where W
+                        'is the effective distance between wheels in the desired units.)
+
+'---------[Initialization Constants]-------------------------------------------
+
+XINIT     CON 128       'Initial X position (byte) in whole units.
+YINIT     CON 128       'Initial Y position (byte) in whole units.
+                        'Initial direction is always assumed to be towards +Y (north).
+
+RECINT    CON 4         'Position record interval:
+                        '  0 = don't record.
+                        '  1 - 15 = record every 1 - 15 encoder pulses.
+
+'---------[Other Constants]----------------------------------------------------
+
+MAXADDR   CON $3FF      'Maximum writable EEPROM address.
+
+RIGHT     CON 0         'Constants used as subscripts into bit arrays.
+LEFT      CON 1
+FWD       CON 0
+BAK       CON 1
+
+SenseR    PIN 10        'Righthand encoder input.
+SenseL    PIN 11        'Lefthand encoder input. (MUST be SenseR + 1.)
+
+MotorR    PIN 12        'Righthand motor output.
+MotorL    PIN 13        'Lefthand motor output. (MUST be MotorR + 1.)
+
+Sense     CON SenseR    'Base address for encoders.
+Motor     CON MotorR    'Base address for motors.
+
+'---------[Variables]----------------------------------------------------------
+
+Prev      VAR Bit(2)    'Previous readings from encoders.
+Dir       VAR Bit(2)    'Wheel directions (FWD or BAK).
+LastSide  VAR Bit       'Last side to get a pulse (LEFT or RIGHT).
+NewSeq    VAR Bit       'Set if last movement started a new LR or RL sequence.
+Side      VAR Bit       'Side index (LEFT or RIGHT).
+Moved     VAR Bit       'Indicates motion since last checking.
+
+Xpos      VAR Word      'X location of the Boe-Bot's center.
+X         VAR Xpos.HIGHBYTE 'Integer portion of Xpos. Low byte is fraction.
+Ypos      VAR Word      'Y location of the Boe-Bot's center.
+Y         VAR Ypos.HIGHBYTE 'Integer portion of Ypos. Low byte is fraction.
+Xdir      VAR Word      'X component of the Boe-Bot's direction.
+Ydir      VAR Word      'Y component of the Boe-Bot's direction.
+MemPtr    VAR Word      'Pointer into EEPROM for position recording.
+MemCtr    VAR MemPtr.HIGHNIB 'Countdown for record interval.
+
+i         VAR Word      'Scratch variables...
+n         VAR Byte
+pulse     VAR Word
+
+'---------[Program begins here.]-----------------------------------------------
+
+DATA @64, 0                 'Initialize reset button count on upload.
+
+PAUSE 10                    'Debounce reset button.
+READ 64, i                  'Read reset button count - 1.
+WRITE 64, i + 1             'Increment count and save back to EEPROM.
+PAUSE 1000                  'Wait one second.
+WRITE 64, 0                 'If not reset again during wait, reinitialize count.
+SELECT i                    'Act based on reset button count - 1.
+
+'---------[Start here on one reset button press.]------------------------------
+
+  CASE 0:
+
+    DumpData:               'Dump stored data to DEBUG port.
+
+      PAUSE 1000            'Wait one second for host program to get ready.
+      DEBUG "NEW", CR       'Send start message.
+      MemPtr = 65           'Start reading from address 64.
+      DO                    'Main reading loop...
+        READ MemPtr, X      'Read 2's complement X and Y byte values.
+        READ MemPtr + 1, Y
+        DEBUG "X:", DEC X, ",", "Y:", DEC Y, CR 'Output one line of data.
+        MemPtr = MemPtr + 2 'Increment memory pointer.
+        Xpos.LOWBYTE = X
+        READ MemPtr, X      'Peek at next X value.
+      LOOP UNTIL (X ^ Xpos.LOWBYTE = $80) 'When next X differs from previous by
+                                          '$80, we're done.
+      DEBUG "END", CR       'Send end message.
+      END                   'That's all.
+
+'---------[Start here on two reset button presses.]----------------------------
+
+  CASE 1:
+
+    MainProg:                         'Begin sample motion profile.
+
+      GOSUB Initialize                'Do encoder initialization.
+
+      FOR n = 1 TO 9                   'This will be a nine-leaf clover.
+        FOR pulse = 700 TO 735 STEP 35 '700 for straighter areas, 730 for turns.
+          FOR i = 1 TO 100             'Proceed with 100 servo pulses.
+            Dir(LEFT) = FWD            'Must set direction values so encoder
+            Dir(RIGHT) = FWD           'routine will know.
+            PULSOUT MotorL, 850        'Pulse the servos.
+            PULSOUT MotorR, pulse
+            GOSUB ChkEnc               'Update the encoders.
+            PAUSE 20                   'Wait 20 ms.
+          NEXT                         'Next servo pulse.
+        NEXT                           'Next pulse value.
+      NEXT                             'Next leaf in clover.
+
+      GOSUB WaitEnc                    'Wait for all motion to cease.
+      END                              'We're done.
+
+ENDSELECT
+END
+
+'---------[Subroutines]--------------------------------------------------------
+
+Initialize:                        'Do encoder initialization.
+
+  Xdir = 0                         'Set direction to +Y.
+  Ydir = $4000
+  Xpos = XINIT << 8                'Set positions from constants.
+  Ypos = YINIT << 8
+  IF (RECINT) THEN                 'Are we going to record positions?
+    WRITE 65, X                    '  Yes: Record initial positions now.
+    WRITE 66, Y
+    MemPtr = RECINT << 12 + 67     '        Initialize MemPtr and MemCtr.
+  ENDIF
+  FOR Side = RIGHT TO LEFT         'Read initial encoder values.
+    Prev(Side) = INS.LOWBIT(Sense + Side)
+  NEXT
+  RETURN                           'Done.
+
+'------------------------------------------------------------------------------
+
+WaitEnc:                           'Track encoders until motion ceases.
+
+  FOR i = 1 TO 30                  'Need 30 motionless intervals to be sure.
+    GOSUB ChkEnc                   'Check the encoder.
+    IF (Moved) THEN i = 0          'If the bot moved, reset counter and start over.
+  NEXT
+  RETURN                           'No motion for 30 steps. It's stopped.
+
+'------------------------------------------------------------------------------
+
+ChkEnc:                            'Update and record position from encoders.
+                                   'Just call it often enough to catch all the
+                                   'changes.
+  Moved = 0                        'Initialize to no detected movement.
+  FOR Side = RIGHT TO LEFT               'For both encoders...
+    IF (INS.LOWBIT(Sense + Side) ^ Prev(Side)) THEN  'Encoder different from prior value?
+
+        Prev(Side) = ~ Prev(Side)        '  Yes: Update with new value.
+        Moved = 1                        '       Indicate that we've moved.
+        NewSeq = ~ (Side ^ Dir(Side) ^ LastSide & NewSeq)   'Start a new LR or RL sequence unless
+                                         '       different side moved last and that was
+                                         '       the start of a new sequence.
+        LastSide = Side ^ Dir(Side)                '       Update last side to move.
+        IF (NewSeq) THEN DoPos           '       New sequence starts with position.
+                                         '       2nd half of same sequence undoes angle first.
+
+      DoAng:                             '       Angle change.
+
+        Ydir = Ydir - ((Dir(Side) ^ Side ^ Xdir.BIT15 << 1 - 1) * (ABS(Xdir) ** SDIRINC >> 3))
+        Xdir = Xdir + ((Dir(Side) ^ Side ^ Ydir.BIT15 << 1 - 1) * (ABS(Ydir) ** SDIRINC >> 2))
+        Ydir = Ydir - ((Dir(Side) ^ Side ^ Xdir.BIT15 << 1 - 1) * (ABS(Xdir) ** SDIRINC >> 3))
+        IF (NewSeq) THEN DoNext
+
+      DoPos:                             '       Position change.
+
+        Xpos = Xpos - ((Dir(Side) ^ Xdir.BIT15 << 1 - 1) * (ABS(Xdir) ** SPOSINC))
+        Ypos = Ypos - ((Dir(Side) ^ Ydir.BIT15 << 1 - 1) * (ABS(Ydir) ** SPOSINC))
+        IF (NewSeq) THEN DoAng
+
+      DoNext:
+
+    ENDIF
+  NEXT
+
+  IF (Moved AND RECINT > 0) THEN           'If bot moved and we're recording it...
+    MemCtr = MemCtr - 1                    'Decrement counter (i.e. MemPtr.HIGHBYTE).
+    IF (MemPtr < MAXADDR - 2) THEN         'If counter is zero AND address is low enough...
+      WRITE MemPtr, X                        'Write X and Y to EEPROM.
+      WRITE MemPtr + 1, Y
+      WRITE MemPtr + 2, X ^ $80              'Add an impossible next X for end-of-file.
+      MemPtr = RECINT << 12 + MemPtr + 2     'Reset counter and update pointer.
+    ENDIF
+  ENDIF
+  RETURN                                 'Over and out.

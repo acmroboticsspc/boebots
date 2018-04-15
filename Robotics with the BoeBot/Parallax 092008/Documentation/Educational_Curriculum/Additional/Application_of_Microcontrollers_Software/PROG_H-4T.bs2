@@ -1,0 +1,32 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_H-4T
+'Transmits a nibble serially from buttons to P0
+'Start synchronization on P6, one scond intervals
+
+NibData var nib		'Nibble to hold button data
+BitOut var bit		'Bit from nibble to be transmitted
+x var nib			'For-Next variable
+
+Output 0			'Set up P0 for output
+DIRC = %0000		'Set up P8-P11 as inputs (buttons)
+
+
+Loop:
+Pause 1000			'Pause 1 second
+Freqout 11,200, 2500
+
+NibData = INC		'Read buttons & Display
+Debug CR, "Nibble out = ",IBIN4 NibData, CR
+HIGH 6				'Set synch line high
+For x = 1 to 4			'Sends out nibble MSB first
+	BitOut = NibData.Bit3	'Get MSB bit
+	DEBUG ? BitOut		'Display it
+	OUT0 = BitOut		'Send it
+	NibData = NibData << 1	'Shift nibble bits left
+Next
+Low 6					'Clear sync line
+Goto Loop

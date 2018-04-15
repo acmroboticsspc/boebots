@@ -1,0 +1,13 @@
+' Scribbler PBASIC Programming Guide - YourTurnSong.bs2
+' Play the first 7 notes of Mary Had a Little Lamb
+'
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+FREQOUT 11, 500, 494       ' B
+FREQOUT 11, 500, 440       ' A
+FREQOUT 11, 500, 392       ' G
+FREQOUT 11, 500, 440       ' A
+FREQOUT 11, 500, 494       ' B
+FREQOUT 11, 500, 494       ' B
+FREQOUT 11, 500, 494       ' B

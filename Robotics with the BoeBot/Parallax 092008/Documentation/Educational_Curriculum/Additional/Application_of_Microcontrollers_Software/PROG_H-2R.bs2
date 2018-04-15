@@ -1,0 +1,25 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_H-2R
+'Parallel nibble transfer receiver with data clock
+'Reads nibble A (P0-P3) when P6 is HIGH and sets LEDs equal to it
+
+btnClock var byte	'Variable for button function
+Clock con 6		'Constant to define clock line
+
+DIRA = %0000	'Set up P0-P3 as inputs
+DIRC = %1111	'Set up button LEDs as outputs
+btnClock = 0	'Clear button variable
+
+Loop:			'Wait until P6 is high, debounce, no repeat
+Button Clock, 1, 255, 0, btnClock, 1, Accept
+Goto Loop
+
+Accept:
+OUTC = INA		'Set LEDs to nibble A (Receives and displays)
+DEBUG "Data in = ",IBIN4 INA, CR  'Display data
+
+GOTO LOOP

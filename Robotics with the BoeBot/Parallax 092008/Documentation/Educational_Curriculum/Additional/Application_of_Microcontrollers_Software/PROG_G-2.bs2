@@ -1,0 +1,34 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_G-2
+'This program will logically evaluate the BLUE and BLACK and RED pushbuttons.
+'To drive through a traffic signal, The light must be green (BLUE PB pressed),
+'OR there can not be "no turn on red sign (BLACK PB NOT Pressed),
+'AND the coast must be clear (GREEN PB is pressed).
+'Buttons are inverted to make pressed = 1.
+
+INPUT 8	'Set up Blue PB for input
+INPUT 9	'Set up Black PB for input
+INPUT 10	'Set UP Green PB for input
+GreenLight var bit		'The light is green = 1
+NoTurnSignPresent var bit	'There is a sign = 1
+CoastClear var bit		'Coast is clear = 1
+NoTurnSignInverted var Bit	'Compliment of sign, No sign = 1
+
+Loop:
+GreenLight = IN8 ^ 1			'Read Blue and compliment 
+NoTurnSignPresent = IN9 ^ 1		'Read Black and compliment
+NoTurnSignInverted = NoTurnSignPresent ^ 1	'Compliment sign
+CoastClear = IN10 ^ 1			'Read Green and compliment
+
+
+IF GreenLight | NoTurnSignInverted & CoastClear THEN CanGo	'Evaluate and sound 
+'tone if true
+Goto Loop					'Repeat
+
+CanGo						'Sound tone
+Freqout 11, 100, 2500
+GOTO Loop

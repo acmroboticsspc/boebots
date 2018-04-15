@@ -1,0 +1,20 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+PROG_F_2c
+'Declares and sets variables for memory map testing.
+'Consists of 2 words, 2 bytes and 4 nibbles.
+'Declare variables 
+WordA var word: ByteA var byte: NibbleA var nib: ByteB var byte
+NibbleB var nib: NibbleC var nib: NibbleD var nib: WordB var word
+
+'Set values in variables.
+WordA = $0123	: WordB = $4567: ByteA = $89: ByteB = $AB
+NibbleA = $C: NibbleB = $D: NibbleC = $E: NibbleD = $F
+
+'Display WordA, change it, Display again.
+DEBUG IHEX4 ? WordA		'Display contents of IHEX4
+B0 = $FF				'Directly change the low order byte in WordA
+DEBUG IHEX4 ? WordA		'Display again

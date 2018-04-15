@@ -1,0 +1,20 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_H-8T
+'Word transmission of POT as the length of a PULSOUT pulse on P0
+
+WordOut var word			'Holds outgoing byte
+Low 0
+
+Loop
+Pause 2000				'2 sec delay between transmission
+HIGH 7:Pause 10			'Charge RC network
+RCTIME 7,1,WordOut
+
+FREQOUT 11, 200, 2000		'Sound transmit tone
+DEBUG "Word Out = ", DEC WordOut,CR
+Pulsout 0, Wordout		'Send Data as a Pulse, CR
+Goto Loop

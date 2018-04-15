@@ -1,0 +1,33 @@
+' Scribbler PBASIC Programming Guide - CheckStall.bs2
+' Display stall sensor I/O pin status in Debug Terminal
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program running!"
+
+' I/O Pin Definitions
+Stall      PIN 7
+MotorRight PIN 12
+MotorLeft  PIN 13
+
+' Variable Declaration
+stuck VAR Bit
+
+' Motor Initialization
+LOW MotorRight
+LOW MotorLeft
+PAUSE 100
+
+' Main Program
+
+PULSOUT MotorRight, 3000 ' motors full speed forward
+PULSOUT MotorLeft, 3000
+
+DO                       ' Put status of Stall I/O pin
+  stuck = Stall          '  into the variable "stuck"
+  DEBUG HOME, BIN stuck  ' Display binary value of stuck
+  PAUSE 50               ' time to read display
+LOOP
+
+
+

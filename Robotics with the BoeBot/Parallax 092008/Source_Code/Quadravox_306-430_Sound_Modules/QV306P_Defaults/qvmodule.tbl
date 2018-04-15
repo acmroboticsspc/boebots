@@ -1,0 +1,240 @@
+  0         0.8  0f.wav
+  1         0.6  1f.wav
+  2         0.6  2f.wav
+  3         0.8  3f.wav
+  4         0.6  4f.wav
+  5         0.6  5f.wav
+  6         0.8  6f.wav
+  7         0.8  7f.wav
+  8         0.6  8f.wav
+  9         0.8  9f.wav
+ 10         0.8  10f.wav
+ 11         0.8  11f.wav
+ 12         0.8  12f.wav
+ 13         1.0  13f.wav
+ 14         1.0  14f.wav
+ 15         1.0  15f.wav
+ 16         1.2  16f.wav
+ 17         1.0  17f.wav
+ 18         1.0  18f.wav
+ 19         1.0  19f.wav
+ 20         0.6  20f.wav
+ 21         0.6  30f.wav
+ 22         0.6  40f.wav
+ 23         0.6  50f.wav
+ 24         0.8  60f.wav
+ 25         0.8  70f.wav
+ 26         0.6  80f.wav
+ 27         0.6  90f.wav
+ 28         0.6  100seq.wav
+ 29         0.6  1000seq.wav
+ 30         0.8  10e6seq.wav
+ 31         0.8  10e9seq.wav
+ 32         0.8  2000.wav
+ 33         0.8  a.m..wav
+ 34         0.8  pm.wav
+ 35         0.6  a.wav
+ 36         0.8  alpha.wav
+ 37         0.6  b.wav
+ 38         0.8  bravo.wav
+ 39         0.6  c.wav
+ 40         0.6  charlie.wav
+ 41         0.6  d.wav
+ 42         0.6  delta.wav
+ 43         0.6  e.wav
+ 44         0.6  echo.wav
+ 45         0.4  f.wav
+ 46         0.8  fox.wav
+ 47         0.6  g.wav
+ 48         0.6  golf.wav
+ 49         0.6  h.wav
+ 50         0.8  hotel.wav
+ 51         0.6  i.wav
+ 52         0.6  india.wav
+ 53         0.6  j.wav
+ 54         0.8  juliet.wav
+ 55         0.6  k.wav
+ 56         0.6  kilo.wav
+ 57         0.6  l.wav
+ 58         0.6  lima.wav
+ 59         0.6  m.wav
+ 60         0.6  mike.wav
+ 61         0.6  n.wav
+ 62         0.8  november.wav
+ 63         0.6  Ohf.wav
+ 64         0.8  oscar.wav
+ 65         0.6  p.wav
+ 66         0.6  papa.wav
+ 67         0.6  q.wav
+ 68         0.8  quebec.wav
+ 69         0.6  r.wav
+ 70         0.8  romeo.wav
+ 71         0.6  s.wav
+ 72         0.8  sierra.wav
+ 73         0.6  t.wav
+ 74         0.6  tango.wav
+ 75         0.6  u.wav
+ 76         0.8  uniform.wav
+ 77         0.6  v.wav
+ 78         0.8  victor.wav
+ 79         0.8  w.wav
+ 80         0.8  whiskey.wav
+ 81         0.6  x.wav
+ 82         0.8  xray.wav
+ 83         0.6  y.wav
+ 84         0.6  yankee.wav
+ 85         0.6  z.wav
+ 86         0.8  zulu.wav
+ 87         0.8  monday.wav
+ 88         0.6  tuesday.wav
+ 89         0.8  wednesday.wav
+ 90         0.8  thursday.wav
+ 91         0.8  friday.wav
+ 92         0.8  saturday.wav
+ 93         0.6  sunday.wav
+ 94         1.0  january.wav
+ 95         0.8  february.wav
+ 96         0.6  march.wav
+ 97         0.6  april.wav
+ 98         0.6  may.wav
+ 99         0.6  june.wav
+100         0.8  july.wav
+101         0.6  august.wav
+102         1.0  september.wav
+103         0.8  october.wav
+104         0.8  november.wav
+105         0.8  december.wav
+106         0.4  amp.wav
+107         0.6  amps.wav
+108         0.8  Bars.wav
+109         0.4  bit.wav
+110         0.6  bits.wav
+111         0.6  black.wav
+112         0.6  blue.wav
+113         0.8  brown.wav
+114         0.4  byte.wav
+115         0.6  bytes.wav
+116         0.6  cable.wav
+117         0.8  celsius.wav
+118         0.8  centimeter.wav
+119         1.0  centimeters.wav
+120         0.8  Cents.wav
+121         0.4  chip.wav
+122         0.8  connector.wav
+123         0.6  Cubic.wav
+124         0.8  degrees.wav
+125         1.2  divided by.wav
+126         0.8  Dollars.wav
+127         0.8  down.wav
+128         0.8  equals.wav
+129         0.8  fahrenheit.wav
+130         0.6  farads.wav
+131         0.4  feet.wav
+132         0.6  foot.wav
+133         0.8  Gallons.wav
+134         1.0  gigahertz.wav
+135         0.6  go.wav
+136         0.6  gold.wav
+137         1.2  good afternoon.wav
+138         1.0  good morning.wav
+139         0.6  goodbye.wav
+140         0.6  gram.wav
+141         0.6  grams.wav
+142         0.6  gray.wav
+143         0.6  green.wav
+144         0.6  hello.wav
+145         0.6  hertz.wav
+146         0.6  hour.wav
+147         0.6  hours.wav
+148         0.6  inch.wav
+149         0.6  inches.wav
+150         1.4  indoor temperature.wav
+151         0.6  is.wav
+152         0.6  key.wav
+153         0.8  kilobit.wav
+154         0.8  kilobits.wav
+155         0.8  kilobyte.wav
+156         0.8  kilohm.wav
+157         0.8  kilometer.wav
+158         1.0  kilometers.wav
+159         1.0  kiloohms.wav
+160         0.6  light.wav
+161         0.8  Liters.wav
+162         0.6  mega.wav
+163         0.8  megabytes.wav
+164         1.2  megaohms.wav
+165         0.8  megohms.wav
+166         0.6  meter.wav
+167         0.6  meters.wav
+168         0.8  micro.wav
+169         0.8  micron.wav
+170         1.0  microns.wav
+171         0.8  midnight.wav
+172         0.6  mile.wav
+173         0.8  miles.wav
+174         0.6  milli.wav
+175         0.8  minus.wav
+176         0.6  minute.wav
+177         0.6  minutes.wav
+178         0.6  noon.wav
+179         0.8  o'clock.wav
+180         1.2  Ofmerc.wav
+181         1.0  Ofwater.wav
+182         0.8  ohms.wav
+183         0.6  orange.wav
+184         1.0  Pascals.wav
+185         0.8  per hour.wav
+186         0.6  per.wav
+187         0.8  percent.wav
+188         0.6  pico.wav
+189         0.4  pink.wav
+190         0.6  plus.wav
+191         0.4  point.wav
+192         0.8  pound.wav
+193         0.8  pounds.wav
+194         1.0  Psi.wav
+195         0.6  purple.wav
+196         1.0  r.p.m..wav
+197         0.6  red.wav
+198         0.6  second.wav
+199         0.8  seconds.wav
+200         0.8  silver.wav
+201         0.8  Square.wav
+202         0.8  start.wav
+203         0.6  stop.wav
+204         0.6  switch.wav
+205         0.8  tan.wav
+206         1.4  temperature is.wav
+207         1.6  the current time is.wav
+208         0.8  the current.wav
+209         1.0  the outside.wav
+210         1.2  the speed is.wav
+211         0.6  the.wav
+212         0.4  thee.wav
+213         0.8  times.wav
+214         0.6  up.wav
+215         0.6  volt.wav
+216         0.6  volts.wav
+217         0.4  white.wav
+218         0.6  wire.wav
+219         0.8  yard.wav
+220         0.8  yards.wav
+221         0.6  yellow.wav
+222         1.6  your speed is.wav
+223         0.8  the date.wav
+224         0.8  is more.wav
+225         0.8  please wait.wav
+226         0.6  please.wav
+227         0.8  is less.wav
+228         0.6  thank you.wav
+229         0.6  than.wav
+230         0.6  and.wav
+231         1.0  are closed.wav
+232         0.8  are down.wav
+233         0.8  are off.wav
+234         0.8  are on.wav
+235         0.8  are open.wav
+236         0.6  are up.wav
+237         1.0  is closed.wav
+238         0.8  is down.wav
+239         0.6  is off.wav

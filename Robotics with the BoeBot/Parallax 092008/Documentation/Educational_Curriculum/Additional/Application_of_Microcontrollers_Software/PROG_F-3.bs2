@@ -1,0 +1,62 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_F-3
+'This program will save a song in EEPROM memory.  The note is based on POT position
+'Grn saves note, black plays song, Blue resets song.
+
+Location var byte		'Record memory location, max notes is 128 (max byte/2 for words).
+PLocation var byte	'Play memory location variable
+Note var word		'Holds note defined by RCTIME of POT
+Check0 var byte		'Used to check if end of song of on play
+
+				'Define bytevariables for buttons
+Grnbv var byte: Bluebv var byte: Blkbv var byte
+				'Assign pin numbers
+Pot con 7: Spk con 11: GrnBtn con 10: BlkBtn con 9: BlueBtn con 8: 
+				'Reset Byte Varaibles.
+Grnbv = 0: Bluebv = 0: Blkbv =0
+
+Location = 0
+DEBUG "READY FOR NEW SONG! - Turn POT to find a note.",CR
+DEBUG "Press:",CR,"GREEN to store note",CR,"BLACK to play song",CR,"BLUE to restart",CR
+
+Loop:
+HIGH Pot: PAUSE 200: 					'Charge up cap
+RCTIME Pot, 1, Note					'Measure it
+FREQOUT spk, 200, Note					'Play it
+BUTTON GrnBtn, 0, 1, 5, Grnbv, 1, StoreIt		'Debounce with repeat, store note
+BUTTON BlkBtn, 0, 255, 0, Blkbv, 1,PlayIt		'Debounce, no repeat, play song
+BUTTON BlueBtn, 0, 255, 0, Bluebv, 1,ClearIt	'Debounce, no repeat, clear song
+Goto Loop
+
+StoreIt:
+StoreNow:
+WRITE Location, Note.HIGHBYTE			'Save the high byte of our note word in location
+WRITE Location + 1, Note.LOWBYTE		'Save the low byte of our note word in location +1
+DEBUG "STORED note ", DEC location/2 + 1, " of 127 in ",IHEX4 Location,CR
+Location = Location + 2 MAX 254		'Increment Location counter by 2
+WRITE Location, $FF				'Write a hex FF to indicate end of song
+Goto Loop
+
+PlayIt:
+DEBUG "****** PLAYING! ******",CR
+Pause 500: PLocation = 0		'Pause for effect, reset play location counter
+Play_loop:
+READ PLocation, Check0			'Read to ensure not end of song
+IF Check0 = $FF THEN EndPlay		'If it is, then end playing
+READ PLocation, Note.HIGHBYTE		'Read high byte and put in note word
+READ PLocation + 1, Note.LOWBYTE	'Read low byte and put in note word
+FREQOUT spk, 200, Note			'play note for 200 ms
+PLocation = PLocation + 2		'increment play location
+GOTO Play_loop				'Play next note
+
+EndPlay
+DEBUG "READY TO CONTINUE RECORDING SONG!",CR
+PAUSE 1000: GOTO Loop
+
+ClearIt:	
+Location = 0: WRITE Location, $FF	'Reset record locations back to 0, mark as end of song.
+GOTO Loop

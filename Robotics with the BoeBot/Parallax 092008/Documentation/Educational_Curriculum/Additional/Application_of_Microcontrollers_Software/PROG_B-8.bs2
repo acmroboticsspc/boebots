@@ -1,0 +1,20 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_B-8
+'Cycles through freq's when Blue Btn is pressed.
+OUTPUT 11  		 'Set up I/O
+INPUT 8
+
+Freq VAR BYTE            'define a variable for freq
+
+Loop:
+IF IN8 = 1 THEN LOOP  'button not pressed, goto Loop
+
+FOR freq = 1 TO 60        'Define loop
+FREQOUT 11, 5, freq * 50    'Use loop variable times 50 for frequency
+NEXT			  'End loop
+
+GOTO Loop

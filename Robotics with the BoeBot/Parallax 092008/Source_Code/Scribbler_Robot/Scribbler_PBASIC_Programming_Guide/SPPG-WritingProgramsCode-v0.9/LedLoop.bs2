@@ -1,0 +1,22 @@
+' Scribbler PBASIC Programming Guide - LedLoop.bs2
+' Turn LEDs on and off in a pattern, in an infinite loop.
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program Running!"
+
+DO
+  HIGH  8
+  LOW  9
+  HIGH  10
+
+  PAUSE 500
+
+  LOW 8
+  HIGH 9
+  LOW 10
+
+  PAUSE 500
+LOOP
+
+

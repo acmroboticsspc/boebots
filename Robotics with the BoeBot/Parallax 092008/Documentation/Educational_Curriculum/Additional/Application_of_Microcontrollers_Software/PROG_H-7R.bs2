@@ -1,0 +1,32 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'Prog_H-7R
+'Asychronous byte receiever on P0 using SERIN command
+
+ByteIn var byte		'Incoming Byte
+Baud var word		'Holds Baud /100
+ByteTime var word		'Holds microsecond length of single bits - 20
+NibIn var nib		'Lower nibble of ByteIn
+
+
+Baud = 9600 / 100
+ByteTime = 10000/Baud - 20 
+
+DIRC = %1111		'Set up LEDs for outputs
+DEBUG "Baud Rate = ",DEC Baud * 100
+
+Loop:
+DEBUG CR, "Waiting for Start Bit",cr	'Display waiting message
+SERIN 0, ByteTime, 2000,Timeout [ByteIn]			'Wait until a byte comes in, store in byteIn
+							'(expecting 9600 baud, inverted, 8 bits)
+NibIn = Bytein.lownib				'Set NibIn to lower nibble of byteIn
+OUTC = NibIn					'Set LEDs
+DEBUG "LEDs are lower nibble of incoming byte ", IBIN8 ByteIn,CR
+GOTO Loop
+
+Timeout:
+DEBUG "Time out",CR
+GOTO Loop

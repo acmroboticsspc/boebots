@@ -1,0 +1,16 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_C-4
+'Read buttons as a nibble and store
+'(Reversed so Pressed = '1')
+
+NibIn var nib		'Define a nibble variable
+DIRC = %0000		'Set P8 - P11 as inputs
+
+Loop:
+NibIn = INC ^ %1111	'Read input, and reverse it
+Debug IBIN4 NibIn, "   ", DEC NibIN, CR
+GOTO LOOP			'Repeat

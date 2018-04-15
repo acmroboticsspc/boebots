@@ -1,0 +1,61 @@
+' Scribbler PBASIC Programming Guide - SeeCircle.bs2
+' Drive Scribbler in circle with LEDs on.  If it sees an object: stop,
+' turn off LEDs, and sound alarm until the obstacle is removed. If it
+' stalls, stop and sound alarm for 1.5 sec. then try driving again.
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program running!"
+
+' I/O Pin Definitions
+ObsRx         PIN 6                ' infrared detector
+Stall         PIN 7                ' stall sensor
+LedRight      PIN 8                ' right green LED
+LedCenter     PIN 9                ' center green LED
+LedLeft       PIN 10               ' left green LED
+Speaker       PIN 11               ' speaker
+MotorRight    PIN 12               ' right wheel motor
+MotorLeft     PIN 13               ' left wheel motor
+ObsTxRight    PIN 14               ' right IR emitter
+ObsTxLeft     PIN 15               ' left IR emitter
+
+' Motor Initialization
+LOW MotorRight
+LOW MotorLeft
+PAUSE 100
+
+' Variable Declarations
+eyeRight VAR Bit                   ' To remember IR sensor status
+eyeLeft  VAR Bit                   '  after each IR LED is used
+stuck    VAR Bit                   ' To remember stall sensor status
+
+DO
+  FREQOUT ObsTxRight, 1, 38500     ' Emit IR from right IR LED
+  eyeRight = ObsRx                 ' put sensor status in eyeRight
+
+  FREQOUT ObsTxLeft, 1, 38500      ' Repeat test with left IR LED
+  eyeLeft = ObsRx                  ' put sensor status in eyeLeft
+
+  stuck = Stall                    ' put stall sensor status in stuck
+
+  IF (eyeRight = 0) OR (eyeLeft = 0) OR (stuck = 1) THEN  ' an object
+    PULSOUT MotorRight, 2000          '  is in the way. Stop both of
+    PULSOUT MotorLeft, 2000           '  the wheel motors...
+
+    LOW LedRight                      ' ...turn off the LEDs...
+    LOW LedCenter
+    LOW LedLeft
+
+    FREQOUT Speaker, 750, 1200, 1500  ' ...and sound an alarm.
+    FREQOUT Speaker, 750, 800, 1200
+
+  ELSE                             ' Else, no objects are in the way
+    PULSOUT MotorRight, 2500       ' so right wheel forward, and left
+    PULSOUT MotorLeft, 3000        ' wheel fwd faster, drive in circle
+
+    HIGH LedRight                  ' and turn on the LEDs back on
+    HIGH LedCenter
+    HIGH LedLeft
+  ENDIF
+LOOP
+

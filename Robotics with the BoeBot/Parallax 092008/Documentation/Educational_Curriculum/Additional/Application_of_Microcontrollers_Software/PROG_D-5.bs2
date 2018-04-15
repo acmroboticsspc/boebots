@@ -1,0 +1,19 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_D-5
+'Measure RC time of the potentiometer to adjust speaker frequency.
+
+RCdata  var word  		'Variable for the data
+RCpin con 7				'Define the input pin
+Spkpin con 11			'Define speaker pin
+
+Loop:
+HIGH RCpin				'Charge cap for 10 ms	
+PAUSE 10
+RCTIME RCpin, 1, RCdata		'Perform discharge and measure	
+DEBUG ? RCdata			'Display results
+FREQOUT Spkpin, 50, RCdata	'Sound speaker using data.
+GOTO Loop

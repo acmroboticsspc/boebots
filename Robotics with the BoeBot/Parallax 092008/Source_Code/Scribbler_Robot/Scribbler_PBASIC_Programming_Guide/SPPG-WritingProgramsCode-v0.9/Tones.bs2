@@ -1,0 +1,15 @@
+' Scribbler PBASIC Programming Guide - Tones.bs2
+' Play 5 single tones on the speaker.
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program running!"
+
+FREQOUT 11, 200, 500   ' Play 500 Hz tone for 1/5 second
+FREQOUT 11, 400, 1000  ' Play 1000 Hz tone for 2/5 second
+FREQOUT 11, 600, 1500  ' Play 1500 Hz tone for 3/5 second
+FREQOUT 11, 800, 2000  ' Play 2000 Hz tone for 4/5 second
+FREQOUT 11, 1000, 2500 ' Play 2500 Hz tone for 1 second
+
+
+

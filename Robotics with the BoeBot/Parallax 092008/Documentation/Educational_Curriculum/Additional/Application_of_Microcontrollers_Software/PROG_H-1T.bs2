@@ -1,0 +1,16 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_H-1T
+'Parallel nibble transfer transmitter
+'Transfers the buttons nibble to nibble A (P0-P3) continously
+
+DIRC = %0000	'Set buttons as inputs
+DIRA = %1111	'Set P0-P3 as outputs
+
+loop:
+DEBUG "Data out = ",IBIN4 INC,CR   'Display the nibble from the button
+OUTA =inc		   'Sets nibble A = nibble C (transmits buttons)
+GOTO loop

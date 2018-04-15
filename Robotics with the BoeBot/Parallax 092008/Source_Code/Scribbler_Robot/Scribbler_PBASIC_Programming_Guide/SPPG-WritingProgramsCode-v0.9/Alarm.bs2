@@ -1,0 +1,15 @@
+' Scribbler PBASIC Programming Guide - Alarm.bs2
+' Make a alarm noise with FREQOUT commands in a loop
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program running!"
+
+DO
+
+  FREQOUT 11, 200, 700, 750
+  FREQOUT 11, 200, 900, 950
+
+LOOP
+
+

@@ -1,0 +1,18 @@
+' Scribbler PBASIC Programming Guide - LedsOnOff.bs2
+' Turn on LEDs for 1 second, then turn them off.
+
+' {$STAMP BS2}
+' {$PBASIC 2.0}
+
+HIGH  8
+HIGH  9
+HIGH  10
+
+PAUSE 1000
+
+LOW 8
+LOW 9
+LOW 10
+
+
+

@@ -1,0 +1,38 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_H-5R
+'Receives a nibble serially from P0 and places on LEDs
+'Individual Bit Sync on P6
+
+NibData var nib	'Nibble to hold incoming nibble
+BitIn var Bit	'Bit to hold incoming Bit
+X var nib		'For-Next variable
+btnClock var byte	'Button function variable
+Clock con 6		'Define clock line as P6
+
+Input 0		'Set P0 as input
+DIRC = %1111	'Set up Button LEDs as outputs
+Input 6		'Set up P6 as input
+btnClock = 0	'Clear button variable
+
+
+Loop:			'Wait until sync pulse starts
+DEBUG "Waiting for Data",CR
+NibData = 0
+For X = 1 to 4	'Read for bits and assemble nibble MSB first
+	BitLoop
+	Button Clock, 1, 255, 0, btnClock, 0, BitLoop '***Wait for clock pulse
+	BitIn = IN0				'Read bit
+	
+	NibData = NibData << 1		'Shift nibble
+	Nibdata = NibData + BitIn	'Add bit to nibble at LSB position
+	DEBUG "BitIn = ",IBIN BitIn, "  NibData = ",IBIN4 NibData,CR
+Next
+
+OUTC = NibData				'Set buttons LEDs
+Debug "Nibble in = ",IBIN4 NibData, CR, CR
+
+Goto Loop

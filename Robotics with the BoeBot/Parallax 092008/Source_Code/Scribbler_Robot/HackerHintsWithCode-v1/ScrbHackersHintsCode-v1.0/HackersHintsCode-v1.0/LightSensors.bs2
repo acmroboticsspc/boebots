@@ -1,0 +1,47 @@
+' Scribbler Robot Demonstration Code
+' LightSensor.bs2
+' Scribbler light sensors measure light levels
+' and display results in the Debug Terminal
+' (C) Parallax Inc. 2005
+
+'  {$STAMP BS2}
+'  {$PBASIC 2.5}
+
+' I/O Declarations
+
+LightRight      PIN 0   ' right light sensor
+LightCenter     PIN 1   ' center light sensor
+LightLeft       PIN 2   ' left light sensor
+
+' Variable Declarations
+
+light_left_value VAR Word
+light_center_value VAR Word
+light_right_value VAR Word
+
+
+DO
+
+' Set the pins high to charge the capacitors
+  HIGH LightLeft
+  HIGH LightCenter
+  HIGH LightRight
+
+  ' Wait while the capacitor charges
+  PAUSE 3
+
+  ' Time how long it takes each one to discharge
+  RCTIME LightLeft, 1, light_left_value
+  RCTIME LightCenter, 1, light_center_value
+  RCTIME LightRight, 1, light_right_value
+
+  'Display light sensor values
+  DEBUG "Left light sensor value =    ", DEC5 light_left_value, CR
+  DEBUG "Center light sensor value =   ", DEC5 light_center_value, CR
+  DEBUG "Right light sensor value =    ", DEC5 light_right_value, CR
+
+  DEBUG HOME
+
+  PAUSE 200
+
+LOOP

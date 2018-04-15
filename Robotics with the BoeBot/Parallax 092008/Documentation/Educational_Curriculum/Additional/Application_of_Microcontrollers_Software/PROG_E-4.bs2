@@ -1,0 +1,37 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_E-4
+'Derivative Control Example
+'This program will Sound a short high tone (READY) followed by a long lone tone(GO).
+'The amount the pot moves DURING the 2nd tone will determe how long 
+'blue's LED stays lit.
+
+StartVal var word					'Store pot begining value
+StopVal var word					'Store pot ending value
+Change var word					'Holds calculated change	
+HIGH 8						'Turn off Blue's LED
+
+Loop:
+FREQOUT 11, 50, 3000				'Sound READY short high tone
+PAUSE 200
+HIGH 7: PAUSE 10: RCTIME 7, 1, StartVal	'Charge RC and get pot value
+FREQOUT 11, 300, 1000				'Sound GO measuring low long tone
+HIGH 7: Pause 10: RCTime 7, 1, StopVal	'Get Pot's end value	
+
+If StopVal > StartVal THEN Switch		'Make sure we don't go negative
+Change = StartVal - StopVal 			'Calculate change
+Goto PulseIt					
+
+Switch:	
+Change	= StopVal - StartVal		'Calculate Change if other direction
+
+PulseIt:						'Display data
+debug "START ",DEC StartVal,": END ",DEC StopVal, ": Change ",DEC Change,cr
+LOW 8: PAUSE Change: HIGH 8			'Light LED for amount of change time
+
+PAUSE 3000						'Take a 3 second breather
+GOTO Loop						'Start over!
+

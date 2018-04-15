@@ -1,0 +1,32 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_F_2
+'Declares and sets variables for memory map testing.
+'Consists of 2 words, 2 bytes and 4 nibbles and 3 bits
+
+WordA var word	'Declare variables
+ByteA var byte
+NibbleA var nib
+ByteB var byte
+NibbleB var nib
+BitA var bit
+NibbleC var nib
+NibbleD var nib
+WordB var word
+BitB var bit
+BitC var bit
+
+WordA = $0123		'Set values in variables.
+WordB = $4567
+ByteA = $89
+ByteB = $AB
+NibbleA = $C
+NibbleB = $D
+NibbleC = $E
+NibbleD = $F
+BitA = 1
+BitB = 0
+BitC = 1

@@ -1,0 +1,306 @@
+'{$STAMP BS2}
+'{$PBASIC 2.5}
+
+'========[Calibrate_All.BS2]===================================================
+
+'This program performs several calibration functions, depending on how it's
+'started:
+
+'  1. A single (normal) reset causes calibration data to be dumped to the debug port.
+
+'  2. Pressing reset twice in rapid succession causes the servos to be continuously
+'     pulsed with 1.5ms pulses, so they can be nulled.
+
+'  3. Pressing reset three times in rapid succession calibrates the wheel servos.
+'     For each servo AND FOR each direction it calculates the correct pulse widths
+'     for sixteen equally-spaced velocities. It stores the 64 byte values thus
+'     obtained in the first 64 bytes of the Stamp's EEPROM. The Boe-Bot needs to be
+'     sitting on a flat, smooth surface for this operation. (See documentation.)
+
+'  4. Pressing reset four times in rapid succession obtains the data necessary for
+'     calibrating the angular rate constants. It reads the output from a photoresistor
+'     at each of 256 minimally-spaced angles and stores the word values obtained
+'     in locations 64 - 575 of the Stamp's EEPROM. This data is later downloaded by the
+'     PC program Calibrate_Angle.exe, which performs an autocorrelation to determine
+'     how many pulses (to the nearest 1/256th pulse) in a complete revolution. The
+'     Boe-Bot needs To be sitting on a flat, smooth surface for this operation.
+'     (See documentation.)
+
+
+'Written by Philip C. Pilgrim    9 April 2004
+
+'---------[Time constants for various BASIC Stamps]----------------------------
+
+#IF ($Stamp = BS2) OR ($Stamp = BS2E) #THEN
+
+  NULL      CON 750       'Pulse width for 1.5ms pulse.
+  SCALE     CON $100      '256 * amount to scale pulses by.
+
+#ELSE
+
+  NULL      CON 1875      'Pulse width for 1.5ms pulse.
+  SCALE     CON $280      '256 * amount to scale pulses by.
+
+#ENDIF
+
+'---------[Constants for all Stamps]-------------------------------------------
+
+MAXPULS   CON 100       'Adder/subtractor (before scaling) to NULL for max speed.
+
+RIGHT     CON 0         'Constants used as subscripts into bit arrays.
+LEFT      CON 1
+CCW       CON 0
+CW        CON 1
+FWD       CON 0
+BAK       CON 1
+
+Photo     PIN 6         'Photo resistor input.
+
+SenseR    PIN 10        'Lefthand encoder input.
+SenseL    PIN 11        'Righthand encoder input. (MUST be SenseL + 1.)
+
+MotorR    PIN 12        'Lefthand motor output.
+MotorL    PIN 13        'Righthand motor output. (MUST be MotorL + 1.)
+
+Sense     CON SenseR    'Base address for encoders.
+Motor     CON MotorR    'Base address for motors.
+
+Pulse     VAR Byte      'Current unscaled or nulled pulse value.
+pPulse    VAR Byte      'Previous pulse value (used in interpolation).
+
+i         VAR Word      'General FOR/NEXT index.
+Value     VAR Word
+p         VAR Byte      'Index into EEPROM table.
+n         VAR Byte(2)   'Encoder counts for both sides.
+nPrev     VAR Byte(2)   'Previous encoder counts for both sides.
+v         VAR Byte(2)   'Next velocity index we're looking for (both sides).
+nt        VAR Byte      'Next encoder count to find, corresponding to v.
+pt        VAR Byte      'Interpolated pulse width to get the desired count.
+nMax      VAR Byte      'Maximum sustainable velocity (encoder count).
+
+Prev      VAR Bit(2)    'Previous readings from encoders.
+New       VAR Bit(2)    'Current readings from encoders.
+Side      VAR Bit       'Side index (RIGHT or LEFT).
+Dir       VAR Bit       'Direction index (FWD or BAK).
+Opp       VAR Bit
+
+Veloc     VAR Nib
+
+Dist      VAR Byte(2)   'Distance for each wheel to travel.
+Counts    VAR Byte(2)   'Encoder pulse countdown for each wheel.
+
+'---------[EEPROM table of pulse sample points]--------------------------------
+
+STEPS     CON 13        'Pulse points at which to sample servo speeds.
+          DATA @576, 0, 1, 2, 4, 6, 8, 10, 15, 20, 30, 40, 50, 60, 100
+
+'=========[Program starts here]================================================
+
+READ 576, i
+WRITE 576, i + 1
+PAUSE 1000
+WRITE 576, 0
+SELECT i
+
+  CASE 0
+
+    PAUSE 1000
+    DEBUG "Copy and paste these DATA statements into your BASIC Stamp programs:", CR, CR
+    FOR i = 0 TO $3f
+      IF (i = 0) THEN
+        DEBUG "DATA @0, "
+      ELSEIF (i & 7 = 0) THEN
+        DEBUG "DATA     "
+      ENDIF
+      READ i, p
+      DEBUG DEC p
+      IF (i & 7 = 7) THEN DEBUG CR ELSE DEBUG ","
+    NEXT
+    DEBUG CR, "Autocorrelation data for Calibrate_All.exe:", CR, CR
+    FOR i = $40 TO $23f STEP 2
+      READ i, n(0)
+      READ i+1, n(1)
+      DEBUG DEC n(0) << 8 + n(1)
+      IF (i & 15 = 14) THEN DEBUG CR ELSE DEBUG ","
+    NEXT
+    DEBUG CR, "END", CR
+    END
+
+  CASE 1
+
+    DO
+      PULSOUT MotorR, 750
+      PULSOUT MotorL, 750
+      PAUSE 50
+    LOOP
+
+  CASE 2
+
+    GOTO Calibrate_Veloc
+
+  CASE 3
+
+    PAUSE 5000
+    FOR i = 0 TO 512 STEP 2
+      HIGH Photo
+      PAUSE 6
+      RCTIME Photo, 1, Value
+      WRITE i + 64, Value.HIGHBYTE
+      WRITE i + 65, Value.LOWBYTE
+      Dist(LEFT) = i.BIT1
+      Dist(RIGHT) = 1 - Dist(RIGHT)
+      Dir(LEFT) = FWD
+      Dir(RIGHT) = BAK
+      Veloc = 1
+      GOSUB DoMove
+    NEXT
+    END
+
+  ENDSELECT
+  END
+
+
+Calibrate_Veloc:
+
+'---------[Make sure servos are nulled]----------------------------------------
+
+Pulse = 0                                   'Pulse width is null value.
+GOSUB Counter                               'Count encoders for 256 servo pulses.
+IF (n(RIGHT) > 1 OR n(LEFT)> 1) THEN Error  'More than one pulse is error.
+
+'---------[Find maximum sustainable rotation rate]-----------------------------
+
+Pulse = MAXPULS */ SCALE                    'Pulse width for fastest speed.
+Dir = CCW                                   'Direction is counter-clockwise.
+GOSUB Counter                               'Count encoders for 256 servo pulses.
+nMax = n(RIGHT) MAX n(LEFT)                 'Pick the smallest encoder count.
+Dir = CW                                    'Now go the other way.
+GOSUB Counter                               'Count encoders for 256 servo pulses.
+nMax = nMax MAX n(RIGHT) MAX n(LEFT) */ $F8 'Pick the smallest encoder count * 31/32.
+IF (nMax <= 1) THEN Error                   'If an encoder didn't respond, then error.
+
+'---------[Get interpolated pulse widths in each direction]--------------------
+
+FOR Dir = CCW TO CW                         'Once for one direction; once for the other.
+  pPulse = 0                                'Previous pulse width deemed zero.
+  FOR Side = RIGHT TO LEFT                  'Clear the count and velocity index arrays.
+    nPrev(Side) = 0
+    v(Side) = 0
+  NEXT
+  FOR p = 0 TO STEPS - 1                    'Index over the sample points.
+    READ p + 577, Pulse                     'Get the next sample point.
+    Pulse = Pulse */ Scale                  'Scale it for this Stamp.
+    GOSUB Counter                           'Count encoders for 256 servo pulses.
+    DEBUG DEC Pulse, ": ", DEC n(RIGHT), " ", DEC n(LEFT), CR
+    FOR Side = RIGHT TO LEFT                'For both sides...
+      DO                                    'Do until all interpolations in this section are done.
+        nt = nMax * (v(Side) + 1) >> 4      'Scale nt to nMax.
+        DEBUG "       (", DEC nt, ")", CR
+        IF (v(Side) <= 15) THEN             'If v were 15, that side would be finished.
+          IF (nt >= nPrev(Side) AND n(Side) >= nt) THEN  'If nt is between observed values...
+                                            'Use linear interpolation to get pt.
+            pt = (Pulse * (nt - nPrev(Side)) + (pPulse * (n(Side) - nt))) / (n(Side) - nPrev(Side)) + 1
+            WRITE Side << 1 + Dir << 4 + v(Side), pt  'Save pt in EEPROM.
+            DEBUG REP " "\(Side * 10 + 12), DEC Side, " ", DEC v(Side), ": ", DEC pt, " "
+            v(Side) = v(Side) + 1           'Increment to next desired velocity.
+          ELSE
+            EXIT                            'Done in this section.
+          ENDIF
+        ELSE
+          EXIT                              'Done with this side altogether.
+        ENDIF
+      LOOP
+    NEXT
+    pPulse = Pulse                          'Previous pulse width is current pulse width.
+    FOR Side = RIGHT TO LEFT                'Previous counts are current counts.
+      nPrev(Side) = n(Side)
+    NEXT
+  NEXT
+NEXT
+
+END
+
+'---------[Error routine]------------------------------------------------------
+
+Error:                                      'Error condition detected. Waggle from side to side.
+  FOR n = 1 TO 3
+    FOR Dir = CCW TO CW
+      FOR i = 1 TO 20
+        FOR Side = RIGHT TO LEFT
+          PULSOUT Motor + Side, NULL + ((Dir << 1 - 1) * (MAXPULS */ SCALE))
+        NEXT
+        PAUSE 20
+      NEXT
+    NEXT
+  NEXT
+  END
+
+'---------[Encoder pulse counter]----------------------------------------------
+
+Counter:
+  FOR Side = RIGHT TO LEFT                  'Get initial encoder states & clear counts.
+    Prev(Side) = INS.LOWBIT(Sense + Side)
+    n(Side) = 0
+  NEXT
+  FOR i = 0 TO 255                          '256 servo pulses.
+    FOR Side = RIGHT TO LEFT
+      New(Side) = INS.LOWBIT(Sense + Side)  'Get new servo states.
+      IF (New(Side) <> Prev(Side)) THEN     'Different from previous state?
+        Prev(Side) = New(Side)              '  Yes: Save new state.
+        n(Side) = n(Side) + 1               '        Increment edge count.
+      ENDIF
+    NEXT
+    FOR Side = RIGHT TO LEFT                'Pulse both motors.
+      PULSOUT Motor + Side, NULL + ((Dir << 1 - 1) * Pulse)
+    NEXT
+    PAUSE 20                                'Delay between servo pulses.
+  NEXT
+  RETURN
+
+'--------[DoMove]--------------------------------------------------------------
+
+'Move RIGHT wheel by Dist(RIGHT) in direction Dir(RIGHT) and
+'LEFT wheel by Dist(LEFT) in direction Dir(LEFT) at peak velocity Veloc,
+'using ramping and RIGHT/LEFT coordination.
+
+DoMove:
+
+  'Initialize Counts TO Dist.
+  'Save current encoder status.
+
+  FOR Side = RIGHT TO LEFT
+    Counts(Side) = Dist(Side)
+    Prev(Side) = INS.LOWBIT(Sense + Side)
+  NEXT
+
+  'Do for as long as there are encoder counts remaining...
+
+  DO WHILE (Counts(RIGHT) OR Counts(LEFT))
+
+    'Get new encoder state for each wheel.
+    'If it's changed, decrement that wheel's Count.
+
+    FOR Side = RIGHT TO LEFT
+      New(Side) = INS.LOWBIT(Sense + Side)
+      IF (New(Side) <> Prev(Side) AND Counts(Side)) THEN
+        Prev(Side) = New(Side)
+        Counts(Side) = Counts(Side) - 1
+      ENDIF
+    NEXT
+
+    'For each wheel decide whether and how much to pulse its servo.
+
+    FOR Side = RIGHT TO LEFT
+      Opp = ~ Side
+      IF (Counts(Side) AND Counts(Side) * Dist(Opp) + (Dist(Side)) >= Counts(Opp) * Dist(Side) + (Dist(Opp) >> 1)) THEN
+        Pulse = (Veloc MIN 3) MAX ((Counts(Side) MIN Counts(Opp)) MAX ((Dist(Side) - Counts(Side)) MIN (Dist(Opp) - Counts(Opp))) << 1 MIN 3)
+        READ Side << 1 + (Dir(Side) ^ Side) << 4 + (Pulse * Dist(Side) / (Dist(Side) MIN Dist(Opp)) + 1 MAX 15), Pulse
+        PULSOUT Motor + Side, NULL - ((Dir(Side) ^ Opp << 1 - 1) * Pulse)
+      ENDIF
+    NEXT
+
+    'Pause between pulses.
+
+    PAUSE 5
+  LOOP
+  RETURN

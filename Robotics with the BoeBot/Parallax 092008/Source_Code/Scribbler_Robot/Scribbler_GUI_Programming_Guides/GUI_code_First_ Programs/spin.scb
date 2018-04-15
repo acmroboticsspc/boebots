@@ -1,0 +1,63 @@
+<!-- Generated code: DO NOT EDIT! Any changes will void this file. -->
+<!-- 3F90BCD546A97450B304653BE513DFB7 -->
+<opt autoreadsensors="2" class="Scribbler_Worksheet" version="1.0">
+  <_children active="1" activecalls="0" activeout="1" class="Scribbler_Subroutine" color="green" counters="0" subclass="">
+    <_children active="1" activeout="0" class="Scribbler_SubroutineTile" subclass="sub_begin">
+      <action icon="gear_green" />
+    </_children>
+    <_children active="1" activeout="0" class="Scribbler_MotionTile" subclass="">
+      <action call="" icon="move_fwd_right" left=" 50" right=" 33" text="50:33" timer="0.00" type="set" />
+    </_children>
+    <_children active="1" activeout="1" class="Scribbler_Loop" subclass="">
+      <_children active="1" activeout="0" class="Scribbler_LoopTile" subclass="loop_begin">
+        <action reps="5" />
+      </_children>
+      <_children active="1" activeout="0" class="Scribbler_LedTile" subclass="">
+        <action>
+          <_states>on</_states>
+          <_states>off</_states>
+          <_states>on</_states>
+        </action>
+      </_children>
+      <_children active="1" activeout="0" class="Scribbler_SequencerTile" subclass="">
+        <action call="" icon="tune" tempo="5" text="R21">
+          <_sequence abbr="R21" bars="0" class="Scribbler_SoundBite" color="magenta" comment="Bot Talk 1" group="Effects" notelength="1/4" notetranspose="0" tremolo="0">
+            <_notes dmult="1" duration="100" fmult="1" frequency="2300" type="note" />
+            <_notes dmult="1" duration="50" fmult="1" frequency="1500" type="note" />
+            <_notes dmult="1" duration="90" fmult="1" frequency="2000" type="note" />
+            <_notes dmult="1" duration="120" fmult="1" frequency="1670" type="note" />
+          </_sequence>
+        </action>
+      </_children>
+      <_children active="1" activeout="0" class="Scribbler_LedTile" subclass="">
+        <action>
+          <_states>off</_states>
+          <_states>on</_states>
+          <_states>off</_states>
+        </action>
+      </_children>
+      <_children active="1" activeout="0" class="Scribbler_SequencerTile" subclass="">
+        <action call="" icon="tune" tempo="5" text="R22">
+          <_sequence abbr="R22" bars="0" class="Scribbler_SoundBite" color="purple" comment="Bot Talk 2" group="Effects" notelength="1/4" notetranspose="0" tremolo="0">
+            <_notes dmult="1" duration="90" fmult="1" frequency="2000" type="note" />
+            <_notes dmult="1" duration="120" fmult="1" frequency="1200" type="note" />
+            <_notes dmult="1" duration="68" fmult="1" frequency="560" type="note" />
+            <_notes dmult="1" duration="100" fmult="1" frequency="3000" type="note" />
+          </_sequence>
+        </action>
+      </_children>
+      <_children active="1" activeout="0" class="Scribbler_LoopTile" subclass="loop_end">
+        <action></action>
+      </_children>
+      <action></action>
+    </_children>
+    <_children active="1" activeout="0" class="Scribbler_MotionTile" subclass="">
+      <action call="" icon="move_stop" left="  0" right="  0" text="0:0" timer="0.00" type="set" />
+    </_children>
+    <_children active="1" activeout="0" class="Scribbler_SubroutineTile" subclass="sub_end">
+      <action icon="gear_green" />
+    </_children>
+    <action></action>
+    <callsto></callsto>
+  </_children>
+</opt>

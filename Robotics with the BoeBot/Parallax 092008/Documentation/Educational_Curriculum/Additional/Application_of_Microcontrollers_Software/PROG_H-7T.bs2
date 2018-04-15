@@ -1,0 +1,31 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_H-7T
+'Asynchronous byte transmitter of P0 using SEROUT command
+
+ByteOut var byte			'Holds outgoing byte
+Baud var word			'Holds Baud / 100
+ByteTime var word			'Holds microsecond length of single bits - 20
+
+Baud = 9600 / 100
+ByteTime = 10000/Baud - 20
+
+DEBUG "Baud Rate = ", DEC Baud * 100
+Loop
+Pause 3000				'3 sec delay between transmission
+
+DIRC = %0000			'Set up buttons as inputs
+Byteout = %11111111		'Clear out ByteOut
+
+Byteout.LOWNIB = INC		'Set lower nibble of byteout to button nibble
+FREQOUT 11, 200, 2000		'Sound transmit tone
+DEBUG IBIN8  ? ByteOut,CR	'Display
+Serout 0, ByteTime, [ByteOut]	'Transmit byteout at 9600 baud, non-inverted, 8 bit
+Goto Loop
+
+
+
+

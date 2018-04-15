@@ -1,0 +1,25 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_B-11
+'Places a * in debug window whenever Blue is pressed.
+'Debouncing and checking
+
+INPUT 8
+FlagON  var bit    'define a flag for checking status
+
+FlagOn = 0	   'clear the flag
+
+Loop:
+If IN8 = 0 THEN Action    'If pressed, take action
+FlagON = 0                      'not pressed, reset flag (0)
+GOTO Loop
+
+Action:
+PAUSE 50
+IF (IN8 = 1) OR (FlagON = 1) THEN Loop   'If no longer pressed, OR the flag is set, skip
+DEBUG "* "
+FlagON = 1		   'Once we do it, set the flag. (1)
+GOTO Loop

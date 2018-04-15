@@ -1,0 +1,18 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_C-3
+'Show binary counting on LEDs. (reversed so 0 = ON)
+
+BinaryCount var nib		'Define nibble variable for counting
+DIRC = %1111			'Set P8-P11 nibble as output
+
+Loop:
+FOR BinaryCount = 0 TO 15	'Start Counting
+PAUSE 500		'Pause 1/2 second
+OUTC = BinaryCount ^ %1111		'Reverse the nibble and send to output
+	NEXT
+PAUSE 3000			'Wait 3 seconds
+GOTO Loop			'Repeat

@@ -1,0 +1,13 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_B-5
+'Sound speaker at 100 HZ (click every 10mSec à1/.010 = 100)
+OUTPUT 11      'set as output
+
+LOOP:
+TOGGLE 11     'Change output state
+PAUSE 10        'pause for 10mSec
+GOTO LOOP    'repeat

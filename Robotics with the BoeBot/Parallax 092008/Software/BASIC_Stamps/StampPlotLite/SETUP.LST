@@ -1,0 +1,41 @@
+[Bootstrap]
+SetupTitle=Install
+SetupText=Copying Files, please stand by.
+CabFile=StampP1.CAB
+Spawn=Setup1.exe
+Uninstal=st6unst.exe
+TmpDir=msftqws.pdw
+Cabs=2
+
+[Bootstrap Files]
+File1=@VB6STKIT.DLL,$(WinSysPathSysFile),,,6/18/98 12:00:00 AM,102912,6.0.81.69
+File2=@COMCAT.DLL,$(WinSysPathSysFile),$(DLLSelfRegister),,5/31/98 12:00:00 AM,22288,4.71.1460.1
+File3=@STDOLE2.TLB,$(WinSysPathSysFile),$(TLBRegister),,3/8/99 12:02:26 PM,17920,2.40.4275.1
+File4=@ASYCFILT.DLL,$(WinSysPathSysFile),,,3/8/99 12:02:26 PM,147728,2.40.4275.1
+File5=@OLEPRO32.DLL,$(WinSysPathSysFile),$(DLLSelfRegister),,8/9/99 4:50:00 AM,164112,5.0.4275.1
+File6=@OLEAUT32.DLL,$(WinSysPathSysFile),$(DLLSelfRegister),,6/29/99 1:05:30 AM,598288,2.40.4275.1
+File7=@MSVBVM60.DLL,$(WinSysPathSysFile),$(DLLSelfRegister),,12/9/98 10:28:18 AM,1409024,6.0.82.68
+
+[IconGroups]
+Group0=Stamp Plot
+PrivateGroup0=False
+Parent0=$(Programs)
+
+[Stamp Plot]
+Icon1=""StampPlotLite.exe""
+Title1=Stamp Plot Lite
+StartIn1=$(AppPath)
+Icon2="STAMPPLOT.HLP"
+Title2=Stamp Plot Help
+StartIn2=$(AppPath)
+
+[Setup]
+Title=Stamp Plot Lite
+DefaultDir=$(ProgramFiles)\Stamp Plot Lite
+AppExe=StampPlotLite.exe
+AppToUninstall=StampPlotLite.exe
+
+[Setup1 Files]
+File1=@STAMPPLOT.HLP,$(AppPath),,,2/7/00 12:03:30 AM,68478,0.0.0.0
+File2=@MSCOMM32.OCX,$(WinSysPath),$(DLLSelfRegister),$(Shared),1/10/00 12:25:46 PM,103744,6.0.81.69
+File3=@StampPlotLite.exe,$(AppPath),,,2/7/00 12:05:06 AM,155648,1.1.0.0

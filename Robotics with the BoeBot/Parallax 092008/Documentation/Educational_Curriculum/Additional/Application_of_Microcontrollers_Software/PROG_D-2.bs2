@@ -1,0 +1,40 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_D-2
+'This program starts at a midscale duty of 128, or 2.5 volts, on Aout
+'Use the Blue button to increase duty, Red to lower.
+'Debug will display duty and Voltage out * 10
+
+Aout con 12		'constant for P12
+Duty var Byte		'Duty variable
+volt_x_10 var word	'Output volt * 10 variable
+RedBtn var byte	'Red button bytevariable
+BlueBtn var byte	'Blue button bytevariable
+
+INPUT 8		'Set up directions
+INPUT 11
+OUTPUT Aout
+Duty = 128		'Set to mid-scale
+GOTO Display		'Display data
+
+Loop:
+BUTTON 8,0,0,100,Bluebtn, 1, Raise      'Blue btn - Raise Aout
+BUTTON 11,0,0,0,redbtn, 1, Lower 	'Red btn - Lower Aout
+PWM Aout, Duty, 100			'Burst of PWM
+GOTO Loop
+
+Raise:
+Duty = Duty + 1 max 255	'bump up duty
+GOTO Display
+
+Lower:
+Duty = Duty -1 min 1		'bump down duty
+GOTO Display
+
+Display:
+volt_x_10 =50 * Duty / 255 	'Calc expected volt
+Debug "Duty = ", DEC Duty, ",   Volt x 10 = ",  DEC volt_x_10, CR	'Display duty & volt
+GOTO Loop

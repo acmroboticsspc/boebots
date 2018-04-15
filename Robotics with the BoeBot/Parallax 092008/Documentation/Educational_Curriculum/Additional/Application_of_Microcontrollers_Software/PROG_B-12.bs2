@@ -1,0 +1,31 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_B-12
+'Different tones for Blue, Black Green with diverse BUTTON command uses.
+'Press and hold each button
+
+Freq var word		'set up variables
+btnBLUE var byte
+btnBLACK var byte
+btnGREEN var byte
+
+btnBLUE = 0   		'initialize button bytevariables
+btnBLACK = 0
+btnGREEN = 0
+
+Loop:
+freq = 1500		'select frequency
+BUTTON 8, 0, 255, 0, btnBLUE, 1, SNDOUT  'read blue button debounce, but no repeat
+freq = 2000
+BUTTON 9, 0, 50, 200, btnBLACK,1,SNDOUT  'read blk button, quick delay, slow repeat
+freq = 3000
+BUTTON 10, 0, 250,10, btnGREEN,1,SNDOUT  'read grn button, slow delay, fast repeat
+GOTO Loop
+
+SNDOUT:		'sounds tone based on frequency defined
+FREQOUT 11, 100, freq
+
+GOTO Loop		'Repeat

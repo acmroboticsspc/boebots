@@ -1,0 +1,235 @@
+'{$STAMP BS2}
+'{$PBASIC 2.5}
+
+'This program consists of a set of subroutines for producing coordinated motion in the
+'Boe-Bot wheels, through the use of encoder feedback.
+
+'Addresses 0 - 63 of EEPROM are assumed to have calibration coefficients put
+'there by the program Wheel_Calibrate.bs2.
+
+'Written by Philip C. Pilgrim    30 March 2004
+
+'Modified 6 April 2004:
+'  Corrected bug in move routine resulting from switching LEFT/RIGHT port assignments.
+'Modified 12 April 2004:
+'  Added compile-time conditionals for NULL and SCALE
+'  Changed calibration constants based on results from Calibrate_All.exe.
+
+'---------[Time constants for various BASIC Stamps]----------------------------
+
+#IF ($Stamp = BS2) OR ($Stamp = BS2E) #THEN
+
+  NULL      CON 750       'Pulse width for 1.5ms pulse.
+  SCALE     CON $100      '256 * amount to scale pulses by.
+
+#ELSE
+
+  NULL      CON 1875      'Pulse width for 1.5ms pulse.
+  SCALE     CON $280      '256 * amount to scale pulses by.
+
+#ENDIF
+
+'--------[Calibration Constants]-----------------------------------------------
+'
+' Adjust FULLROT for best precision on a closed course.
+' Recompute BRDSPER as shown.
+'
+FULLROT     CON  $326D
+BRDSPER     CON  $0514
+SDIRINC     CON  $7F92
+
+'---------[Other Global Constants]---------------------------------------------
+
+RIGHT     CON 0         'Constants used as subscripts into bit arrays.
+LEFT      CON 1
+FWD       CON 0
+BAK       CON 1
+
+SenseR    PIN 10        'Lefthand encoder input.
+SenseL    PIN 11        'Righthand encoder input. (MUST be SenseL + 1.)
+
+MotorR    PIN 12        'Lefthand motor output.
+MotorL    PIN 13        'Righthand motor output. (MUST be MotorL + 1.)
+
+Sense     CON SenseR    'Base address for encoders.
+Motor     CON MotorR    'Base address for motors.
+
+Arg       VAR Byte      'Requested travel or turn amount.
+Veloc     VAR Nib       'Requested maximum velocity.
+
+DirErr    VAR Word      'Current directional error in brads and 1/256 brads.
+
+Prev      VAR Bit(2)    'Previous readings from encoders.
+New       VAR Bit(2)    'Current readings from encoders.
+Dir       VAR Bit(2)    'Wheel directions (FWD or BAK).
+Side      VAR Bit       'Side index (RIGHT or LEFT).
+Opp       VAR Bit       'Index to the other side (saves code).
+
+Pulse     VAR Byte      'Current unscaled, unnulled servo pulse value.
+
+Dist      VAR Byte(2)   'Distance for each wheel to travel.
+Counts    VAR Byte(2)   'Encoder pulse countdown for each wheel.
+i         VAR Byte      'General FOR loop index.
+
+'=========[MAIN PROGRAM]=======================================================
+
+PAUSE 2000
+GOSUB Square
+END
+
+PAUSE 2000
+GOSUB Octagon
+PAUSE 2000
+GOSUB Circle
+PAUSE 2000
+GOSUB Turn256
+END
+
+'=========[SUBROUTINES]========================================================
+
+'---------[Octagon]------------------------------------------------------------
+
+' Move Boe-bot along a counterclockwise, octagonal path, each leg of length 25.
+
+Octagon:
+  Veloc = 15                 'Set velocity to maximum.
+  FOR i = 1 TO 8             'Do for eight sides.
+    Arg = 25: GOSUB Move     'Go straight for 25 eps.
+    PAUSE 500
+    Arg = 32: GOSUB Turn     'Turn left by 32 brads.
+    PAUSE 500
+  NEXT
+  RETURN
+
+'---------[Square]-------------------------------------------------------------
+
+' Move Bot-Bot counterclockwise along a closed, square path, each leg of length 50.
+
+Square:
+  Veloc = 15                 'Set velocity to maximum.
+  FOR i = 1 TO 4             'Do for four sides.
+    Arg = 50: GOSUB Move     'Move ahead by 50 eps.
+    PAUSE 500
+    Arg = 64: GOSUB Turn     'Turn left by 64 brads.
+    PAUSE 500
+  NEXT
+  RETURN
+
+'---------[Circle]--------------------------------------------------------------
+
+' Move Boe-Bot counterclockwise in a complete circle about its left wheel.
+
+Circle:
+  Veloc = 15                 'Set velocity to maximum.
+  Dist(LEFT) = 0             'Left wheel stays still.
+                             'Right wheel goes forward by number of encoder counts
+                             '(rounded) in one full, 256 brad turn.
+  Dist(RIGHT) = Dist(LEFT) + (FULLROT + $80 >> 8)
+  Dir(RIGHT) = FWD            'Both directions are forward.
+  Dir(LEFT) = FWD
+  GOSUB DoMove               'Execute the move.
+  RETURN
+
+'---------[Turn256]------------------------------------------------------------
+
+'Spin the Boe-Bot on its axis one complete revolution.
+
+Turn256:
+  Veloc = 15                 'Set velocity to maximum.
+  FOR i = 1 TO 2             'Do in two, 128-brad segments.
+    Arg = -128               'Turn 128 brads to the LEFT.
+    GOSUB Turn               'Execute turn.
+  NEXT
+  RETURN
+
+'---------[Move]---------------------------------------------------------------
+
+'Move the Boe-Bot forward/backward by signed byte Arg at unsigned speed Veloc.
+
+Move:
+  Dir(LEFT) = Arg.BIT7      'Direction of motion given by sign bit of Arg.
+  Dir(RIGHT) = Dir(LEFT)     'Both directions are the same.
+  Arg = ABS(Arg << 8) >> 8   'Take the absolute value of Arg to get distance.
+                             'Compute length of first leg of tack.
+  Dist(LEFT) = Arg * (16 - (ABS(DirErr) / (BRDSPER >> 4))) / 16
+  IF (Dist(LEFT)) THEN       'Is it greater than zero?
+    Dist(RIGHT) = Dist(LEFT) '  Yes: Right wheel goes the same distance.
+    GOSUB DoMove             '       Execute the move
+    Arg = Arg - Dist(LEFT)   '       Subtract the distance moved from Arg.
+    IF (Arg) THEN            '       Anything left?
+      Dist(LEFT) = DirErr.BIT15     '  Yes: Correct direction by the sign of DirErr.
+      Dist(RIGHT) = Dist(LEFT) ^ 1  '       Only one wheel moves forward.
+      GOSUB DoMove                  '       Execute the move.
+    ENDIF
+  ENDIF
+  IF (Arg) THEN              'Now back to Arg. Is it greater than zero?
+    Dist(RIGHT) = Arg         '  Yes: Set distances from it.
+    Dist(LEFT) = Arg
+    GOSUB DoMove             '       Execute this leg of the move.
+  ENDIF
+  RETURN
+
+'---------[Turn]---------------------------------------------------------------
+
+'Turn the Boe-Bot on its axis by the amount in signed byte Arg at speed Veloc.
+'Arg > 0 turns left; Arg < 0 turns right.
+
+Turn:
+  DirErr = DirErr + (Arg << 8)          'Adjust direction error by amount of turn.
+  Arg = ABS(DirErr) ** FULLROT >> 7 + 1 >> 1 'Compute new Arg from new DirErr.
+  Dir(RIGHT) = DirErr.BIT15             'Direction of turn is sign bit of DirrErr.
+  Arg = ABS(Arg << 8) >> 8              'Amount of turn is absolute value of Arg.
+  Dist(LEFT) = Arg >> 1                 'Split turn amount evenly between both wheels.
+  Dist(RIGHT) = Arg >> 1 + (Arg.BIT0)   'Round right wheel up if Arg is odd.
+  Dir(LEFT) = ~ Dir(RIGHT)              'Left wheel goes opposite direction.
+  GOTO DoMove                           'Execute the motion.
+
+'--------[DoMove]--------------------------------------------------------------
+
+'Move right wheel by Dist(RIGHT) in direction Dir(RIGHT) and
+'left wheel by Dist(LEFT) in direction Dir(LEFT) at peak velocity Veloc,
+'using ramping and RIGHT/LEFT coordination.
+
+DoMove:
+
+  'Correct DirErr by effects of presumptive motion.
+  'Initialize Counts TO Dist.
+  'Save current encoder status.
+
+  FOR Side = RIGHT TO LEFT
+    DirErr = DirErr + ((Side ^ Dir(Side) << 1 - 1) * Dist(Side) * BRDSPER)
+    Counts(Side) = Dist(Side)
+    Prev(Side) = INS.LOWBIT(Sense + Side)
+  NEXT
+
+  'Do for as long as there are encoder counts remaining...
+
+  DO WHILE (Counts(RIGHT) OR Counts(LEFT))
+
+    'Get new encoder state for each wheel.
+    'If it's changed, decrement that wheel's Count.
+
+    FOR Side = RIGHT TO LEFT
+      New(Side) = INS.LOWBIT(Sense + Side)
+      IF (New(Side) <> Prev(Side) AND Counts(Side)) THEN
+        Prev(Side) = New(Side)
+        Counts(Side) = Counts(Side) - 1
+      ENDIF
+    NEXT
+
+    'For each wheel decide whether and how much to pulse its servo.
+
+    FOR Side = RIGHT TO LEFT
+      Opp = ~ Side
+      IF (Counts(Side) AND Counts(Side) * Dist(Opp) + (Dist(Side)) >= Counts(Opp) * Dist(Side) + (Dist(Opp) >> 1)) THEN
+        Pulse = (Veloc MIN 3) MAX ((Counts(Side) MIN Counts(Opp)) MAX ((Dist(Side) - Counts(Side)) MIN (Dist(Opp) - Counts(Opp))) << 1 MIN 3)
+        READ Side << 1 + (Dir(Side) ^ Side) << 4 + (Pulse * Dist(Side) / (Dist(Side) MIN Dist(Opp)) + 1 MAX 15), Pulse
+        PULSOUT Motor + Side, NULL - ((Dir(Side) ^ Opp << 1 - 1) * Pulse)
+      ENDIF
+    NEXT
+
+    'Pause between pulses.
+
+    PAUSE 5
+  LOOP
+  RETURN

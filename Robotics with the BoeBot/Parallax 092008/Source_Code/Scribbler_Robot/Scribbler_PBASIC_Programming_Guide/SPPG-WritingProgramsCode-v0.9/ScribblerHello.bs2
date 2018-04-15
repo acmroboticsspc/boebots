@@ -1,0 +1,8 @@
+' Scribbler PBASIC Programming Guide - ScribblerHello.bs2
+' BASIC Stamp sends message to Debug Terminal
+
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Hello, I am your Scribbler Robot!"
+END

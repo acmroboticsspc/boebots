@@ -1,0 +1,45 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_E-1
+'ON-OFF control of incubator.  Setpoint of 105.
+'Pot adjust temperature sensed by program.
+'Blue's LED is indicates heat on, Red's indicates alarm (>115). Press Red to reset.
+
+RCin var word			'Varibale to hold RC time
+Temp var byte			'RC time is spanded to ~80-130 and stored here
+AlarmFlag var Bit			'One bit to indicate alarm condition. 0 = no alarm
+Pot con 7				'Define Pot I/O pin
+
+AlarmFlag = 0			'Clear Alarm flag
+
+Loop:
+HIGH pot				'Charge pot capacitor for 10 mSec
+PAUSE 10		
+RCTIME Pot, 1, Rcin		'Measure discharge time
+Temp = Rcin / 106 + 80		'Convert to temp
+DEBUG CR, "Temperature is: ",DEC Temp
+HIGH 8				'Turn off heaters for an instant
+
+IF Temp => 105 THEN AlarmOff	'If at or above setpoint do not turn on heaters
+LOW 8					'If below turn ON heaters
+DEBUG ":  Heater is ON "	'Display heaters are on
+
+AlarmOff: 				'If RED PB is pressed, reset alarm
+INPUT 11				'Set up P11 for input
+PAUSE 10				'Allow 10mSec to stabilize
+IF IN11 = 1 THEN AlarmOn	'Red not pressed? Skip next.
+AlarmFlag = 0			'Red pressed, clear alarm flag.
+
+AlarmOn				'Check to see if Alarm needs to be set
+IF Temp < 115 THEN AlarmSound	'Less the alarm setpoint? Skip.
+AlarmFlag = 1			'or else set the alarms flag.
+
+AlarmSound:				'Check if we need to buzz alarm
+If AlarmFlag = 0 THEN Loop	'Alarm flag not set? Skip and start over
+FREQOUT 11, 50, 2000		'Or else sound speaker
+DEBUG " **** ALARM ****"	'Display condition
+
+GOTO Loop

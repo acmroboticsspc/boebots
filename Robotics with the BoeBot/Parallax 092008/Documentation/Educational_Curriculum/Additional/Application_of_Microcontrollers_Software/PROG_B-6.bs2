@@ -1,0 +1,18 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_B-6
+'Plays the CHARGE! theme.
+'Hit the Reset button on the activity board to replay it.
+
+OUTPUT 11	'Set up direction for speaker
+
+FREQOUT 11, 150, 1120	'Play notes
+FREQOUT 11, 150, 1476
+FREQOUT 11, 150, 1856
+FREQOUT 11, 300,2204
+FREQOUT 11, 9, 255
+FREQOUT 11, 200,1856
+FREQOUT 11, 600, 2204

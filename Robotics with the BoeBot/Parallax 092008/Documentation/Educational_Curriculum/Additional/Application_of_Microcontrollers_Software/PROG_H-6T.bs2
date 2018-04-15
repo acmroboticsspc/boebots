@@ -1,0 +1,38 @@
+'*********************************************************************
+'* Electronics Management - Southern Illinois University, Carbondale *
+'* http://www.siu.edu/~imsasa/elm                7/1/99 Martin Hebel *
+'*********************************************************************
+
+'PROG_H-6T
+'Sends a bit Asynchronously on P0
+
+NibData var nib		'Holds nibble to send
+BitOut var bit		'Hold outgoing bit
+BitTime var word		'length of bits in mSec
+
+DIRC = %0000		'Set up buttons as inputs
+LOW 0				'Output P0 to LOW
+BitTime = 50		'Set length of bits in mSec
+
+Loop:
+Pause 2000				'Deley between transmissions
+NibData = INC			'Read buttons
+Freqout 11, 250, 2500		'Sound tone
+DEBUG CR, IBIN4 ? NibData	'Display
+Debug "Start Bit",CR		
+HIGH 0				'Send Start bit (HIGH)
+Pause BitTime
+BitOut = NibData.Bit3: Gosub SendBit	'get each bit from nibble, Go send
+BitOut = NibData.Bit2: Gosub SendBit
+BitOut = NibData.Bit1: Gosub SendBit
+BitOut = NibData.Bit0: Gosub SendBit
+
+DEBUG "Stop Bit",CR		'Send Stop bit (LOW)
+LOW 0: Pause BitTime
+Goto Loop
+
+SendBit:
+OUT0 = BitOut			'Set output to bit
+DEBUG ? BITOUT			'display
+Pause BitTime			'Time of bit equal to BitTime
+Return

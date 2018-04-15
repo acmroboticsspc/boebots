@@ -1,0 +1,21 @@
+---------------------------------------------------------------------------
+NC Drill File Report For :  C:\Client98\PCB98\pcb\OemBS2.pcb   8-Nov-1999   13:44:55
+---------------------------------------------------------------------------
+
+
+
+Layer Pair : Top Layer to Bottom Layer
+ASCII File : C:\Client98\PCB98\pcb\OemBS2.TXT
+EIA File   : C:\Client98\PCB98\pcb\OemBS2.DRL
+
+Tool         Hole Size          Hole Count Plated       Tool Travel
+---------------------------------------------------------------------------
+T1        26mil (0.6604mm)         14               4.48 Inch (113.83 mm)
+T2        35mil (0.889mm)          15               6.79 Inch (172.37 mm)
+T3        38mil (0.9652mm)         77               11.63 Inch (295.50 mm)
+T4        55mil (1.397mm)          3                3.12 Inch (79.15 mm)
+T5        140mil (3.556mm)         2                2.98 Inch (75.62 mm)
+---------------------------------------------------------------------------
+Totals                             111              28.99 Inch (736.47 mm)
+
+Total Processing Time : 00:00:00

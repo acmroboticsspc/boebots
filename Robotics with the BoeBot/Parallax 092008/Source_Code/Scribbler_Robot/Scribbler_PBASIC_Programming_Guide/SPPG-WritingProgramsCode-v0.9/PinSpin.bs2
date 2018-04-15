@@ -1,0 +1,41 @@
+' Scribbler PBASIC Programming Guide - PinSpin.bs2
+' The Scribbler beeps and blinks green LEDs while spinning
+' {$STAMP BS2}
+' {$PBASIC 2.5}
+
+DEBUG "Program running!"
+
+' I/O Pin Definitions
+
+LedRight      PIN 8
+LedCenter     PIN 9
+LedLeft       PIN 10
+Speaker       PIN 11
+MotorRight    PIN 12
+MotorLeft     PIN 13
+
+' Motor Initialization
+
+LOW MotorRight
+LOW MotorLeft
+PAUSE 100
+
+' Main Program
+
+PULSOUT MotorRight, 2700
+PULSOUT MotorLeft, 1300
+
+DO
+  HIGH LedRight
+  LOW  LedCenter
+  HIGH LedLeft
+
+  FREQOUT Speaker, 250, 523
+
+  LOW  LedRight
+  HIGH LedCenter
+  LOW  LedLeft
+
+  FREQOUT Speaker, 250, 659
+LOOP
+
