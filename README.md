@@ -93,8 +93,8 @@ So I make a change to ovalbot.bs2 in the GreatProgram folder using whatever, and
 
 ```
 computerusername@Computername:~/folderthatIwantcodestuffsin/boebots$ git add GreatProgram/ovalbot.bs2
-computerusername@Computername:~/folderthatIwantcodestuffsin/boebots$ git commit -m "This is where I describe briefly the changes I made to trips.txt"
-[master d08e589] This is where I describe briefly the changes I made to trips.txt
+computerusername@Computername:~/folderthatIwantcodestuffsin/boebots$ git commit -m "This is where I describe briefly the changes I made to ovalbot.bs2"
+[master d08e589] This is where I describe briefly the changes I made to ovalbot.bs2
  1 file changed, 2 insertions(+), 2 deletions(-)
 computerusername@Computername:~/folderthatIwantcodestuffsin/boebots$ git push
 Username for 'https://github.com': githubuser
